@@ -84,9 +84,9 @@ Priority: **P0** = must work for the demo · **P1** = should have · **P2** = on
 | Secure login + RBAC | JWT access (15 min) + refresh tokens, argon2 hashing, role + tenant checked **on the server** for every route | P0 |
 | Dashboard | Per role: citizen (icons + audio progress), officer (queue), admin (stats), auditor (logs) | P0 |
 | Case management | Create, assign, escalate, close; full event timeline per case | P0 |
-| Public REST API + API keys + Swagger | Fastify + Zod → OpenAPI at `/docs`; API keys hashed, scoped, rate-limited | P0 |
+| Public REST API + API keys + Swagger | NestJS + `nestjs-zod` + `@nestjs/swagger` → OpenAPI at `/docs`; API keys hashed, scoped, rate-limited (`ApiKeyGuard`) | P0 |
 | Audit log | Every user / AI / agent / system action, append-only, **hash-chained** (each row stores hash of previous row → tamper-evident) | P0 |
-| Consent management | See, share, withdraw, correct; enforced in middleware on every personal-data read | P0 |
+| Consent management | See, share, withdraw, correct; enforced by `ConsentGuard` on every personal-data read | P0 |
 | Mock identity, payment, data services | `/mock/nadra`, `/mock/raast`, `/mock/household`, `/mock/sms` with their own API keys and simulated latency/failures | P0 |
 
 ### 5.2 Optional platform features (we pick 8 because our stack makes them cheap)
@@ -97,7 +97,7 @@ Priority: **P0** = must work for the demo · **P1** = should have · **P2** = on
 | Officer review queue with priority + confidence sorting | Sorted by risk × amount × waiting time | P0 |
 | Low-bandwidth / offline mode | PWA, IndexedDB outbox, idempotency keys, tiny pages, cached audio | P0 |
 | Background jobs and queues | pg-boss for OCR, forgery, LLM calls, notifications | P0 |
-| Rate limiting + error handling | `@fastify/rate-limit`, uniform error format, retries with backoff for mocks | P0 |
+| Rate limiting + error handling | `@nestjs/throttler`, global exception filter (uniform error format), retries with backoff for mocks | P0 |
 | Multi-tenant workspaces | Tenants: *Relief Department* and *Fraud & Complaints Desk*; `tenant_id` on every row | P1 |
 | Notifications | In-app + mock SMS phone screen + email (Resend) | P1 |
 | Analytics dashboard per tenant | Claims/day, lanes, approval time, scam types | P1 |
@@ -205,7 +205,7 @@ Audit log is append-only and hash-chained; the auditor screen has a **"Verify ch
 ### Challenge 06 — Consent and take-back
 
 - Consent = (citizen, grantee [department / helper], data fields, purpose, expiry, status).
-- Every personal-data read goes through `requireConsent()` middleware. Withdrawn → **HTTP 403 `CONSENT_WITHDRAWN`**, logged.
+- Every personal-data route is marked `@RequireConsent('income')` and checked by `ConsentGuard`. Withdrawn → **HTTP 403 `CONSENT_WITHDRAWN`**, logged.
 - Citizen screen "**Who has my data**": list of grantees + access log ("Relief officer viewed your income, 21 Nov 7:40 PM").
 - Correct data → creates a correction case; the old value is kept in history.
 - Demo: citizen withdraws → officer refreshes → blocked → auditor sees both events.
@@ -272,8 +272,8 @@ Fake documents: ELA heatmap, EXIF editing-software tags, OCR vs QR vs mock NADRA
  │ Auditor · Judge Mode · Service worker · IndexedDB        │
  └───────────▲──────────────────────────────────────────────┘
              │ HTTPS + JWT  (idempotency keys)
- ┌───────────┴──────────── Fastify API (Render) ────────────┐
- │ auth · rbac · consent middleware · rate limit            │
+ ┌───────────┴──────── NestJS API (Fastify adapter) ────────┐
+ │ guards: jwt · roles · tenant · consent · throttler       │
  │ cases · decisions · rules · documents · scam · eval      │
  │ helpers · payments · audit (hash chain) · rag            │
  │ Claim Agent (allowlisted tools)                          │
@@ -288,6 +288,53 @@ Fake documents: ELA heatmap, EXIF editing-software tags, OCR vs QR vs mock NADRA
 
 **Why it scales:** stateless API (run N copies), slow AI work in queues, idempotent writes, tenant_id + indexes on hot tables. Free tiers are not built for scale, but the architecture is — moving to paid tiers changes config, not code.
 
+### 8.1 NestJS backend design
+
+We use **NestJS on the Fastify adapter** (Nest structure, Fastify speed). Hosted on Render.
+
+**Request pipeline** (every request, in this order):
+
+```
+Request
+ → ThrottlerGuard       rate limit per user / API key
+ → JwtAuthGuard         or ApiKeyGuard for public API (@Public() skips)
+ → RolesGuard           @Roles('officer', 'admin')
+ → TenantGuard          user can only touch rows of their tenant
+ → ConsentGuard         @RequireConsent('income') → 403 CONSENT_WITHDRAWN
+ → ZodValidationPipe    body/query validated with shared Zod schemas
+ → IdempotencyInterceptor   same Idempotency-Key → same stored response
+ → Controller → Service → PrismaService
+ → AuditInterceptor     writes hash-chained audit row (actor, action, entity)
+ → AllExceptionsFilter  uniform error JSON, logged with request id
+```
+
+All guards are registered **globally**, so a route is protected by default; a public route must opt out with `@Public()`. This is our answer to "server-side enforcement of access controls".
+
+**Libraries:**
+
+| Need | Package |
+|---|---|
+| Fastify adapter | `@nestjs/platform-fastify` |
+| Validation + Swagger from Zod | `nestjs-zod` (shared schemas in `packages/shared`) + `@nestjs/swagger` |
+| Auth | `@nestjs/jwt` + `@nestjs/passport` + `passport-jwt`, `argon2` |
+| Rate limit | `@nestjs/throttler` |
+| Config | `@nestjs/config` (Zod-validated env) |
+| Logs | `nestjs-pino` (request id on every log line) |
+| DB | Prisma via a `PrismaService` provider |
+| Jobs | `pg-boss` wrapped in a `JobsModule` (workers run in the same app, separate process later) |
+| Events inside the app | `@nestjs/event-emitter` (e.g. `payment.completed` → Haq Receipt) |
+| Tests | Jest (Nest default) + Supertest; Playwright for one end-to-end flow |
+
+**Modules** (one folder each, one owner each — fewer merge conflicts):
+
+| Module | Owner |
+|---|---|
+| `AuthModule`, `UsersModule`, `TenantsModule`, `ApiKeysModule`, `AuditModule`, `ConsentModule`, `CasesModule`, `PrismaModule`, `JobsModule` | A |
+| `RulesModule`, `DecisionsModule`, `DocumentsModule` (OCR/forgery), `ScamModule`, `EvalModule` | B |
+| `AgentModule`, `PaymentsModule`, `HelpersModule`, `VoiceModule`, `RagModule`, `JudgeModule`, `MockModule` (nadra, raast, household, sms) | D |
+
+The mock services live in `MockModule` with their own API keys and simulated latency/failures, so they are still "behind clean APIs" but need no extra deploy.
+
 ## 9. Tech stack and costs (total: PKR 0)
 
 | Layer | Pick | Cost |
@@ -295,7 +342,7 @@ Fake documents: ELA heatmap, EXIF editing-software tags, OCR vs QR vs mock NADRA
 | Language / monorepo | TypeScript, pnpm workspaces | Free |
 | Frontend | Next.js + Tailwind + shadcn/ui + Recharts | Free |
 | Offline | Serwist (service worker) + `idb` | Free |
-| Backend | Fastify + Zod + `fastify-type-provider-zod` + `@fastify/swagger` | Free |
+| Backend | NestJS (Fastify adapter) + `nestjs-zod` + `@nestjs/swagger` + `@nestjs/throttler` | Free |
 | Database | Supabase Postgres (+ pgvector, Storage) + Prisma migrations | Free (500 MB) |
 | Jobs | pg-boss | Free |
 | Auth | jsonwebtoken + argon2 | Free |
@@ -307,7 +354,7 @@ Fake documents: ELA heatmap, EXIF editing-software tags, OCR vs QR vs mock NADRA
 | Email | Resend | Free (100/day) |
 | SMS / WhatsApp | Mocked phone screen | Free |
 | Observability | Langfuse, Sentry, pino | Free tier |
-| Tests | Vitest, Supertest, Playwright | Free |
+| Tests | Jest (Nest default), Supertest, Playwright | Free |
 | Hosting | Vercel (web), Render (API), GitHub | Free |
 
 **Free-tier traps:**
@@ -325,7 +372,7 @@ Fake documents: ELA heatmap, EXIF editing-software tags, OCR vs QR vs mock NADRA
 |---|---|
 | `tenants` | id, name, type (relief / fraud_desk) |
 | `users` | id, tenant_id, role, phone, name, password_hash, pin_hash |
-| `persons` | id, cnic, full_name, name_normalized, father_name, dob, phone, district |
+| `persons` | id, cnic_enc, cnic_hash, full_name, name_normalized, father_name, dob, phone_enc, district |
 | `helper_assignments` | helper_id, person_id, granted_by, expires_at, revoked_at |
 | `consents` | id, person_id, grantee_type, grantee_id, fields[], purpose, status, granted_at, withdrawn_at |
 | `data_access_log` | person_id, accessor_id, fields[], purpose, allowed, at |
@@ -339,6 +386,7 @@ Fake documents: ELA heatmap, EXIF editing-software tags, OCR vs QR vs mock NADRA
 | `receipts` | payment_id, confirmed_full, reported_amount, at |
 | `messages` | id, text, sender, channel, district, seal_valid, label, confidence, red_flags[], lane, reviewed_label |
 | `api_keys` | id, owner_id, key_hash, scopes[], rate_limit, revoked_at |
+| `refresh_tokens` | id, user_id, token_hash, family_id, on_behalf_of, expires_at, revoked_at |
 | `audit_logs` | id, actor_type, actor_id, action, entity, entity_id, payload_hash, prev_hash, hash, ip, at |
 | `idempotency_keys` | key, user_id, response, created_at |
 | `eval_runs` | id, dataset, threshold, metrics_json, at |
@@ -375,10 +423,14 @@ GET  /docs                        (Swagger UI)
 haqdaar/
 ├─ apps/
 │  ├─ web/            Next.js PWA (all role UIs, Judge Mode)
-│  └─ api/            Fastify API
-│     └─ src/modules/ auth, cases, consent, audit, rules, decisions,
-│                     documents, scam, payments, helpers, eval, rag,
-│                     agent, judge, mock/{nadra,raast,household,sms}
+│  └─ api/            NestJS API (Fastify adapter)
+│     ├─ prisma/      schema.prisma + migrations
+│     └─ src/
+│        ├─ common/   guards, interceptors, filters, decorators
+│        └─ modules/  auth, users, tenants, api-keys, audit, consent,
+│                     cases, rules, decisions, documents, scam, eval,
+│                     agent, payments, helpers, voice, rag, judge,
+│                     jobs, mock/{nadra,raast,household,sms}
 ├─ packages/
 │  └─ shared/         Zod schemas + types shared by web and api
 ├─ data/
@@ -395,7 +447,7 @@ haqdaar/
 
 | Person | Owns | First deliverable (by H6) |
 |---|---|---|
-| **A — Umer (backend core)** | Monorepo, Prisma schema + migrations (sole owner), auth/JWT/RBAC, tenants, cases + events, audit hash chain, consent middleware, API keys, rate limit, Swagger, deploy API | Login + roles + cases CRUD deployed with Swagger |
+| **A — Umer (backend core)** | Monorepo, NestJS app setup, Prisma schema + migrations (sole owner), auth (Passport JWT) + global guards (Roles, Tenant, Consent, Throttler), audit + idempotency interceptors, tenants, cases + events, audit hash chain, API keys, Swagger, deploy API | Login + roles + cases CRUD deployed with Swagger |
 | **B — AI / decision engine** | Rule engine (JSON Logic) + versions, decision lanes + cost math, calibration, synthetic data generators, eval dashboard data, scam classifier + Seal, OCR/forgery/blur, Langfuse | `decide(case)` returns lane + trace on synthetic cases |
 | **C — Frontend** | Next.js PWA, voice-first citizen flow, icons + audio, officer queue, admin rule editor + Digital Twin UI, auditor screens, Judge Mode panel, eval charts | Citizen flow screens with audio playing, mocked API |
 | **D — Integrations / agent / offline** | Mock NADRA/Raast/household/SMS services, Claim Agent + tools, Whisper STT, TTS clip generation, offline outbox + idempotency, Helper Mode, Haq Receipt, RAG, deploy web, demo script | Mock services live + Whisper transcribing Urdu |
@@ -447,3 +499,103 @@ haqdaar/
 - [ ] "PROTOTYPE — not an official service" label on every page
 - [ ] No real personal data anywhere (synthetic only)
 - [ ] Local backup running for the live demo
+
+## 18. Speed, accuracy, security — why this is the best design
+
+This section is our script for the judges' "why did you choose this?" questions.
+
+### 18.1 Speed
+
+| Where | What we do | Why it is fast |
+|---|---|---|
+| API | NestJS on the **Fastify adapter** | Fastify handles about 2× the requests per second of Express; Nest gives structure at no speed cost |
+| AI calls | **Groq** for LLM and Whisper | Groq's LPU hardware returns hundreds of tokens per second; Urdu transcription in about 1 s |
+| Slow work | OCR, forgery checks, LLM, notifications run in **pg-boss jobs** | The API answers in milliseconds; the client polls or gets an in-app notification |
+| Repeated work | Cache results by input hash (same SMS, same document → same answer, no second AI call) | Saves time and rate limit |
+| Database | Indexes on `cases(tenant_id, status, priority)`, `audit_logs(entity_id)`, `persons(cnic)`, `persons(name_normalized)`; Supabase connection pooler | Officer queue and lookups stay fast as data grows |
+| Phone | Pages < 100 KB, photos compressed on the phone to ~150 KB, Urdu audio clips ~10 KB cached offline | Works on 2G/3G; repeat visits load from cache |
+| Decisions | Rule engine (JSON Logic) and scoring run **in-process**, no AI call | A decision takes milliseconds; AI is only used for reading and explaining |
+
+**Targets we will measure and show on the evaluation dashboard:** API p95 < 300 ms (excluding AI), scam check < 2 s, full claim decision after upload < 10 s.
+
+### 18.2 Accuracy
+
+Accuracy comes from **design**, not from trusting one model:
+
+1. **Deterministic decisions.** Eligibility is decided by versioned rules, not by an LLM. Same input + same rule version = same result, every time.
+2. **Cross-checks instead of single sources.** CNIC number from OCR vs QR code vs mock NADRA must agree; a mismatch is a flag, never ignored.
+3. **Structured outputs.** Every LLM output must pass a Zod schema. Invalid → one retry with the error → still invalid → goes to a human. Low temperature (0–0.2) for extraction.
+4. **Ensembles for classification.** Scam = seal check + red-flag rules + LLM. The certain layers (seal) handle most cases; the LLM only handles the leftovers.
+5. **Calibrated confidence.** Scores are calibrated on a labelled synthetic set, so "0.99" really means ~99% right. We show a reliability chart.
+6. **Abstain when unsure.** Accuracy on the cases we decide stays high because uncertain cases go to humans — and we report the automation rate honestly next to it.
+7. **Human feedback loop.** Every officer decision is stored as a label (`reviewed_label`) and used in the next evaluation run.
+
+**Targets on our labelled synthetic sets** (shown live, with the dataset described honestly as synthetic):
+
+| Metric | Target |
+|---|---|
+| Wrong auto-approvals (fraud approved by the system) | ≤ 0.5% of auto-approved cases |
+| Share of cases decided automatically | ≥ 60% |
+| Scam detection recall | ≥ 95% |
+| False alarms on genuine messages | ≤ 5% (each shown in a list, not hidden) |
+| Name matching: wrong merges | 0 (never merges on name alone) |
+
+### 18.3 Security
+
+| Area | What we do |
+|---|---|
+| Authentication | Passwords hashed with **argon2id**; JWT access token 15 min; refresh tokens rotated on each use and stored hashed — a reused old refresh token logs out every session (theft detection) |
+| Authorization | **Global guards, deny by default**: JWT → Roles → Tenant → Consent. A new route is protected unless explicitly marked `@Public()`. Checked on the server, never only hidden in the UI |
+| Tenant isolation | Every query is scoped by `tenant_id` through a Prisma extension; tests try cross-tenant access and must get 403/404 |
+| Helper Mode | Family switch needs that family's PIN (hashed, 5 tries then lock); helper tokens carry `on_behalf_of` and expire; every action logged "helper X for family Y" |
+| Personal data | CNIC and phone **encrypted at rest** (AES-256-GCM field encryption) with a separate hash for lookups; officers see masked CNIC (`42101-*****-3`) unless consent + need |
+| Consent | `ConsentGuard` checks live consent on every read; withdrawal takes effect on the next request (no cached access); every allowed and denied access is logged |
+| Input | Zod validation on every body and query; file uploads limited by size and checked by magic bytes, not file extension; images re-encoded with sharp (strips hidden content) |
+| AI safety | PII removed before prompts; document and SMS text treated as **data, never instructions** (prompt-injection defense); the agent can only call allowlisted tools; `initiate_payment` needs a human approval token |
+| API | API keys stored hashed with scopes and per-key rate limits; `@nestjs/throttler` on login and public endpoints; Helmet security headers; CORS allowlist; idempotency keys stop replayed payments |
+| Audit | Append-only, **hash-chained** audit log; auditor role is read-only; "Verify chain" button detects any edited row |
+| Seal | Program messages signed with HMAC-SHA256 (secret only on the server, rotatable); codes include an expiry |
+| Storage | Documents in private Supabase Storage; short-lived signed URLs only |
+| Secrets & supply chain | Secrets only in environment variables (never in git); `.env.example` only; `pnpm audit` before submission |
+
+### 18.4 Coverage matrix — every requirement and challenge
+
+**Requirements from the brief:**
+
+| Requirement | Required | We cover |
+|---|---|---|
+| User roles | ≥ 3 | **5** (citizen, helper, officer, admin, auditor) |
+| Core platform features | all 7 | **all 7** |
+| Optional platform features | ≥ 3 | **8** (rule editor, officer queue, offline, jobs, rate limiting, multi-tenant, notifications, analytics) |
+| AI features | ≥ 3 | **11** (all of them: voice, structured outputs, classification + routing, computer vision, agent + tools, guardrails, explainability, anomaly detection, evaluation, memory, RAG) |
+| Engineering basics | Postgres + migrations, monitoring, logs, tests | Supabase Postgres + Prisma migrations, Sentry + Langfuse, pino logs, Jest + Supertest + Playwright |
+| Bonus features | optional | **Digital Twin + Helper Mode + Offline-First Sync** (Scam Map if time) |
+| Rules | prototype label, mock data, real vs simulated | Label on every page, synthetic data only, table in README |
+
+**The 8 technical challenges:**
+
+| # | Challenge | Our mechanism | Proof shown live |
+|---|---|---|---|
+| 01 | Cost of being wrong | Cost model → threshold 0.988, hard flags, amount cap, circuit breaker, never auto-reject | Cost curve + Judge button 01 |
+| 02 | Saying "I am not sure" | Calibrated confidence, abstain → human with AI case note, Kill AI → safe routing | Judge buttons 02 + Kill AI |
+| 03 | Bad data | Normalize + transliteration map + Jaro-Winkler + CNIC rules, never merge on name alone | Judge button 03 on seeded messy data |
+| 04 | Rules that change | JSON Logic rule versions, instant publish, decisions store rule version, Digital Twin | Judge button 04 |
+| 05 | Explain and audit | Urdu voice reason + full auditor trace + hash-chained log | Judge button 05 + Verify chain |
+| 06 | Consent and take-back | ConsentGuard, withdraw → 403, access log, corrections | Judge button 06 |
+| 07 | Works for everyone | Voice + icons, < 100 KB pages, offline outbox, idempotent sync | Judge button 07 (network off) |
+| 08 | Scams and fake documents | Haqdaar Seal + rules + LLM ensemble, ELA/EXIF/QR/OCR cross-checks, honest false-alarm list | Judge button 08 + eval dashboard |
+
+## 19. Judge Q&A — prepared answers
+
+| Question | Our answer |
+|---|---|
+| Why NestJS? | Global guards make deny-by-default security easy to prove; modules let 4 people work in parallel; Fastify adapter keeps it fast. Our team already knows it, so we spent the time on judgment, not learning. |
+| Why doesn't the AI make the decision? | LLMs are not reproducible or auditable. Rules decide, so every decision can be replayed with its rule version; the AI reads, sorts and explains. |
+| Why never auto-reject? | A wrong rejection stops a real person's money. Automation may only approve when very sure, or escalate. Only a human can say no. |
+| Why 0.988? | From the cost model: (1 − p) × 25,000 < 300. If the admin changes the costs, the threshold changes with them — no code change. |
+| Why JSON Logic for rules? | Rules are data, not code: editable in the admin UI, versioned, replayable in the Digital Twin, and safe (no code execution). |
+| Why Postgres? | Relational data with strict integrity (cases, consents, payments), transactions for payments, pgvector for RAG — one database instead of three. |
+| Why pg-boss instead of Redis queues? | Jobs live in the same database, inside the same transactions; one less service to run and secure. |
+| Why your own JWT instead of a hosted auth service? | We need helper "on behalf of" tokens, PIN switching and custom audit — easier to control and explain with our own tokens. |
+| How do you know your accuracy numbers are real? | They come from labelled synthetic sets we generated with known answers; we show the dataset, the confusion matrix and every false alarm. We say clearly that real-world accuracy needs real (consented) data. |
+| What are the limitations? | Synthetic data only; forgery detection is heuristic (it routes to humans, never rejects); free-tier hosting; Urdu TTS uses an unofficial voice service with a browser fallback. |

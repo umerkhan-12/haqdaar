@@ -1,4 +1,4 @@
 # apps/api
 
-Fastify API: auth/RBAC, cases, consent, audit hash chain, rules, decisions, documents, scam, payments, helpers, eval, rag, agent, judge, and mock services under /mock.
-Owners: A (core), B (AI modules), D (agent + mocks). See docs/PLAN.md.
+NestJS API on the Fastify adapter: auth (Passport JWT) + global guards (roles, tenant, consent, throttler), audit + idempotency interceptors, and modules for cases, consent, audit, rules, decisions, documents, scam, payments, helpers, voice, eval, rag, agent, judge, jobs, plus mock services under /mock.
+Owners: A (core), B (AI modules), D (agent + mocks). See docs/PLAN.md section 8.1.

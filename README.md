@@ -24,7 +24,7 @@ We help **a low-literacy widow** **claim her monthly relief payment** even thoug
 
 ```
 apps/web        Next.js PWA (citizen, helper, officer, admin, auditor, Judge Mode)
-apps/api        Fastify API + mock NADRA / Raast / household / SMS services
+apps/api        NestJS API (Fastify adapter) + mock NADRA / Raast / household / SMS services
 packages/shared Zod schemas shared by web and api
 data/           synthetic data generators, seed, policy docs, Urdu audio clips
 docs/           plan and design notes
@@ -32,7 +32,7 @@ docs/           plan and design notes
 
 ## Stack
 
-TypeScript · Next.js · Fastify · Zod · Prisma · Supabase Postgres · pg-boss · Groq (Llama + Whisper) · Gemini (fallback) · tesseract.js · sharp · Vercel · Render. Total cost: free tiers only.
+TypeScript · Next.js · NestJS (Fastify adapter) · Zod · Prisma · Supabase Postgres · pg-boss · Groq (Llama + Whisper) · Gemini (fallback) · tesseract.js · sharp · Vercel · Render. Total cost: free tiers only.
 
 ## Setup
 
