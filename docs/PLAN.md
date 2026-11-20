@@ -262,6 +262,7 @@ Fake documents: ELA heatmap, EXIF editing-software tags, OCR vs QR vs mock NADRA
 | 06 Withdraw consent | Officer blocked with 403; audit log shows it |
 | 07 Go offline | Network off mid-claim → saved → reconnect → synced, no duplicate |
 | 08 Fake SMS / forged CNIC | Seal check, red flags, ELA heatmap |
+| Payments (5 buttons) | Raast timeout, double click, mule account, self-approval, reconcile — see section 20.1 |
 | Kill AI | LLM disabled → cases still safe, routed to humans |
 
 ## 8. Architecture
@@ -382,7 +383,11 @@ The mock services live in `MockModule` with their own API keys and simulated lat
 | `rule_sets` / `rule_versions` | rule_set_id, version, logic_json, clause_texts, status, created_by, activated_at |
 | `cost_settings` | version, wrong_approval, review, ask_more, amount_cap, threshold |
 | `decisions` | id, case_id, rule_version_id, cost_settings_version, model_version, prompt_version, input_hash, features, confidence, lane, explanation_user, trace |
-| `payments` | id, case_id, amount, status, raast_ref, idempotency_key, approved_by |
+| `payments` | id, case_id, amount, state (state machine), idempotency_key (unique), end_to_end_id, creditor_alias, title_fetched, title_match_score, maker_id, checker_id |
+| `payment_attempts` | payment_id, attempt_no, request, response, outcome (success / failed / timeout), at |
+| `ledger_entries` | id, txn_id, account (fund / payable / beneficiary), debit, credit, payment_id, at (append-only) |
+| `approvals` | entity, entity_id, maker_id, checker_id, status, at (maker-checker; maker ≠ checker enforced) |
+| `reconciliation_runs` | id, date, matched, missing, extra, amount_mismatch, report_json |
 | `receipts` | payment_id, confirmed_full, reported_amount, at |
 | `messages` | id, text, sender, channel, district, seal_valid, label, confidence, red_flags[], lane, reviewed_label |
 | `api_keys` | id, owner_id, key_hash, scopes[], rate_limit, revoked_at |
@@ -407,7 +412,10 @@ GET  /me/data-access-log
 POST /scam/check                  GET /scam/stats
 GET  /rules  POST /rules/:id/versions  POST /rules/versions/:id/simulate (Digital Twin)
 POST /rules/versions/:id/publish  GET/PUT /cost-settings
-POST /payments/:caseId            POST /receipts/:paymentId
+POST /payments/:caseId            POST /payments/:id/approve (checker)
+POST /payments/:id/inquiry        POST /payments/:id/reversal
+POST /reconciliation/run          POST /receipts/:paymentId
+/mock/raast/title-fetch · /mock/raast/status
 GET  /eval/summary  POST /eval/run
 POST /rag/ask
 GET  /audit  POST /audit/verify-chain
@@ -599,3 +607,79 @@ Accuracy comes from **design**, not from trusting one model:
 | Why your own JWT instead of a hosted auth service? | We need helper "on behalf of" tokens, PIN switching and custom audit — easier to control and explain with our own tokens. |
 | How do you know your accuracy numbers are real? | They come from labelled synthetic sets we generated with known answers; we show the dataset, the confusion matrix and every false alarm. We say clearly that real-world accuracy needs real (consented) data. |
 | What are the limitations? | Synthetic data only; forgery detection is heuristic (it routes to humans, never rejects); free-tier hosting; Urdu TTS uses an unofficial voice service with a browser fallback. |
+
+## 20. Know your judges
+
+Our judges: developers from **PaySys Labs** (product-focused), **two from fintech**, and **one serial hackathon winner**. What each will look for, and how we answer it:
+
+| Judge | What they will test | Our answer |
+|---|---|---|
+| Fintech / payments | Double payments, timeouts, reconciliation, fraud/mule accounts, approvals, audit | Bank-grade payout flow (20.1) |
+| Product | Is the user journey clear? Is there a real user and a measurable outcome? Polish in the details | One persona, one task, one north-star metric, every state designed (20.2) |
+| Hackathon winner | Does it actually work live? Is the story sharp? Are they overclaiming? | Story in 30 seconds, live Judge Mode, honest numbers (20.3) |
+
+### 20.1 Bank-grade payout flow (for the fintech judges)
+
+The payout is small in our story but it is where fintech judges will dig. We do it properly.
+
+**Payment state machine** (no other transitions allowed; every transition audited):
+
+```
+CREATED -> AWAITING_APPROVAL -> APPROVED -> SENT -> SUCCESS
+                                   |          |-> FAILED   retry, SAME idempotency key
+                                   |          '-> UNKNOWN  timeout -> status inquiry
+                                   |                       -> SUCCESS or FAILED
+                                   '-> HELD   title mismatch / velocity rule -> officer
+
+SUCCESS -> REVERSAL_REQUESTED -> REVERSED   (maker-checker)
+```
+
+| Fintech concern | What we do | Priority |
+|---|---|---|
+| **Double payment** | One idempotency key per payout, unique constraint in DB; mock Raast also dedupes by our reference. Retrying the same request returns the same result | P0 |
+| **Timeouts** | A timed-out payment becomes `UNKNOWN` and is **never retried blindly**. A background job runs a status inquiry against mock Raast first | P0 |
+| **Mule / wrong accounts** | **Account title fetch** before payout (mock Raast alias lookup) → title compared to the beneficiary with our name matcher → mismatch = `HELD` for an officer | P0 |
+| **Maker-checker (four-eyes)** | Payouts above a limit, reversals and rule publishing need a **second, different** officer/admin to approve. The system blocks self-approval | P0 |
+| **Velocity / AML-style rules** | Same receiving account for many beneficiaries, many claims from one device/phone, payouts at unusual times → hold + alert. Limits are admin-editable rules | P1 |
+| **Ledger** | **Double-entry ledger** (`ledger_entries`): every payout debits the program fund account and credits the beneficiary payable; balances are always derived, never edited | P1 |
+| **Reconciliation** | Daily (on-demand in the demo) job compares our ledger with the mock Raast statement → matched / missing / extra / amount-mismatch report | P1 |
+| **Standards awareness** | Mock Raast request fields modelled on ISO 20022 credit-transfer names (end-to-end id, debtor, creditor, amount, currency), since Raast uses ISO 20022 | P2 |
+
+The mock Raast service can be told to **time out, fail, or return duplicates** so we can show each case live.
+
+**New Judge Mode buttons:**
+
+| Button | What judges see |
+|---|---|
+| Raast timeout | Payment → `UNKNOWN` → status inquiry → `SUCCESS`, paid exactly once |
+| Double click / retry | Same payout sent 3× → one payment, one ledger entry |
+| Mule account | Payout to an account whose title doesn't match → `HELD` with the reason |
+| Self-approval | Officer tries to approve their own high-value payout → blocked, needs a second officer |
+| Reconcile | Run reconciliation → one deliberate mismatch found and explained |
+
+### 20.2 Product thinking (for the product judges)
+
+- **North-star metric: "time to money"** — from first voice message to Haq Receipt. Shown on the analytics dashboard, with the median for auto-approved vs human-reviewed cases.
+- **Supporting metrics:** task completion rate without help, claims finished offline, scams stopped, false alarms, officer minutes saved.
+- **Every state is designed:** loading, empty, error, offline, "waiting for officer" — each with an icon and a spoken Urdu line. No raw error messages, ever.
+- **One consistent design system:** shadcn/ui, one colour palette, big touch targets (≥ 48 px), Urdu as the first language with English toggle.
+- **Clear "what's next" on every screen** for the citizen: one primary action, never a menu.
+
+### 20.3 Winning the room (for the hackathon winner)
+
+- **Open with the person, not the tech:** 30 seconds of Zainab's story and her voice. Then show it working.
+- **No dead time:** seeded data, logged-in tabs ready for each role, the demo path rehearsed until it takes 6 minutes flat.
+- **Let them drive:** hand over Judge Mode. Confidence that it won't break is the strongest signal.
+- **Never overclaim:** say "synthetic data", "heuristic", "mock Raast" out loud before they ask.
+- **Have a backup:** the local copy running on a laptop and a recorded video, in case the venue internet fails.
+- **Be ready for code questions:** each person can explain their own modules and one trade-off they made.
+
+### 20.4 Extra fintech questions — prepared answers
+
+| Question | Our answer |
+|---|---|
+| What if Raast times out after the money left? | The payment goes to `UNKNOWN`, never retried blindly. A status inquiry decides it; the idempotency key guarantees one payout even if we resend. |
+| How do you prevent double payment? | Idempotency key per payout + unique DB constraint + the provider deduplicating by our reference. Demo: click pay 3 times, one payment. |
+| How do you stop money going to a fraudster's account? | Account title fetch + name match before payout; mismatch holds the payment for an officer. Velocity rules catch one account receiving for many people. |
+| Who can move money? | No single person: maker-checker for high value and reversals; the AI agent can never call the payment tool without a human approval token. |
+| How do you know the books are right? | Double-entry ledger; balances are derived, never edited; reconciliation against the provider statement flags every mismatch. |
