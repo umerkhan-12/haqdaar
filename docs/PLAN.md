@@ -101,8 +101,10 @@ Priority: **P0** = must work for the demo · **P1** = should have · **P2** = on
 | Multi-tenant workspaces | Tenants: *Relief Department* and *Fraud & Complaints Desk*; `tenant_id` on every row | P1 |
 | Notifications | In-app + mock SMS phone screen + email (Resend) | P1 |
 | Analytics dashboard per tenant | Claims/day, lanes, approval time, scam types | P1 |
+| Signed webhooks (added for the SaaS rubric) | Partners subscribe to `case.decided`, `payment.succeeded`, `consent.withdrawn`; body signed with HMAC-SHA256 + timestamp, retries with backoff, delivery log with "resend" button | P1 |
+| Tenant onboarding + usage metering (added for the SaaS rubric) | Admin "Launch a program" wizard creates a tenant, its rules, API key and cost settings; per-tenant usage page: API calls, AI calls, AI cost, quota bar | P1 |
 
-Skipped on purpose: subscription plans, webhooks (P2 only). *Reason for judges: they do not help the widow finish her task.*
+Skipped on purpose: paid subscription plans (a quota per tenant is enough to show the idea). *Reason for judges: billing does not help the widow finish her task.*
 
 ### 5.3 AI features (we use 10 of 11, all integrated into the one task)
 
@@ -421,6 +423,9 @@ POST /rag/ask
 GET  /audit  POST /audit/verify-chain
 POST /api-keys  DELETE /api-keys/:id
 POST /judge/:scenario             (admin, Judge Mode)
+POST /tenants (onboarding wizard) GET /tenants/:id/usage
+POST /webhooks  GET /webhooks/:id/deliveries  POST /webhooks/deliveries/:id/resend
+GET  /health  (public: DB, queue, Groq, mock services; used by UptimeRobot + status badge)
 /mock/nadra/verify · /mock/household/:cnic · /mock/raast/transfer · /mock/sms/send
 GET  /docs                        (Swagger UI)
 ```
@@ -507,6 +512,8 @@ haqdaar/
 - [ ] "PROTOTYPE — not an official service" label on every page
 - [ ] No real personal data anywhere (synthetic only)
 - [ ] Local backup running for the live demo
+- [ ] CI green on `main` (badge in README), `/health` all green, AI golden-set check passing
+- [ ] Rubric scorecard (section 21) walked through: every criterion has its proof ready
 
 ## 18. Speed, accuracy, security — why this is the best design
 
@@ -574,9 +581,9 @@ Accuracy comes from **design**, not from trusting one model:
 |---|---|---|
 | User roles | ≥ 3 | **5** (citizen, helper, officer, admin, auditor) |
 | Core platform features | all 7 | **all 7** |
-| Optional platform features | ≥ 3 | **8** (rule editor, officer queue, offline, jobs, rate limiting, multi-tenant, notifications, analytics) |
+| Optional platform features | ≥ 3 | **10** (rule editor, officer queue, offline, jobs, rate limiting, multi-tenant, notifications, analytics, signed webhooks, tenant onboarding + usage metering) |
 | AI features | ≥ 3 | **11** (all of them: voice, structured outputs, classification + routing, computer vision, agent + tools, guardrails, explainability, anomaly detection, evaluation, memory, RAG) |
-| Engineering basics | Postgres + migrations, monitoring, logs, tests | Supabase Postgres + Prisma migrations, Sentry + Langfuse, pino logs, Jest + Supertest + Playwright |
+| Engineering basics | Postgres + migrations, monitoring, logs, tests | Supabase Postgres + Prisma migrations, Sentry + Langfuse, pino logs, `/health` + UptimeRobot, Jest + Supertest + Playwright, GitHub Actions CI with an AI golden-set check |
 | Bonus features | optional | **Digital Twin + Helper Mode + Offline-First Sync** (Scam Map if time) |
 | Rules | prototype label, mock data, real vs simulated | Label on every page, synthetic data only, table in README |
 
@@ -683,3 +690,91 @@ The mock Raast service can be told to **time out, fail, or return duplicates** s
 | How do you stop money going to a fraudster's account? | Account title fetch + name match before payout; mismatch holds the payment for an officer. Velocity rules catch one account receiving for many people. |
 | Who can move money? | No single person: maker-checker for high value and reversals; the AI agent can never call the payment tool without a human approval token. |
 | How do you know the books are right? | Double-entry ledger; balances are derived, never edited; reconciliation against the provider statement flags every mismatch. |
+
+## 21. Evaluation rubric — our scorecard (100 points)
+
+The official rubric, criterion by criterion, with **what proves it, where judges see it, and who owns it**. Use this as the final checklist on Sunday and as the order of the demo.
+
+**Where the points are:** AI 30 · SaaS 20 · Real-world 15 · Safety 15 · Accessibility 10 · Innovation 10. AI + SaaS = **half the marks**, so roles B (AI) and A (backend) carry the most weight; accessibility and innovation are where our story already shines.
+
+### 21.1 AI Implementation & Intelligence (30)
+
+| Criterion | Pts | Our proof | Shown where | Owner |
+|---|---|---|---|---|
+| Functional AI features (≥ 3) | 12 | **5 flawless "headline" AI features** (below), the other 6 as support | Main demo steps 2–4 + Judge Mode | B, D |
+| AI workflow integration | 8 | AI is inside **one pipeline**, not bolted-on chatbots: voice → structured claim → document vision → agent tools → rules decide → AI explains. Each AI step feeds the next | Agent step list visible on screen | B |
+| AI output quality & consistency | 6 | Zod-validated outputs, temperature 0–0.2, **versioned prompts**, input-hash cache (same input → same answer), **golden set of 50 labelled cases run in CI** — the build fails if accuracy drops | Eval dashboard + CI badge | B |
+| Model & tool selection | 4 | Every model chosen for a reason (table below) and a fallback for each | Slide + Q&A | B |
+
+**The 5 headline AI features** (must never fail in the demo; everything else is a bonus):
+
+1. **Urdu voice claim:** Whisper STT → LLM fills the claim schema → Urdu voice reply.
+2. **Document vision:** CNIC OCR + QR + forgery checks (ELA, EXIF, OCR vs QR vs NADRA).
+3. **Scam classifier:** Seal + red-flag rules + LLM, with confidence and routing.
+4. **Claim Agent:** visible tool calls, with a human approval token required for payment.
+5. **Explainability:** a 1–2 sentence Urdu reason for the citizen and a full trace for the auditor.
+
+**Model & tool choices (say these out loud):**
+
+| Job | Choice | Why | Fallback |
+|---|---|---|---|
+| Urdu speech-to-text | Groq Whisper large-v3 | Best open model for Urdu; ~1 s on Groq | Gemini audio |
+| Reasoning, extraction, explanation | Llama 3.3 70B on Groq | Fast, free, strong at structured JSON | Gemini Flash |
+| OCR | tesseract.js (on our server) | CNIC images never leave our system (privacy) | Officer manual entry |
+| Forgery | sharp ELA + exifr + jsQR | Deterministic and explainable, not a black box | Human review |
+| Eligibility decision | JSON Logic rules, **not an LLM** | Reproducible, auditable, versioned | — |
+| Confidence | Platt-scaled scores | "0.99" really means ~99% right | Abstain → human |
+
+### 21.2 SaaS Functionality & Technical Architecture (20)
+
+| Criterion | Pts | Our proof | Shown where | Owner |
+|---|---|---|---|---|
+| Core SaaS features & functionality | 8 | 5 roles + RBAC, **multi-tenant** (2 tenants + "Launch a program" wizard), per-tenant analytics, **usage metering + quota**, API keys, **signed webhooks**, notifications, admin rule editor | Admin tour (60 s) | A, C |
+| Backend architecture & API design | 5 | NestJS modules, global deny-by-default guards, uniform error format, idempotency, versioned REST, **Swagger at `/docs`**, queues for slow work | Swagger page + architecture slide | A |
+| Database design & data management | 4 | Normalised Prisma schema, Prisma migrations, indexes on hot paths, encrypted PII fields, double-entry ledger, append-only hash-chained audit, seed scripts | ER diagram slide | A |
+| Deployment, testing & monitoring | 3 | Live on Vercel + Render; **GitHub Actions CI** (lint, typecheck, Jest, Supertest, golden-set AI check); Playwright happy path; Sentry errors, Langfuse AI traces, pino logs; **`/health`** + UptimeRobot | CI badge, Sentry + Langfuse screenshots | A, D |
+
+### 21.3 Real-World Problem Solving (15)
+
+| Criterion | Pts | Our proof | Owner |
+|---|---|---|---|
+| Problem understanding & user needs | 5 | One persona (Zainab), her 3 real barriers (can't read, weak signal, scam messages), plus the helper, officer and shopkeeper views | Everyone (the pitch) |
+| End-to-end task completion | 7 | **The single most important item.** From voice to money to receipt, live, in under 2 minutes, with no manual DB edits | All (M1 milestone) |
+| Practical impact & relevance | 3 | "Time to money", officer minutes saved, scams stopped — numbers on the dashboard; mapped to real Pakistani rails (NADRA, Raast) | C |
+
+### 21.4 Accessibility & Inclusion (10)
+
+| Criterion | Pts | Our proof | Owner |
+|---|---|---|---|
+| Voice & regional language | 4 | Urdu voice in and out; every screen has a play button; amounts spoken offline from number clips; English toggle | D, C |
+| Low-literacy usability | 3 | Icons + colour + audio, one action per screen, ≥ 48 px targets, Helper Mode | C |
+| Weak internet & connectivity | 3 | < 100 KB pages, compressed photos, offline outbox + idempotent sync; demo with network **off** | D |
+
+### 21.5 Safety, Privacy & Reliability (15)
+
+| Criterion | Pts | Our proof | Owner |
+|---|---|---|---|
+| AI uncertainty & human handoff | 5 | Calibrated confidence, 3 lanes, never auto-reject, AI case note for the officer, **Kill AI** button | B |
+| Privacy, consent & data protection | 4 | ConsentGuard (withdraw → 403 instantly), encrypted CNIC/phone, masking, PII stripped before prompts, data-access log for the citizen | A |
+| Explainability & auditability | 3 | Urdu reason + auditor trace with rule version; hash-chained audit with "Verify chain" | A, B |
+| Risk handling & system reliability | 3 | Circuit breaker, retries with backoff, Raast `UNKNOWN` → status inquiry, maker-checker, rate limits, AI fallback models | A, D |
+
+### 21.6 Innovation & Creativity (10)
+
+| Criterion | Pts | Our proof |
+|---|---|---|
+| Originality & uniqueness | 4 | **Haqdaar Seal** (proving "real" instead of guessing "fake") and **Haq Receipt** (spoken payout amount against middlemen skimming) |
+| Creative feature implementation | 4 | **Judge Mode** (judges break it live), **Digital Twin** (replay past cases on a new rule), Helper Mode with PIN switching |
+| Technical creativity & design decisions | 2 | Cost-based threshold (0.988 from the maths, not a guess), rules-decide / AI-explains split |
+
+### 21.7 Where we could lose points (and the fix)
+
+| Risk | Criterion hit | Fix |
+|---|---|---|
+| Groq rate limit or outage during demo | AI features (12) | Gemini fallback + cached answers for the seeded demo inputs + Kill AI path still finishes the task |
+| Too many half-working features | AI quality (6), E2E (7) | Feature freeze Sun 10 AM; the 5 headline AI features first, others only if green |
+| "It's a public service, not SaaS" | Core SaaS (8) | Show multi-tenant onboarding, usage/quota, API keys, webhooks in a 60-second admin tour |
+| No visible tests / monitoring | Deploy & test (3) | CI badge in README, show one Sentry error and one Langfuse trace |
+| Render cold start | Reliability (3), E2E (7) | Warm up 10 min before, UptimeRobot, local backup |
+
+**Demo order follows the points:** end-to-end task (E2E 7 + AI 12) → Judge Mode (Safety 15) → admin tour (SaaS 8) → eval dashboard + CI (AI quality 6 + testing 3).
