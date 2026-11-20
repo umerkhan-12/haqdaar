@@ -1,0 +1,449 @@
+# Haqdaar — Build Plan
+
+**Coder's Cup '26 · Hagrid's Hackathon · "The Last Mile: AI on Public Rails"**
+Build window: Fri 20 Nov 2026, 6:00 PM → Sun 22 Nov 2026, 6:00 PM PKT · Final evaluation: Mon 23 Nov, FAST-NUCES Karachi Library
+
+> **PROTOTYPE ONLY.** Haqdaar is a hackathon prototype, not an official government service. Every identity, payment, SMS and data service is simulated. No real personal data is used anywhere.
+
+---
+
+## 1. The one sentence
+
+> We help **a low-literacy widow** **claim her monthly relief payment** even though **she cannot read forms, has a weak phone signal, and keeps receiving fake "relief payment" messages that could steal her savings.**
+
+**Tagline:** *Knows when it doesn't know. Proves who's real.*
+
+One task (claiming a mock cash-transfer relief payment, the "Sahara Program"), done end to end. Every persona from the brief touches this one task.
+
+## 2. Why we win (our strategy)
+
+The judges said they score **judgment, not speed** — how the system behaves with risk, mistakes and surprises. Experienced teams will build many features thinly. We build one task deeply and **let the judges attack it live**.
+
+Three ideas other teams will not have:
+
+1. **Haqdaar Seal — prove real instead of guessing fake.** Every genuine program message carries a signed verification code / QR. Valid seal = certainly real. No seal but claims to be "relief" = certainly not from us. AI is only used for the leftovers, and says "not sure" when unsure.
+2. **Haq Receipt — protect her from the middleman.** At payout the beneficiary hears the exact amount in Urdu on her own phone. If she got less, a complaint case opens automatically against that helper/agent.
+3. **Judge Mode — "Try to break it".** A panel with one button per challenge (01–08) plus "Kill AI" and "Go offline". The judges' checklist becomes our demo.
+
+Core principles we will defend in Q&A:
+
+- **The LLM never approves anything.** A versioned rule engine + calibrated scores decide. The LLM extracts, classifies and explains.
+- **The system never auto-rejects.** Only humans reject. Automation can only approve (when very sure) or escalate.
+- **Every decision is reproducible:** input hash + rule version + model version + confidence + result.
+- **Failure is safe:** if AI is down or unsure, the case goes to a human with notes. Nothing guesses silently.
+
+## 3. Personas and roles (we use all 5)
+
+| Role | Who | What they do in Haqdaar |
+|---|---|---|
+| **Citizen** | Widow (Zainab, mock) | Voice-first Urdu claim, CNIC photo, track status by icons + audio, manage consent, check suspicious SMS, confirm Haq Receipt |
+| **Community helper** | Helper serving 40 families on one phone | Helper Mode: switch family with that family's PIN, act *on behalf of* with per-family consent, time-limited access |
+| **Department officer** | Relief officer / Fraud-desk officer | Review queue sorted by risk + confidence, AI case notes, approve / reject / ask for more proof |
+| **Admin** | Program admin | Users and roles, rule editor (no code), Digital Twin, cost settings, mock services, Judge Mode |
+| **Auditor** | Independent auditor | Read-only: audit log (tamper-evident), consent history, every AI decision trace |
+
+The shopkeeper uses the **Citizen** role with the scam checker (and can report scam messages to the Scam Map).
+
+## 4. End-to-end flow (the main demo)
+
+```
+Citizen speaks Urdu ──► Whisper STT ──► LLM extracts fields (Zod-validated)
+        │                                      │ missing/invalid → asks again by voice
+        ▼                                      ▼
+CNIC photo (compressed on phone) ──► OCR + QR + forgery checks (background job)
+        │
+        ▼
+Claim Agent (allowlisted tools only)
+   1. verify_identity      → mock NADRA (fuzzy name match, CNIC exact)
+   2. fetch_household      → mock data-exchange service (needs consent)
+   3. check_duplicates     → existing claims / persons
+   4. evaluate_rules       → active rule version (JSON Logic)
+   5. score_risk           → calibrated confidence + anomaly flags
+        │
+        ▼
+Decision lanes
+   AUTO_APPROVE  (p ≥ threshold, no flags, under amount cap, auto-budget not exhausted)
+   ASK_MORE      (missing / unreadable data → tells her exactly what is needed, by voice)
+   HUMAN_REVIEW  (low confidence, any flag, near-duplicate, forgery suspicion, rule fail)
+        │
+        ▼
+Approved ──► initiate_payment (requires approval token) ──► mock Raast ──► Haq Receipt (voice)
+        │
+        ▼
+Citizen: simple spoken reason      Auditor: full trace
+```
+
+## 5. Feature list (mapped to the brief)
+
+Priority: **P0** = must work for the demo · **P1** = should have · **P2** = only if time remains.
+
+### 5.1 Core platform (all required)
+
+| Feature | How | Priority |
+|---|---|---|
+| Secure login + RBAC | JWT access (15 min) + refresh tokens, argon2 hashing, role + tenant checked **on the server** for every route | P0 |
+| Dashboard | Per role: citizen (icons + audio progress), officer (queue), admin (stats), auditor (logs) | P0 |
+| Case management | Create, assign, escalate, close; full event timeline per case | P0 |
+| Public REST API + API keys + Swagger | Fastify + Zod → OpenAPI at `/docs`; API keys hashed, scoped, rate-limited | P0 |
+| Audit log | Every user / AI / agent / system action, append-only, **hash-chained** (each row stores hash of previous row → tamper-evident) | P0 |
+| Consent management | See, share, withdraw, correct; enforced in middleware on every personal-data read | P0 |
+| Mock identity, payment, data services | `/mock/nadra`, `/mock/raast`, `/mock/household`, `/mock/sms` with their own API keys and simulated latency/failures | P0 |
+
+### 5.2 Optional platform features (we pick 8 because our stack makes them cheap)
+
+| Feature | How | Priority |
+|---|---|---|
+| Admin rule editor | JSON Logic rules with a form-based editor; versioned; instant effect | P0 |
+| Officer review queue with priority + confidence sorting | Sorted by risk × amount × waiting time | P0 |
+| Low-bandwidth / offline mode | PWA, IndexedDB outbox, idempotency keys, tiny pages, cached audio | P0 |
+| Background jobs and queues | pg-boss for OCR, forgery, LLM calls, notifications | P0 |
+| Rate limiting + error handling | `@fastify/rate-limit`, uniform error format, retries with backoff for mocks | P0 |
+| Multi-tenant workspaces | Tenants: *Relief Department* and *Fraud & Complaints Desk*; `tenant_id` on every row | P1 |
+| Notifications | In-app + mock SMS phone screen + email (Resend) | P1 |
+| Analytics dashboard per tenant | Claims/day, lanes, approval time, scam types | P1 |
+
+Skipped on purpose: subscription plans, webhooks (P2 only). *Reason for judges: they do not help the widow finish her task.*
+
+### 5.3 AI features (we use 10 of 11, all integrated into the one task)
+
+| AI feature | Where it lives | Priority |
+|---|---|---|
+| Voice (Urdu STT + TTS) | Groq Whisper large-v3 for STT; pre-generated Urdu audio clips + Edge TTS for TTS | P0 |
+| Structured outputs | LLM fills a Zod schema; invalid output is rejected and retried, never trusted | P0 |
+| Classification + routing (Jev idea) | Scam / complaint / request classifier → confidence → auto / ask more / human | P0 |
+| Computer vision | OCR of mock CNIC (tesseract.js), QR decode (jsQR), forgery: error-level analysis (sharp), EXIF editor tags, OCR vs QR vs NADRA mismatch, blur detection (Laplacian variance) | P0 |
+| Agent + tool calling | Claim Agent with allowlisted tools; risky tools need human approval token | P0 |
+| Guardrails + human approval | Output validation, PII redaction in prompts, blocked topics, payment requires approval, "not sure" handoff | P0 |
+| Explainability | User: 1–2 sentence Urdu voice reason built from rule-clause texts. Auditor: full trace | P0 |
+| Anomaly detection | Repeat claims, one phone on many CNICs, helper complaint rate, payment spikes (z-scores + rules) | P1 |
+| Evaluation dashboard | Accuracy, false approvals, false alarms, auto-rate, expected cost, latency, LLM cost (Langfuse) | P0 |
+| Memory and context | Case progress saved server-side + IndexedDB; resume across sessions and devices | P0 |
+| RAG | "Ask about the program" over mock policy docs, answers with sources, refuses outside sources (pgvector) | P1 |
+
+## 6. The 8 technical challenges — our answers
+
+Each challenge has a **Judge Mode button** that reproduces it live.
+
+### Challenge 01 — The cost of being wrong
+
+Cost model (admin-editable, so the numbers can change without code):
+
+| Outcome | Cost (PKR-equivalent) | Reasoning |
+|---|---|---|
+| Wrong approval (fraud paid out) | **25,000** | 10,000 payout lost + recovery effort + trust harm to the real beneficiary |
+| Human review | **300** | ~10 min officer time + citizen waits ~1 day |
+| Ask for more proof | **150** | Citizen effort, re-submission |
+| Wrong rejection | **not possible by automation** | Only humans reject |
+
+**Auto-approve rule:** approve alone only when the expected cost of approving is lower than the cost of a review:
+
+```
+(1 − p) × 25,000  <  300   ⇒   p  >  1 − 300/25,000  =  0.988
+```
+
+Extra safety rails (all configurable):
+
+- Hard flags always go to a human, whatever p is: forgery suspicion, near-duplicate, identity ambiguity, anomaly, first-time helper.
+- Amount cap for auto-approval (e.g. ≤ PKR 10,500).
+- **Auto-approval circuit breaker:** if auto-approvals in the last hour exceed 3× the normal rate, the auto lane pauses and everything goes to humans.
+
+**Showing the numbers:** a synthetic labelled set of 500 cases (legit + 5 fraud types). The evaluation dashboard plots expected total cost vs threshold and marks the chosen threshold; shows confusion matrix, false-approval rate, % automated, average time saved.
+
+### Challenge 02 — Saying "I am not sure"
+
+- Confidence is **calibrated** (Platt scaling fitted on the synthetic set), not a raw LLM number.
+- Below threshold, or any hard flag → `HUMAN_REVIEW` with an **AI case note**: what was checked, what passed, what failed, what is uncertain and why, suggested next step.
+- Citizen hears: *"Aap ka case ek afsar dekhenge. Aap ko 2 din mein jawab milega."* (An officer will look at your case. You'll get an answer in 2 days.)
+- If the LLM/OCR service is down → case goes to a human with note "AI unavailable". **Silent guessing is impossible by design.**
+
+### Challenge 03 — Bad data
+
+Name matching pipeline:
+
+1. Normalize: lowercase, strip honorifics (Mr, Mst, Bibi, Syed…), collapse spaces and doubled letters.
+2. Transliteration map: `muhammad | mohammad | muhammed | mohammed | mohd | md → mhd`, `khan | khaan → khan`, `fatima | fatimah | fatma → ftm`, etc.
+3. Similarity: Jaro-Winkler on normalized names + father's name.
+4. **Match rules:**
+
+| CNIC | Name similarity | DOB / father | Result |
+|---|---|---|---|
+| exact | ≥ 0.90 | at least one matches | **Same person** |
+| exact | < 0.90 | — | **Human review** (possible data error or identity misuse) |
+| different | ≥ 0.92 | both match | **Possible duplicate person** → human |
+| missing | any | — | **Ask for more** (never match on name alone) |
+
+- Never auto-merge records. Never crash on missing fields (Zod `.partial()` + explicit "missing" state).
+- Duplicates in seed data are deliberate (same person, 3 spellings, 2 claims).
+
+### Challenge 04 — Rules that change
+
+- Rules stored as **JSON Logic** in `rule_versions` (draft → active). Evaluated at runtime by `json-logic-js`.
+- Each rule clause has an id + Urdu/English explanation text, so explanations come straight from the rule trace.
+- Admin publishes v2 → the next case uses v2 immediately. No code change, no redeploy.
+- Every decision stores `rule_version_id`; old decisions still show v1.
+- **Digital Twin** (bonus): before publishing, replay the draft on past cases → "37 decisions would change: 30 human→approve, 7 approve→human; expected cost −PKR 4,200".
+
+Example rule (v1):
+
+```json
+{ "and": [
+  { "<":  [ { "var": "household.monthly_income" }, 40000 ] },
+  { ">=": [ { "var": "household.size" }, 3 ] },
+  { "==": [ { "var": "already_enrolled" }, false ] }
+]}
+```
+
+### Challenge 05 — Explain and audit
+
+| View | Content |
+|---|---|
+| **Citizen** | 1–2 simple sentences, Urdu voice + icons: *"Aap ki aamdani 40,000 se kam hai aur ghar mein 5 log hain, is liye aap ko madad mil gayi."* (Your income is under 40,000 and there are 5 people in your home, so you have been approved.) |
+| **Auditor** | Input hash, extracted fields, OCR/forgery scores, identity match details, rule version + per-clause result, model + prompt version, calibrated confidence, lane, threshold used, cost settings version, actor, timestamps |
+
+Audit log is append-only and hash-chained; the auditor screen has a **"Verify chain"** button.
+
+### Challenge 06 — Consent and take-back
+
+- Consent = (citizen, grantee [department / helper], data fields, purpose, expiry, status).
+- Every personal-data read goes through `requireConsent()` middleware. Withdrawn → **HTTP 403 `CONSENT_WITHDRAWN`**, logged.
+- Citizen screen "**Who has my data**": list of grantees + access log ("Relief officer viewed your income, 21 Nov 7:40 PM").
+- Correct data → creates a correction case; the old value is kept in history.
+- Demo: citizen withdraws → officer refreshes → blocked → auditor sees both events.
+
+### Challenge 07 — Works for everyone
+
+- **Icon-first UI:** every screen has a big speaker button that auto-plays the Urdu prompt; answers by voice or big ✓ / ✗ buttons; progress shown as a picture path.
+- **Small pages:** < 100 KB per screen; photos compressed on the phone to ~150 KB; audio prompts ~10 KB each, cached by the service worker.
+- **Offline-first:** every step saved to IndexedDB; outbox syncs when signal returns; each request carries an idempotency key, so retries never create duplicates.
+- **Numbers spoken offline:** amounts built from pre-recorded number clips ("das hazaar" + "paanch sau").
+
+### Challenge 08 — Scams and fake documents
+
+Scam checker pipeline:
+
+1. **Seal check:** does the message contain a valid Haqdaar Seal code (HMAC, e.g. `HQ-7F3K-92`) or signed QR? → **REAL** (certain).
+2. **Claims to be from the program but no valid seal** → **NOT FROM US** (certain about origin) + red flags explained.
+3. **Otherwise:** rule red-flags (asks for PIN/OTP, "fee to release payment", link, urgency, unknown number) + LLM classifier (Zod output: label, confidence, red_flags) → calibrated → **SCAM / SAFE / NOT SURE** → not-sure goes to the Fraud Desk queue.
+
+Fake documents: ELA heatmap, EXIF editing-software tags, OCR vs QR vs mock NADRA mismatch, blur score (blurry → ask for a new photo, not "forged").
+
+**Honesty:** evaluation dashboard shows false alarms on a labelled set of ~200 messages (Urdu, Roman Urdu, English) and on genuine documents. *Blocking a real person is a cost, so a suspicious document goes to a human — it is never auto-rejected.*
+
+## 7. Bonus features
+
+| Bonus | Status |
+|---|---|
+| **Digital Twin** (rule replay on past cases) | P0 — nearly free once rules are versioned |
+| **Helper Mode** (one phone, 40 families) | P0 — part of our story |
+| Offline-First Sync | Already covered by Challenge 07 (P0) |
+| Scam Map (by type, area, time) | P2 — only if time remains (Leaflet + OpenStreetMap) |
+
+### Helper Mode details
+
+- Helper sees family cards (name + audio, no photos). Switching to a family requires that family's 4-digit PIN.
+- Every action is recorded as *"Helper Asma on behalf of Zainab"*.
+- Per-family consent; helper access expires (e.g. 30 days) and can be revoked by the citizen.
+- Auto-lock after 2 minutes idle; nothing of family A is visible while working on family B (server enforces it).
+
+### Haq Receipt details
+
+- On payout: beneficiary hears *"Aap ko 10,500 rupay milne chahiye. Kya aap ko poore paise mile?"* (You should receive 10,500 rupees. Did you get the full amount?) ✓ / ✗
+- ✗ → complaint case to the Fraud Desk with the helper/agent attached; helper complaint rate feeds anomaly detection.
+
+### Judge Mode panel
+
+| Button | What judges see |
+|---|---|
+| 01 Risky claim | High amount + mild flags → goes to human, cost math shown |
+| 02 Unsure case | Low confidence → handoff with case note |
+| 03 Messy name | "Mohammad" vs "Muhammad" matched; near-duplicate → human |
+| 04 Change rule | Admin edits income limit → next case uses v2; old shows v1 |
+| 05 Explain | Same decision, citizen view vs auditor trace |
+| 06 Withdraw consent | Officer blocked with 403; audit log shows it |
+| 07 Go offline | Network off mid-claim → saved → reconnect → synced, no duplicate |
+| 08 Fake SMS / forged CNIC | Seal check, red flags, ELA heatmap |
+| Kill AI | LLM disabled → cases still safe, routed to humans |
+
+## 8. Architecture
+
+```
+ ┌──────────────────────── Next.js PWA (Vercel) ────────────┐
+ │ Citizen (voice/icons) · Helper · Officer · Admin ·       │
+ │ Auditor · Judge Mode · Service worker · IndexedDB        │
+ └───────────▲──────────────────────────────────────────────┘
+             │ HTTPS + JWT  (idempotency keys)
+ ┌───────────┴──────────── Fastify API (Render) ────────────┐
+ │ auth · rbac · consent middleware · rate limit            │
+ │ cases · decisions · rules · documents · scam · eval      │
+ │ helpers · payments · audit (hash chain) · rag            │
+ │ Claim Agent (allowlisted tools)                          │
+ │ /mock/nadra · /mock/raast · /mock/household · /mock/sms  │
+ └──────┬─────────────────┬─────────────────┬───────────────┘
+        │                 │                 │
+   Supabase Postgres   pg-boss jobs      External AI (free)
+   + pgvector          (OCR, forgery,    Groq (LLM, Whisper)
+   + Storage           LLM, notify)      Gemini (fallback, embeddings)
+                                         Edge TTS · Resend · Langfuse · Sentry
+```
+
+**Why it scales:** stateless API (run N copies), slow AI work in queues, idempotent writes, tenant_id + indexes on hot tables. Free tiers are not built for scale, but the architecture is — moving to paid tiers changes config, not code.
+
+## 9. Tech stack and costs (total: PKR 0)
+
+| Layer | Pick | Cost |
+|---|---|---|
+| Language / monorepo | TypeScript, pnpm workspaces | Free |
+| Frontend | Next.js + Tailwind + shadcn/ui + Recharts | Free |
+| Offline | Serwist (service worker) + `idb` | Free |
+| Backend | Fastify + Zod + `fastify-type-provider-zod` + `@fastify/swagger` | Free |
+| Database | Supabase Postgres (+ pgvector, Storage) + Prisma migrations | Free (500 MB) |
+| Jobs | pg-boss | Free |
+| Auth | jsonwebtoken + argon2 | Free |
+| Rules | json-logic-js | Free |
+| LLM | Groq (Llama 3.3 70B), fallback Gemini Flash | Free (rate-limited) |
+| STT | Groq Whisper large-v3 | Free (rate-limited) |
+| TTS | Pre-generated clips + `msedge-tts` (ur-PK voices) + browser fallback | Free (unofficial) |
+| OCR / CV | tesseract.js, sharp, exifr, jsQR | Free |
+| Email | Resend | Free (100/day) |
+| SMS / WhatsApp | Mocked phone screen | Free |
+| Observability | Langfuse, Sentry, pino | Free tier |
+| Tests | Vitest, Supertest, Playwright | Free |
+| Hosting | Vercel (web), Render (API), GitHub | Free |
+
+**Free-tier traps:**
+
+| Trap | Fix |
+|---|---|
+| Render free sleeps after ~15 min (cold start ~50 s) | UptimeRobot ping every 10 min; local backup on a laptop for judging |
+| Supabase free pauses after ~1 week idle | Open dashboard Monday morning |
+| Groq rate limits | Each dev uses own key; cache AI results; Gemini fallback |
+| Google Cloud / AWS need a card | Avoid them |
+
+## 10. Data model (Prisma, first version)
+
+| Table | Key fields |
+|---|---|
+| `tenants` | id, name, type (relief / fraud_desk) |
+| `users` | id, tenant_id, role, phone, name, password_hash, pin_hash |
+| `persons` | id, cnic, full_name, name_normalized, father_name, dob, phone, district |
+| `helper_assignments` | helper_id, person_id, granted_by, expires_at, revoked_at |
+| `consents` | id, person_id, grantee_type, grantee_id, fields[], purpose, status, granted_at, withdrawn_at |
+| `data_access_log` | person_id, accessor_id, fields[], purpose, allowed, at |
+| `documents` | id, case_id, type, storage_key, ocr_json, qr_json, forgery_score, blur_score, flags[] |
+| `cases` | id, tenant_id, person_id, type, status, lane, priority, confidence, assigned_to, created_by, on_behalf_of, idempotency_key |
+| `case_events` | case_id, actor_type, actor_id, event, data, at |
+| `rule_sets` / `rule_versions` | rule_set_id, version, logic_json, clause_texts, status, created_by, activated_at |
+| `cost_settings` | version, wrong_approval, review, ask_more, amount_cap, threshold |
+| `decisions` | id, case_id, rule_version_id, cost_settings_version, model_version, prompt_version, input_hash, features, confidence, lane, explanation_user, trace |
+| `payments` | id, case_id, amount, status, raast_ref, idempotency_key, approved_by |
+| `receipts` | payment_id, confirmed_full, reported_amount, at |
+| `messages` | id, text, sender, channel, district, seal_valid, label, confidence, red_flags[], lane, reviewed_label |
+| `api_keys` | id, owner_id, key_hash, scopes[], rate_limit, revoked_at |
+| `audit_logs` | id, actor_type, actor_id, action, entity, entity_id, payload_hash, prev_hash, hash, ip, at |
+| `idempotency_keys` | key, user_id, response, created_at |
+| `eval_runs` | id, dataset, threshold, metrics_json, at |
+| `policy_chunks` | id, doc, section, text, embedding (pgvector) |
+
+## 11. API routes (first version)
+
+```
+POST /auth/login · /auth/refresh · /auth/logout · /auth/pin-switch (helper)
+GET  /me
+POST /cases                       (idempotency key)     GET /cases · /cases/:id
+POST /cases/:id/documents         POST /cases/:id/voice
+POST /cases/:id/assign · /escalate · /close · /approve · /reject · /request-info
+GET  /queue                       (officer, sorted)
+GET  /decisions/:id               /decisions/:id/trace  (auditor)
+GET  /consents  POST /consents  POST /consents/:id/withdraw  POST /corrections
+GET  /me/data-access-log
+POST /scam/check                  GET /scam/stats
+GET  /rules  POST /rules/:id/versions  POST /rules/versions/:id/simulate (Digital Twin)
+POST /rules/versions/:id/publish  GET/PUT /cost-settings
+POST /payments/:caseId            POST /receipts/:paymentId
+GET  /eval/summary  POST /eval/run
+POST /rag/ask
+GET  /audit  POST /audit/verify-chain
+POST /api-keys  DELETE /api-keys/:id
+POST /judge/:scenario             (admin, Judge Mode)
+/mock/nadra/verify · /mock/household/:cnic · /mock/raast/transfer · /mock/sms/send
+GET  /docs                        (Swagger UI)
+```
+
+## 12. Repository structure
+
+```
+haqdaar/
+├─ apps/
+│  ├─ web/            Next.js PWA (all role UIs, Judge Mode)
+│  └─ api/            Fastify API
+│     └─ src/modules/ auth, cases, consent, audit, rules, decisions,
+│                     documents, scam, payments, helpers, eval, rag,
+│                     agent, judge, mock/{nadra,raast,household,sms}
+├─ packages/
+│  └─ shared/         Zod schemas + types shared by web and api
+├─ data/
+│  ├─ generators/     synthetic persons, cases, messages (labelled)
+│  ├─ seed/           seed scripts
+│  ├─ policy/         mock program policy docs (for RAG)
+│  └─ audio/          pre-generated Urdu prompt + number clips
+└─ docs/              this plan, PDF, architecture notes
+```
+
+## 13. Team split (4 people)
+
+> Update names and swap areas once we know everyone's strongest skill.
+
+| Person | Owns | First deliverable (by H6) |
+|---|---|---|
+| **A — Umer (backend core)** | Monorepo, Prisma schema + migrations (sole owner), auth/JWT/RBAC, tenants, cases + events, audit hash chain, consent middleware, API keys, rate limit, Swagger, deploy API | Login + roles + cases CRUD deployed with Swagger |
+| **B — AI / decision engine** | Rule engine (JSON Logic) + versions, decision lanes + cost math, calibration, synthetic data generators, eval dashboard data, scam classifier + Seal, OCR/forgery/blur, Langfuse | `decide(case)` returns lane + trace on synthetic cases |
+| **C — Frontend** | Next.js PWA, voice-first citizen flow, icons + audio, officer queue, admin rule editor + Digital Twin UI, auditor screens, Judge Mode panel, eval charts | Citizen flow screens with audio playing, mocked API |
+| **D — Integrations / agent / offline** | Mock NADRA/Raast/household/SMS services, Claim Agent + tools, Whisper STT, TTS clip generation, offline outbox + idempotency, Helper Mode, Haq Receipt, RAG, deploy web, demo script | Mock services live + Whisper transcribing Urdu |
+
+**Git rules:** branch per feature (`a/auth`, `b/rules`…), small PRs, merge to `main` at least every 4 hours. Only A edits `schema.prisma` — others request changes in the team chat. Zod contracts in `packages/shared` are agreed in the first 2 hours and changed only with a heads-up.
+
+## 14. 48-hour timeline
+
+| Time (PKT) | Hours | Goal |
+|---|---|---|
+| Fri 6 PM – 9 PM | H0–3 | Repo + monorepo, Supabase, Prisma v1, hello-world deployed (web + api), env keys, agree shared Zod contracts |
+| Fri 9 PM – Sat 6 AM | H3–12 | Each person builds their first deliverable. Sleep shifts: A+C sleep 2–6 AM, B+D sleep 6–10 AM |
+| Sat 6 AM – 2 PM | H12–20 | Integrate. **M1 (Sat 2 PM): full happy path deployed** — voice claim → agent → decision → approval → mock payment → receipt |
+| Sat 2 PM – Sun 4 AM | H20–34 | Edge cases (challenges 01–08), Helper Mode, Digital Twin, eval dashboard, Judge Mode. **M2 (Sun 4 AM): every Judge Mode button works** |
+| Sun 4 AM – 12 PM | H34–42 | **Feature freeze at Sun 10 AM.** Bug bash, seed data, tests, offline test on throttled 3G |
+| Sun 12 PM – 6 PM | H42–48 | README (real vs simulated), demo video, slides, final deploy, rehearse 3×. **Submit by 5 PM** |
+| Mon 23 Nov | — | Warm up Render, open Supabase, local backup running, rehearse once more |
+
+## 15. Demo script (~6 minutes)
+
+1. **(0:00) The person.** Play Zainab's voice in Urdu asking for help. "She can't read this form. Watch her finish it."
+2. **(0:30) Claim by voice** on a throttled connection; CNIC photo; network drops → saved → resumes.
+3. **(1:30) Agent at work** (visible step list) → auto-approved at p = 0.993 → mock Raast → **Haq Receipt** plays the amount.
+4. **(2:15) The shopkeeper** forwards a fake "relief" SMS → *Not from us* + red flags; a real one with Seal → *Real*.
+5. **(3:00) The helper** switches families with PINs; consent separated; withdraws one family's consent → officer blocked.
+6. **(3:45) Hand Judge Mode to the judges.** Messy names, forged CNIC, unsure case, Kill AI.
+7. **(4:45) Admin changes a rule** → Digital Twin shows impact → publish → next case uses v2, old shows v1.
+8. **(5:30) The numbers:** eval dashboard — cost curve, threshold 0.988, false approvals, false alarms (shown honestly).
+
+## 16. Real vs simulated (for README and judges)
+
+| Real | Simulated |
+|---|---|
+| Login, roles, server-side permission checks | NADRA identity service |
+| Rule engine, versioning, Digital Twin | Raast payments |
+| Decision engine, calibration, cost math | Household / income data exchange |
+| OCR, QR, forgery heuristics on uploaded images | SMS / WhatsApp delivery (shown on a mock phone screen) |
+| Urdu speech-to-text and text-to-speech | All people, CNICs, documents (synthetic) |
+| Audit hash chain, consent enforcement | Program policy documents (written by us) |
+| Offline outbox + idempotent sync | Relief program "Sahara" (fictional) |
+
+## 17. Submission checklist
+
+- [ ] Live deployed link (web + API + Swagger)
+- [ ] GitHub repository (make public before submission)
+- [ ] README: one sentence, features, architecture, real vs simulated, setup, test accounts, limitations
+- [ ] Demo video (public Google Drive link)
+- [ ] Slides (optional but recommended)
+- [ ] "PROTOTYPE — not an official service" label on every page
+- [ ] No real personal data anywhere (synthetic only)
+- [ ] Local backup running for the live demo
