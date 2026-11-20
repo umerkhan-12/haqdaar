@@ -26,7 +26,7 @@ export async function bootstrapService(
     bodyLimit: o.bodyLimitBytes ?? 1024 * 1024,
     // Keep one request id across gateway -> services -> logs -> error bodies.
     requestIdHeader: 'x-request-id',
-    genReqId: (req) => {
+    genReqId: (req: { headers: Record<string, string | string[] | undefined> }) => {
       const id = randomUUID();
       req.headers['x-request-id'] = id;
       return id;
