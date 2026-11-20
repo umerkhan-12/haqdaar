@@ -1,0 +1,25 @@
+# Local infrastructure. Services run on the host with `pnpm dev` (fast reload).
+# Postgres has pgvector for the RAG feature. Port 5433 avoids clashing with a local Postgres.
+name: haqdaar
+
+services:
+  postgres:
+    # Swap to pgvector/pgvector:pg16 when the RAG feature is built (needs the `vector` extension).
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: haqdaar
+      POSTGRES_PASSWORD: haqdaar
+      POSTGRES_DB: haqdaar
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U haqdaar -d haqdaar']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:

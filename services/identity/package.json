@@ -1,0 +1,37 @@
+{
+  "name": "@haqdaar/identity",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Identity service: tenants, users, RS256 tokens, refresh rotation, consent, API keys.",
+  "scripts": {
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/**/*.test.js",
+    "db:generate": "prisma generate",
+    "db:push": "node ../../scripts/with-env.mjs prisma db push --skip-generate",
+    "db:seed": "node ../../scripts/with-env.mjs node dist/seed.js"
+  },
+  "dependencies": {
+    "@haqdaar/nest-kit": "workspace:*",
+    "@haqdaar/shared": "workspace:*",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-fastify": "^11.0.0",
+    "@nestjs/swagger": "^11.0.0",
+    "@nestjs/throttler": "^6.4.0",
+    "@prisma/client": "^6.19.0",
+    "argon2": "^0.41.1",
+    "nestjs-pino": "^4.1.0",
+    "pino-http": "^10.3.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "pino-pretty": "^13.0.0",
+    "prisma": "^6.19.0"
+  }
+}

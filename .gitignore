@@ -10,3 +10,7 @@ coverage/
 .DS_Store
 .vercel/
 .turbo/
+
+# Prisma generated clients (run pnpm db:generate)
+**/generated/
+*.tsbuildinfo

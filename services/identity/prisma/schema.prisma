@@ -1,0 +1,151 @@
+// Identity service — owns the `identity` schema. No other service reads these tables.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("IDENTITY_DATABASE_URL")
+}
+
+enum TenantType {
+  relief
+  fraud_desk
+}
+
+enum Role {
+  citizen
+  helper
+  officer
+  admin
+  auditor
+}
+
+enum ConsentStatus {
+  ACTIVE
+  WITHDRAWN
+}
+
+model Tenant {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String
+  type      TenantType
+  createdAt DateTime   @default(now()) @map("created_at")
+  users     User[]
+  apiKeys   ApiKey[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  role         Role
+  name         String
+  /// AES-256-GCM ciphertext; never stored in plain text
+  phoneEnc     String   @map("phone_enc")
+  /// HMAC-SHA256 of the phone, used for login lookup
+  phoneHash    String   @unique @map("phone_hash")
+  passwordHash String   @map("password_hash")
+  /// Helper Mode / citizen quick PIN (argon2id)
+  pinHash      String?  @map("pin_hash")
+  /// Citizen users point to their person record in the cases service
+  personId     String?  @map("person_id") @db.Uuid
+  failedLogins Int      @default(0) @map("failed_logins")
+  lockedUntil  DateTime? @map("locked_until")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  refreshTokens RefreshToken[]
+  helperLinks   HelperLink[]
+
+  @@index([tenantId, role])
+  @@map("users")
+}
+
+/// Opaque refresh tokens, stored hashed. A family = one login session.
+/// Reusing a rotated token revokes the whole family (token theft detection).
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  familyId    String    @map("family_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at")
+  rotatedAt   DateTime? @map("rotated_at")
+  revokedAt   DateTime? @map("revoked_at")
+  /// Helper Mode: the person this session acts for
+  onBehalfOf  String?   @map("on_behalf_of") @db.Uuid
+  userAgent   String?   @map("user_agent")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+/// Which families a helper may act for (each needs that family's PIN to switch).
+model HelperLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  helperId  String   @map("helper_id") @db.Uuid
+  personId  String   @map("person_id") @db.Uuid
+  label     String
+  pinHash   String   @map("pin_hash")
+  failedPins Int     @default(0) @map("failed_pins")
+  lockedUntil DateTime? @map("locked_until")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  helper User @relation(fields: [helperId], references: [id])
+
+  @@unique([helperId, personId])
+  @@map("helper_links")
+}
+
+model ApiKey {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  name       String
+  /// First chars shown in the UI, e.g. "hq_live_ab12"
+  prefix     String
+  keyHash    String    @unique @map("key_hash")
+  scopes     String[]
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("api_keys")
+}
+
+/// Consent given by a person (citizen) for a purpose. Withdrawal takes effect immediately.
+model Consent {
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  personId    String        @map("person_id") @db.Uuid
+  purpose     String
+  /// Who may use the data (e.g. a helper user id); null = the program itself
+  grantedTo   String?       @map("granted_to")
+  status      ConsentStatus @default(ACTIVE)
+  grantedAt   DateTime      @default(now()) @map("granted_at")
+  withdrawnAt DateTime?     @map("withdrawn_at")
+
+  @@index([personId, purpose, status])
+  @@map("consents")
+}
+
+/// Transactional outbox: written in the same transaction as the change, published by the relay.
+model OutboxEvent {
+  id          String    @id @db.Uuid
+  type        String
+  envelope    Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+  attempts    Int       @default(0)
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox")
+}
