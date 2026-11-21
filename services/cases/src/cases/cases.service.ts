@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { createHmac } from 'node:crypto';
 import {
   buildEvent,
   decryptField,
@@ -22,6 +23,14 @@ import { PrismaService } from '../prisma.service';
 import { RulesService, type ActiveRule } from '../rules/rules.service';
 import { Upstream, type HouseholdRecord, type NadraVerifyResponse } from '../upstream';
 import { decide, type DecisionInputs, type HardFlag } from '../engine/decide';
+import {
+  DEFAULT_ANOMALY_THRESHOLDS,
+  detectAnomalies,
+  type AnomalyCandidateGroups,
+  type AnomalyObservation,
+  type AnomalySignal,
+  type AnomalyType,
+} from '../engine/anomaly';
 import { nameSimilarity, normalizeName } from '../engine/names';
 import { priority } from '../engine/priority';
 import type { Facts } from '../engine/rules';
@@ -36,6 +45,9 @@ const REVIEWABLE: CaseStatus[] = ['IN_REVIEW', 'NEEDS_INFO'];
 const PROCESSABLE: CaseStatus[] = ['SUBMITTED', 'NEEDS_INFO'];
 const CONSENTS: ConsentPurpose[] = ['identity_verification', 'household_data'];
 const DUPLICATE_NAME_MIN = 0.92;
+const ANOMALY_OPEN_STATUSES = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW'] as const;
+const ANOMALY_COUNTED_STATUSES = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW', 'APPROVED', 'PAID'] as const;
+const ANOMALY_BATCH_SIZE = 250;
 
 @Injectable()
 export class CasesService {
@@ -77,6 +89,11 @@ export class CasesService {
             idempotencyKey,
             payoutIban: body.payout.iban ?? null,
             payoutAlias: body.payout.alias ?? null,
+            payoutKey: this.payoutKey(body.payout.iban, body.payout.alias),
+            districtSnapshot: person.district,
+            householdSize: body.householdSize ?? body.extraction?.householdSize ?? null,
+            nameNormalizedSnapshot: person.nameNormalized,
+            helperId: user.role === 'helper' ? user.id : null,
             extraction: (body.extraction as Prisma.InputJsonValue) ?? Prisma.JsonNull,
             events: { create: { type: 'submitted', actor: user.id, data: { via: user.role } } },
           },
@@ -136,13 +153,21 @@ export class CasesService {
     const rule = await this.rules.published(c.tenantId);
     const costs = await this.rules.costs(c.tenantId);
     const inputs = await this.gather(c, c.person, requestId);
-    const outcome = decide(inputs, { clauses: rule.clauses, amount: rule.amount, costs, amountCap: env.AUTO_APPROVE_AMOUNT_CAP_PKR });
-
-    const to: CaseStatus =
-      outcome.lane === 'AUTO_APPROVE' ? 'APPROVED' : outcome.lane === 'ASK_MORE' ? 'NEEDS_INFO' : 'IN_REVIEW';
     const ctx = { source: 'cases', principal: actor, correlationId: requestId };
 
     await this.prisma.$transaction(async (tx) => {
+      await this.lockTenantAnomalyScan(tx, c.tenantId);
+      const now = new Date();
+      const observations = await this.anomalyObservations(tx, c.tenantId, now);
+      const candidates = await this.anomalyCandidateGroups(tx, c.tenantId, now);
+      const signals = this.detectTenantAnomalies(c.tenantId, observations, now, candidates);
+      const currentSignals = signals.filter((signal) => signal.evidenceCaseIds.includes(c.id));
+      inputs.externalFlags.push(...currentSignals.map((signal) => this.anomalyHardFlag(signal.type)));
+      await this.persistOpenFindings(tx, signals, observations);
+
+      const outcome = decide(inputs, { clauses: rule.clauses, amount: rule.amount, costs, amountCap: env.AUTO_APPROVE_AMOUNT_CAP_PKR });
+      const to: CaseStatus =
+        outcome.lane === 'AUTO_APPROVE' ? 'APPROVED' : outcome.lane === 'ASK_MORE' ? 'NEEDS_INFO' : 'IN_REVIEW';
       const claimed = await tx.case.updateMany({
         where: { id: c.id, status: { in: PROCESSABLE } },
         data: {
@@ -189,8 +214,279 @@ export class CasesService {
       if (to === 'APPROVED') {
         await this.emit(tx, this.decidedEvent(c.id, c.personId, 'AUTO_APPROVE', outcome.confidence, rule, ctx));
       }
-    });
+    }, { maxWait: 10_000, timeout: 30_000 });
     this.bus.kick();
+  }
+
+  /** Authenticated, tenant-scoped, repeatable scan. It only adds evidence to open claims. */
+  async scanAnomalies(user: AuthUser) {
+    const now = new Date();
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockTenantAnomalyScan(tx, user.tenantId);
+      const observations = await this.anomalyObservations(tx, user.tenantId, now);
+      const candidates = await this.anomalyCandidateGroups(tx, user.tenantId, now);
+      const signals = this.detectTenantAnomalies(user.tenantId, observations, now, candidates);
+      const result = await this.persistOpenFindings(tx, signals, observations);
+      return {
+        tenantId: user.tenantId,
+        scannedCases: observations.length,
+        signalsDetected: signals.length,
+        findingsCreated: result.created,
+        findingsUpdated: result.updated,
+        findings: signals.map((signal) => ({
+          type: signal.type,
+          evidenceCaseIds: signal.evidenceCaseIds,
+          observedCount: signal.observedCount,
+          threshold: signal.threshold,
+          windowStart: signal.windowStart,
+          windowEnd: signal.windowEnd,
+        })),
+      };
+    }, { maxWait: 10_000, timeout: 30_000 });
+  }
+
+  private async lockTenantAnomalyScan(tx: Tx, tenantId: string) {
+    // Serializes decisions/scans within one tenant so concurrent submissions cannot all miss a ring.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId}))`;
+  }
+
+  private async anomalyObservations(tx: Tx, tenantId: string, now: Date): Promise<AnomalyObservation[]> {
+    const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60_000);
+    const rows: AnomalyObservation[] = [];
+    let afterId: string | undefined;
+    for (;;) {
+      const batch = await tx.case.findMany({
+        where: {
+          tenantId,
+          type: 'relief_claim',
+          status: { in: [...ANOMALY_COUNTED_STATUSES] },
+          createdAt: { gte: cutoff, lte: now },
+          ...(afterId ? { id: { gt: afterId } } : {}),
+        },
+        orderBy: { id: 'asc' },
+        take: ANOMALY_BATCH_SIZE,
+        select: {
+          id: true,
+          tenantId: true,
+          status: true,
+          personId: true,
+          payoutKey: true,
+          helperId: true,
+          districtSnapshot: true,
+          householdSize: true,
+          nameNormalizedSnapshot: true,
+          createdAt: true,
+          person: { select: { cnicHash: true } },
+        },
+      });
+      if (batch.length === 0) break;
+      rows.push(...batch.map((row) => ({
+        tenantId: row.tenantId,
+        caseId: row.id,
+        status: row.status,
+        personId: row.personId,
+        cnicHash: row.person.cnicHash,
+        nameNormalized: row.nameNormalizedSnapshot ?? '',
+        district: row.districtSnapshot,
+        payoutKey: row.payoutKey,
+        helperId: row.helperId,
+        householdSize: row.householdSize,
+        createdAt: row.createdAt,
+      })));
+      afterId = batch[batch.length - 1]!.id;
+      if (batch.length < ANOMALY_BATCH_SIZE) break;
+    }
+    return rows;
+  }
+
+  private detectTenantAnomalies(
+    tenantId: string,
+    observations: AnomalyObservation[],
+    now: Date,
+    candidates: AnomalyCandidateGroups,
+  ): AnomalySignal[] {
+    return detectAnomalies(tenantId, observations, now, {
+      sharedPayoutPeople: env.ANOMALY_SHARED_PAYOUT_PEOPLE,
+      helperClaimsPerHour: env.ANOMALY_HELPER_CLAIMS_PER_HOUR,
+      householdPatternPeople: env.ANOMALY_HOUSEHOLD_PATTERN_PEOPLE,
+      identityCorroboratingDetails: env.ANOMALY_IDENTITY_CORROBORATION_DETAILS,
+    }, candidates);
+  }
+
+  /** Candidate clusters are SQL GROUP BY aggregates; the pure engine verifies them and builds evidence. */
+  private async anomalyCandidateGroups(tx: Tx, tenantId: string, now: Date): Promise<AnomalyCandidateGroups> {
+    const base = {
+      tenantId,
+      type: 'relief_claim' as const,
+      status: { in: [...ANOMALY_COUNTED_STATUSES] },
+      createdAt: { lte: now },
+    };
+    const candidates: Record<AnomalyType, Set<string>> = {
+      shared_payout: new Set(),
+      helper_velocity: new Set(),
+      household_pattern: new Set(),
+      identity_collision: new Set(),
+    };
+
+    const payoutPeople = await tx.case.groupBy({
+      by: ['payoutKey', 'personId'],
+      where: {
+        ...base,
+        payoutKey: { not: null },
+        createdAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60_000), lte: now },
+      },
+    });
+    const payoutCounts = new Map<string, Set<string>>();
+    for (const item of payoutPeople) {
+      if (!item.payoutKey) continue;
+      const people = payoutCounts.get(item.payoutKey) ?? new Set<string>();
+      people.add(item.personId);
+      payoutCounts.set(item.payoutKey, people);
+    }
+    for (const [key, people] of payoutCounts) {
+      if (people.size > env.ANOMALY_SHARED_PAYOUT_PEOPLE) candidates.shared_payout.add(key);
+    }
+
+    const helpers = await tx.case.groupBy({
+      by: ['helperId'],
+      where: {
+        ...base,
+        helperId: { not: null },
+        createdAt: { gte: new Date(now.getTime() - 60 * 60_000), lte: now },
+      },
+      _count: { _all: true },
+    });
+    for (const item of helpers) {
+      if (item.helperId && item._count._all > env.ANOMALY_HELPER_CLAIMS_PER_HOUR) {
+        candidates.helper_velocity.add(item.helperId);
+      }
+    }
+
+    const householdPeople = await tx.case.groupBy({
+      by: ['districtSnapshot', 'householdSize', 'personId'],
+      where: {
+        ...base,
+        districtSnapshot: { not: null },
+        householdSize: { not: null },
+        createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60_000), lte: now },
+      },
+    });
+    const householdCounts = new Map<string, Set<string>>();
+    for (const item of householdPeople) {
+      if (!item.districtSnapshot || item.householdSize === null) continue;
+      const key = `${normalizeGroupValue(item.districtSnapshot)}\u0000${item.householdSize}`;
+      const people = householdCounts.get(key) ?? new Set<string>();
+      people.add(item.personId);
+      householdCounts.set(key, people);
+    }
+    for (const [key, people] of householdCounts) {
+      if (people.size >= env.ANOMALY_HOUSEHOLD_PATTERN_PEOPLE) candidates.household_pattern.add(key);
+    }
+
+    const identityDetails = await tx.case.groupBy({
+      by: ['nameNormalizedSnapshot', 'districtSnapshot', 'personId', 'payoutKey', 'helperId', 'householdSize'],
+      where: {
+        ...base,
+        nameNormalizedSnapshot: { not: null },
+        districtSnapshot: { not: null },
+        createdAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60_000), lte: now },
+      },
+    });
+    const identityGroups = new Map<string, Map<string, { payout: Set<string>; helper: Set<string>; household: Set<number> }>>();
+    for (const item of identityDetails) {
+      if (!item.nameNormalizedSnapshot || !item.districtSnapshot) continue;
+      const key = `${normalizeGroupValue(item.nameNormalizedSnapshot)}\u0000${normalizeGroupValue(item.districtSnapshot)}`;
+      const people = identityGroups.get(key) ?? new Map();
+      const details = people.get(item.personId) ?? { payout: new Set<string>(), helper: new Set<string>(), household: new Set<number>() };
+      if (item.payoutKey) details.payout.add(item.payoutKey);
+      if (item.helperId) details.helper.add(item.helperId);
+      if (item.householdSize !== null) details.household.add(item.householdSize);
+      people.set(item.personId, details);
+      identityGroups.set(key, people);
+    }
+    for (const [key, people] of identityGroups) {
+      const identities = [...people.values()];
+      let corroborated = false;
+      for (let i = 0; i < identities.length && !corroborated; i++) {
+        for (let j = i + 1; j < identities.length && !corroborated; j++) {
+          const left = identities[i]!;
+          const right = identities[j]!;
+          const details = Number(intersects(left.payout, right.payout))
+            + Number(intersects(left.helper, right.helper))
+            + Number(intersects(left.household, right.household));
+          corroborated = details >= env.ANOMALY_IDENTITY_CORROBORATION_DETAILS;
+        }
+      }
+      if (corroborated) candidates.identity_collision.add(key);
+    }
+    return candidates;
+  }
+
+  private async persistOpenFindings(tx: Tx, signals: AnomalySignal[], observations: AnomalyObservation[]) {
+    const rowById = new Map(observations.map((row) => [row.caseId, row]));
+    let created = 0;
+    let updated = 0;
+    for (const signal of signals) {
+      const signalKey = createHmac('sha256', env.PII_HASH_KEY)
+        .update(`${signal.type}:${signal.groupKey}`)
+        .digest('hex');
+      for (const caseId of signal.evidenceCaseIds) {
+        const row = rowById.get(caseId);
+        if (!row || !(ANOMALY_OPEN_STATUSES as readonly string[]).includes(row.status)) continue;
+        const target = await tx.case.findUniqueOrThrow({ where: { id: caseId }, select: { flags: true, status: true } });
+        if (!(ANOMALY_OPEN_STATUSES as readonly string[]).includes(target.status)) continue;
+        const existing = await tx.anomalyFinding.findUnique({ where: { caseId_signalKey: { caseId, signalKey } } });
+        const data = {
+          tenantId: row.tenantId,
+          signalType: signal.type,
+          signalKey,
+          evidenceCaseIds: signal.evidenceCaseIds,
+          windowStart: signal.windowStart,
+          windowEnd: signal.windowEnd,
+          observedCount: signal.observedCount,
+          threshold: signal.threshold,
+        };
+        if (existing) {
+          await tx.anomalyFinding.update({ where: { id: existing.id }, data });
+          const flag = this.anomalyHardFlag(signal.type);
+          const flags = target.flags.includes(flag) ? target.flags : [...target.flags, flag];
+          await tx.case.update({ where: { id: caseId }, data: { flags, lane: 'HUMAN_REVIEW' } });
+          updated++;
+          continue;
+        }
+        await tx.anomalyFinding.create({ data: { ...data, caseId } });
+        const flag = this.anomalyHardFlag(signal.type);
+        const flags = target.flags.includes(flag) ? target.flags : [...target.flags, flag];
+        await tx.case.update({ where: { id: caseId }, data: { flags, lane: 'HUMAN_REVIEW' } });
+        await tx.caseEvent.create({
+          data: {
+            caseId,
+            type: 'anomaly.detected',
+            actor: 'system',
+            data: {
+              signalType: signal.type,
+              evidenceCaseIds: signal.evidenceCaseIds,
+              windowStart: signal.windowStart.toISOString(),
+              windowEnd: signal.windowEnd.toISOString(),
+              observedCount: signal.observedCount,
+              threshold: signal.threshold,
+            },
+          },
+        });
+        created++;
+      }
+    }
+    return { created, updated };
+  }
+
+  private anomalyHardFlag(type: AnomalyType): HardFlag {
+    return `anomaly:${type}`;
+  }
+
+  private payoutKey(iban: string | undefined, alias: string | undefined): string | null {
+    if (alias) return createHmac('sha256', env.PII_HASH_KEY).update(`alias:${alias.replace(/\D/g, '')}`).digest('hex');
+    if (iban) return createHmac('sha256', env.PII_HASH_KEY).update(`iban:${iban.replace(/[^a-z0-9]/gi, '').toUpperCase()}`).digest('hex');
+    return null;
   }
 
   private async gather(c: Case, person: Person, requestId?: string): Promise<DecisionInputs> {
@@ -403,21 +699,31 @@ export class CasesService {
     const where: Prisma.CaseWhereInput = { tenantId: user.tenantId, ...(status ? { status } : {}) };
     if (!isStaff(user)) where.personId = subjectPerson(user);
     const rows = await this.prisma.case.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100 });
-    return rows.map((c) => this.summary(c));
+    return rows.map((c) => this.summary(c, isStaff(user)));
   }
 
   /** Officer queue: no names or CNICs here, only what is needed to pick the next case. */
   async queue(user: AuthUser) {
     const rows = await this.prisma.case.findMany({
-      where: { tenantId: user.tenantId, status: { in: REVIEWABLE } },
-      include: { person: { select: { district: true } } },
+      where: {
+        tenantId: user.tenantId,
+        OR: [
+          { status: { in: REVIEWABLE } },
+          { flags: { hasSome: ['anomaly:shared_payout', 'anomaly:helper_velocity', 'anomaly:household_pattern', 'anomaly:identity_collision'] } },
+        ],
+      },
+      include: {
+        person: { select: { district: true } },
+        anomalies: { orderBy: { createdAt: 'desc' } },
+      },
       take: 500,
     });
     const now = new Date();
     return rows
       .map((c) => ({
-        ...this.summary(c),
-        district: c.person.district,
+        ...this.summary(c, true),
+        district: c.districtSnapshot ?? c.person.district,
+        anomalies: c.anomalies.map((finding) => this.anomalyView(finding)),
         priority: priority(
           { confidence: c.confidence, hardFlagCount: c.flags.length, amount: c.amount, createdAt: c.createdAt },
           now,
@@ -430,13 +736,16 @@ export class CasesService {
   async view(user: AuthUser, id: string) {
     const c = isStaff(user) ? await this.staffCase(user, id) : await this.ownCase(user, id);
     if (isStaff(user) && user.role !== 'auditor') await this.requireConsent(c.personId);
-    const [person, events, decision] = await Promise.all([
+    const [person, events, decision, anomalies] = await Promise.all([
       this.prisma.person.findUniqueOrThrow({ where: { id: c.personId } }),
       this.prisma.caseEvent.findMany({ where: { caseId: c.id }, orderBy: { at: 'asc' } }),
       this.lastDecision(c.id),
+      isStaff(user)
+        ? this.prisma.anomalyFinding.findMany({ where: { tenantId: user.tenantId, caseId: c.id }, orderBy: { createdAt: 'desc' } })
+        : Promise.resolve([]),
     ]);
     return {
-      ...this.summary(c),
+      ...this.summary(c, isStaff(user)),
       person: {
         id: person.id,
         fullName: person.fullName,
@@ -444,8 +753,11 @@ export class CasesService {
         district: person.district,
       },
       payout: { ibanMasked: maskTail(c.payoutIban), aliasMasked: maskTail(c.payoutAlias) },
-      decision: decision && this.decisionView(decision),
-      timeline: events.map((e) => ({ type: e.type, actor: e.actor, data: e.data, at: e.at })),
+      decision: decision && this.decisionView(decision, isStaff(user)),
+      ...(isStaff(user) ? { anomalies: anomalies.map((finding) => this.anomalyView(finding)) } : {}),
+      timeline: events
+        .filter((event) => event.type !== 'anomaly.detected' || isStaff(user))
+        .map((e) => ({ type: e.type, actor: e.actor, data: e.data, at: e.at })),
     };
   }
 
@@ -460,7 +772,7 @@ export class CasesService {
     }
   }
 
-  private summary(c: Case) {
+  private summary(c: Case, revealAnomalyFlags = false) {
     return {
       id: c.id,
       type: c.type,
@@ -468,21 +780,41 @@ export class CasesService {
       lane: c.lane,
       confidence: c.confidence,
       amount: c.amount,
-      flags: c.flags,
+      flags: revealAnomalyFlags ? c.flags : c.flags.filter((flag) => !flag.startsWith('anomaly:')),
       assignedTo: c.assignedTo,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
     };
   }
 
-  private decisionView(d: Decision) {
+  private anomalyView(finding: {
+    signalType: string;
+    evidenceCaseIds: string[];
+    windowStart: Date;
+    windowEnd: Date;
+    observedCount: number;
+    threshold: number;
+    createdAt: Date;
+  }) {
+    return {
+      type: finding.signalType,
+      evidenceCaseIds: finding.evidenceCaseIds,
+      windowStart: finding.windowStart,
+      windowEnd: finding.windowEnd,
+      observedCount: finding.observedCount,
+      threshold: finding.threshold,
+      createdAt: finding.createdAt,
+    };
+  }
+
+  private decisionView(d: Decision, revealAnomalyFlags: boolean) {
     return {
       id: d.id,
       lane: d.lane,
       confidence: d.confidence,
       eligible: d.eligible,
       clauses: d.clausesHit,
-      hardFlags: d.hardFlags,
+      hardFlags: revealAnomalyFlags ? d.hardFlags : d.hardFlags.filter((flag) => !flag.startsWith('anomaly:')),
       explanationUr: d.explanationUr,
       explanationEn: d.explanationEn,
       decidedBy: d.decidedBy === 'system' ? 'system' : 'officer',
@@ -526,6 +858,15 @@ export class CasesService {
   private emit(tx: Tx, event: EventEnvelope) {
     return tx.outboxEvent.create({ data: outboxRow(event) });
   }
+}
+
+function normalizeGroupValue(value: string) {
+  return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+function intersects<T>(left: ReadonlySet<T>, right: ReadonlySet<T>) {
+  for (const value of left) if (right.has(value)) return true;
+  return false;
 }
 
 function maskTail(v: string | null): string | null {

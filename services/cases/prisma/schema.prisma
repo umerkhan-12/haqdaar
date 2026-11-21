@@ -81,6 +81,13 @@ model Case {
   /// Payout account snapshot at claim time: an approval is bound to this account, not to later edits
   payoutIban     String?    @map("payout_iban")
   payoutAlias    String?    @map("payout_alias")
+  /// Claim-time signals. These remain within the cases service.
+  districtSnapshot        String? @map("district_snapshot")
+  householdSize           Int?    @map("household_size")
+  nameNormalizedSnapshot  String? @map("name_normalized_snapshot")
+  helperId                String? @map("helper_id") @db.Uuid
+  /// HMAC over a namespaced, normalized alias or IBAN; never used to equate alias with IBAN.
+  payoutKey               String? @map("payout_key")
   extraction     Json?
   flags          String[]
   createdAt      DateTime   @default(now()) @map("created_at")
@@ -89,10 +96,38 @@ model Case {
   person    Person      @relation(fields: [personId], references: [id])
   events    CaseEvent[]
   decisions Decision[]
+  anomalies AnomalyFinding[]
 
   @@index([tenantId, status, priority])
   @@index([personId, createdAt])
+  @@index([tenantId, payoutKey, createdAt])
+  @@index([tenantId, helperId, createdAt])
+  @@index([tenantId, districtSnapshot, householdSize, createdAt])
+  @@index([tenantId, nameNormalizedSnapshot, createdAt])
   @@map("cases")
+}
+
+/// Idempotent anomaly evidence for officer review. Never stores plaintext CNICs or payout details.
+model AnomalyFinding {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  caseId           String   @map("case_id") @db.Uuid
+  signalType       String   @map("signal_type")
+  /// HMAC of the internal signal grouping key; unique per affected case and group.
+  signalKey        String   @map("signal_key")
+  evidenceCaseIds  String[] @map("evidence_case_ids")
+  windowStart      DateTime @map("window_start")
+  windowEnd        DateTime @map("window_end")
+  observedCount    Int      @map("observed_count")
+  threshold        Int
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, signalKey])
+  @@index([tenantId, signalType, createdAt])
+  @@map("anomaly_findings")
 }
 
 /// Timeline shown to citizens, officers and auditors.

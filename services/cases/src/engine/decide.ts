@@ -20,7 +20,11 @@ export type HardFlag =
   | 'name_mismatch'
   | 'duplicate_claim_this_month'
   | 'household_not_found'
-  | 'verification_unavailable';
+  | 'verification_unavailable'
+  | 'anomaly:shared_payout'
+  | 'anomaly:helper_velocity'
+  | 'anomaly:household_pattern'
+  | 'anomaly:identity_collision';
 
 /** Snapshot stored with every decision so the Digital Twin can replay it under another rule. */
 export interface DecisionInputs {
@@ -161,6 +165,10 @@ const FLAG_TEXT: Record<HardFlag, [string, string]> = {
   ],
   household_not_found: ['گھریلو ریکارڈ نہیں ملا', 'no household record was found'],
   verification_unavailable: ['تصدیقی نظام ابھی دستیاب نہیں', 'verification systems are unavailable right now'],
+  'anomaly:shared_payout': ['ایک ہی ادائیگی کا اکاؤنٹ مختلف دعووں میں استعمال ہوا ہے', 'the same payout destination appears on claims from multiple people'],
+  'anomaly:helper_velocity': ['ایک مددگار نے مختصر وقت میں کئی دعوے جمع کرائے ہیں', 'one helper submitted an unusually high number of claims in one hour'],
+  'anomaly:household_pattern': ['ایک ضلع میں ایک جیسے گھرانے کے اعداد کئی دعووں میں ملے ہیں', 'the same household size appears across many claims in one district'],
+  'anomaly:identity_collision': ['ملتے جلتے شناختی کوائف والے مختلف افراد کی مزید جانچ ضروری ہے', 'different identities share a name and corroborating claim details'],
 };
 
 const REASON_TEXT = {

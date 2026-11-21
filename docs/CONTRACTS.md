@@ -62,6 +62,9 @@ All `/mock/*` routes are `@InternalOnly()` unless marked. Simulated latency 50â€
 | Route | Who | Notes |
 |---|---|---|
 | `GET /internal/cases/:id/payout` | internal | `{ caseId, tenantId, personId, beneficiaryName, accountIban: string \| null, accountAlias: string \| null, amount }` â€” the account is the one **stored on the case at claim time**, so an approval stays bound to the account it was approved for |
+| `POST /cases/anomaly-scan` | officer, admin | Runs an idempotent, tenant-scoped scan over cases-owned claim snapshots. Returns signal type, evidence case IDs, observed count and time window. Findings route open claims to human review; the scan never rejects or changes paid cases. |
+
+Officer `GET /cases/:id` and `GET /queue` responses include permitted anomaly evidence (`type`, evidence case IDs, observed count, threshold and time window). Citizen/helper views hide anomaly evidence and anomaly flags. Signal thresholds and evidence handling are documented in [docs/ANOMALY_SIGNALS.md](ANOMALY_SIGNALS.md).
 
 ### Evaluation and metrics (`/eval`, via the gateway)
 

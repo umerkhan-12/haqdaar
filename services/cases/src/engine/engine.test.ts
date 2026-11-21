@@ -91,6 +91,13 @@ test('hard flags always go to a human, even with eligible facts', () => {
   assert.deepEqual(mismatch.hardFlags, ['name_mismatch']);
 });
 
+test('fraud anomaly flags force human review with a signal-specific explanation', () => {
+  const d = decide({ ...strong, externalFlags: ['anomaly:shared_payout'] }, ctx);
+  assert.equal(d.lane, 'HUMAN_REVIEW');
+  assert.deepEqual(d.hardFlags, ['anomaly:shared_payout']);
+  assert.match(d.explanationEn, /same payout destination/);
+});
+
 test('missing consent → ASK_MORE with a plain explanation', () => {
   const d = decide({ ...strong, missing: ['consent:household_data'] }, ctx);
   assert.equal(d.lane, 'ASK_MORE');

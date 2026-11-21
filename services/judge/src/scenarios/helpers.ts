@@ -9,6 +9,8 @@ export interface CaseView {
   confidence: number | null;
   flags: string[];
   decision?: { id: string; explanationUr: string; explanationEn: string; hardFlags: string[] } | null;
+  anomalies?: { type: string; evidenceCaseIds: string[]; observedCount: number; threshold: number }[];
+  timeline?: { type: string }[];
 }
 
 export interface Payment {

@@ -1,4 +1,4 @@
-import { FAMILIES } from '../demo-data';
+import { FAMILIES, MULE_ALIAS } from '../demo-data';
 import type { Scenario } from './types';
 import { waitFor } from '../run';
 import { claimFor, fmt, grantConsents, items, type CaseView } from './helpers';
@@ -264,6 +264,65 @@ const scams: Scenario = {
   },
 };
 
+const fraudRing: Scenario = {
+  id: 'c09-fraud-ring',
+  challenge: '09',
+  title: 'Fraud ring signals',
+  proves: 'Three different synthetic people using one payout alias produce review flags with evidence, never an automatic rejection.',
+  async run({ api, run }) {
+    const beneficiaries = [FAMILIES.zainabBadin, FAMILIES.kaneez, FAMILIES.akram];
+    const claims = await Promise.all(beneficiaries.map((family) => claimFor(api, run, family, { alias: MULE_ALIAS })));
+    run.check('Three distinct claim identities were created', new Set(claims.map((claim) => claim.id)).size === 3);
+
+    const officer = await api.as('officer');
+    const scan = await run.step(
+      'Officer runs the tenant-scoped anomaly scan',
+      () => api.call<{ signalsDetected: number; findingsCreated: number; findings: { type: string; evidenceCaseIds: string[] }[] }>(
+        'POST',
+        '/cases/anomaly-scan',
+        { token: officer },
+      ),
+      (response) => `${response.body?.signalsDetected} signals, ${response.body?.findingsCreated} new findings`,
+      (response) => response.body?.findings,
+    );
+    const retry = await run.step(
+      'Repeat the same scan to verify finding idempotency',
+      () => api.call<{ findingsCreated: number; findingsUpdated: number }>('POST', '/cases/anomaly-scan', { token: officer }),
+      (response) => `${response.body?.findingsCreated} new, ${response.body?.findingsUpdated} updated`,
+    );
+    const details = await Promise.all(claims.map((claim) =>
+      run.step(
+        `Officer inspects evidence for ${claim.id.slice(0, 8)}`,
+        () => api.call<CaseView>('GET', `/cases/${claim.id}`, { token: officer }),
+        (response) => `${response.body?.status}, ${response.body?.flags.filter((flag) => flag.startsWith('anomaly:')).join(', ') || 'no anomaly flag'}`,
+      ),
+    ));
+    const expectedEvidence = claims.map((claim) => claim.id).sort();
+    run.check(
+      'Scan identifies the shared payout group',
+      scan.body?.findings.some((finding) => finding.type === 'shared_payout' && expectedEvidence.every((id) => finding.evidenceCaseIds.includes(id))) === true,
+    );
+    const sharedFinding = details
+      .flatMap((response) => response.body?.anomalies ?? [])
+      .find((finding) => finding.type === 'shared_payout' && expectedEvidence.every((id) => finding.evidenceCaseIds.includes(id)));
+    run.check(
+      'Shared payout finding records all three case IDs as evidence',
+      !!sharedFinding,
+      sharedFinding?.evidenceCaseIds.join(', '),
+    );
+    run.check(
+      'Every affected open claim is flagged for human review, never automatically rejected',
+      details.every((response) => response.body?.flags.includes('anomaly:shared_payout') && response.body?.lane === 'HUMAN_REVIEW' && response.body?.status !== 'REJECTED'),
+    );
+    run.check('Repeated scan creates no duplicate findings', retry.body?.findingsCreated === 0);
+    run.check(
+      'Each affected case has one anomaly timeline entry',
+      details.every((response) => response.body?.timeline?.filter((event) => event.type === 'anomaly.detected').length === 1),
+    );
+    return 'Three synthetic beneficiaries shared one alias; officers see the anomaly flag and linked case evidence.';
+  },
+};
+
 export const CHALLENGE_SCENARIOS: Scenario[] = [
   costOfBeingWrong,
   notSure,
@@ -273,4 +332,5 @@ export const CHALLENGE_SCENARIOS: Scenario[] = [
   consent,
   worksForEveryone,
   scams,
+  fraudRing,
 ];
