@@ -1,0 +1,207 @@
+// Payments service — owns the `payments` schema. Bank-grade payout flow.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PAYMENTS_DATABASE_URL")
+}
+
+enum PaymentState {
+  CREATED
+  AWAITING_APPROVAL
+  APPROVED
+  SENT
+  SUCCESS
+  FAILED
+  UNKNOWN
+  HELD
+  REVERSAL_REQUESTED
+  REVERSED
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum LedgerKind {
+  PAYOUT
+  REVERSAL
+}
+
+enum DeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+model Payment {
+  id              String       @id @default(uuid()) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  caseId          String       @unique @map("case_id") @db.Uuid
+  personId        String       @map("person_id") @db.Uuid
+  /// Whole rupees (PKR)
+  amount          Int
+  currency        String       @default("PKR")
+  state           PaymentState @default(CREATED)
+  /// One payout per case, ever: `case:<caseId>`
+  idempotencyKey  String       @unique @map("idempotency_key")
+  /// ISO 20022 end-to-end id; the SAME id is reused for every retry, so the provider dedupes
+  endToEndId      String       @unique @map("end_to_end_id")
+  creditorName    String       @map("creditor_name")
+  creditorIban    String?      @map("creditor_iban")
+  creditorAlias   String?      @map("creditor_alias")
+  titleFetched    String?      @map("title_fetched")
+  titleMatchScore Float?       @map("title_match_score")
+  holdReason      String?      @map("hold_reason")
+  /// `system` or the user who released/requested it
+  makerId         String       @default("system") @map("maker_id")
+  checkerId       String?      @map("checker_id")
+  providerRef     String?      @map("provider_ref")
+  settledAt       DateTime?    @map("settled_at")
+  /// Optimistic locking: every transition updates `where version = x`
+  version         Int          @default(0)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  transitions PaymentTransition[]
+  attempts    PaymentAttempt[]
+  ledger      LedgerEntry[]
+  approvals   Approval[]
+
+  @@index([tenantId, state])
+  @@index([creditorIban, createdAt])
+  @@index([creditorAlias, createdAt])
+  @@index([state, updatedAt])
+  @@map("payments")
+}
+
+model PaymentTransition {
+  id        String        @id @default(uuid()) @db.Uuid
+  paymentId String        @map("payment_id") @db.Uuid
+  from      PaymentState?
+  to        PaymentState
+  reason    String?
+  actor     String
+  at        DateTime      @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId, at])
+  @@map("payment_transitions")
+}
+
+/// One row per call to the provider (transfer or status inquiry).
+model PaymentAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  paymentId String   @map("payment_id") @db.Uuid
+  kind      String
+  outcome   String
+  detail    Json?
+  latencyMs Int      @map("latency_ms")
+  at        DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId, at])
+  @@map("payment_attempts")
+}
+
+/// Double-entry ledger. Append-only; balances are always derived from entries.
+model LedgerEntry {
+  id           String          @id @default(uuid()) @db.Uuid
+  paymentId    String          @map("payment_id") @db.Uuid
+  entryGroupId String          @map("entry_group_id") @db.Uuid
+  kind         LedgerKind
+  account      String
+  direction    LedgerDirection
+  amount       Int
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  /// A payout (or reversal) can be booked only once
+  @@unique([paymentId, kind, direction])
+  @@index([account])
+  @@map("ledger_entries")
+}
+
+/// Every maker / checker action, for four-eyes evidence.
+model Approval {
+  id        String   @id @default(uuid()) @db.Uuid
+  paymentId String   @map("payment_id") @db.Uuid
+  action    String
+  actorId   String   @map("actor_id")
+  note      String?
+  at        DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId, action])
+  @@map("approvals")
+}
+
+model ReconciliationRun {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String?  @map("tenant_id") @db.Uuid
+  date      String
+  matched   Int
+  mismatched Int
+  items     Json
+  runBy     String   @map("run_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("reconciliation_runs")
+}
+
+model WebhookSubscription {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  url       String
+  events    String[]
+  active    Boolean  @default(true)
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  deliveries WebhookDelivery[]
+
+  @@map("webhook_subscriptions")
+}
+
+model WebhookDelivery {
+  id             String         @id @default(uuid()) @db.Uuid
+  subscriptionId String         @map("subscription_id") @db.Uuid
+  eventId        String         @map("event_id") @db.Uuid
+  eventType      String         @map("event_type")
+  payload        Json
+  status         DeliveryStatus @default(PENDING)
+  attempts       Int            @default(0)
+  lastStatusCode Int?           @map("last_status_code")
+  lastError      String?        @map("last_error")
+  nextAttemptAt  DateTime       @default(now()) @map("next_attempt_at")
+  deliveredAt    DateTime?      @map("delivered_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id])
+
+  @@unique([subscriptionId, eventId])
+  @@index([status, nextAttemptAt])
+  @@map("webhook_deliveries")
+}
+
+/// Transactional outbox: written in the same transaction as the change, published by the relay.
+model OutboxEvent {
+  id          String    @id @db.Uuid
+  type        String
+  envelope    Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+  attempts    Int       @default(0)
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox")
+}

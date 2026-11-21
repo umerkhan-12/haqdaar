@@ -20,23 +20,52 @@ We help **a low-literacy widow** **claim her monthly relief payment** even thoug
 3. **Judge Mode:** one button per hackathon challenge, so judges can try to break it live.
 4. **The LLM never approves; automation never rejects.** Auto-approve only when `p ≥ 0.988` (cost-based threshold).
 
-## Repository layout
+## Architecture
+
+Microservices behind a gateway, one Postgres schema per service, durable events through a transactional outbox + pg-boss. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · service contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
+
+| Service | Port | Owns |
+|---|---|---|
+| `gateway` | 4000 | Public entry: routing, Helmet, CORS allowlist, rate limit, `/status` |
+| `identity` | 4001 | Tenants, users, RS256 tokens + refresh rotation, consent, Helper Mode |
+| `cases` | 4002 | Claims, JSON Logic rules + versions, decision engine, officer queue, Digital Twin |
+| `ai` | 4003 | `AI_PROFILE` switch (dev / demo / offline), LLM + Urdu STT with fallback, scam check, Kill AI |
+| `payments` | 4004 | Payout state machine, idempotency, maker-checker, double-entry ledger, reconciliation, webhooks |
+| `audit` | 4005 | Append-only hash-chained log of every event |
+| `rails-mock` | 4006 | Simulated NADRA, Raast, household data, SMS, with failure injection |
 
 ```
-apps/web        Next.js PWA (citizen, helper, officer, admin, auditor, Judge Mode)
-apps/api        NestJS API (Fastify adapter) + mock NADRA / Raast / household / SMS services
-packages/shared Zod schemas shared by web and api
-data/           synthetic data generators, seed, policy docs, Urdu audio clips
-docs/           plan and design notes
+apps/web            Next.js PWA (citizen, helper, officer, admin, auditor, Judge Mode)
+services/*          NestJS (Fastify) microservices
+packages/shared     Zod contracts, events, domain rules shared by web and services
+packages/nest-kit   Shared service toolkit: bootstrap, auth guards, errors, service client, circuit breaker, event bus, crypto, seal
+infra/              Local Postgres (docker compose)
+scripts/            key generation, env wrapper, run-all launcher
+docs/               plan, architecture, contracts
 ```
 
 ## Stack
 
-TypeScript · Next.js · NestJS (Fastify adapter) · Zod · Prisma · Supabase Postgres · pg-boss · Groq (Llama + Whisper) · Gemini (fallback) · tesseract.js · sharp · Vercel · Render. Total cost: free tiers only.
+TypeScript · NestJS 11 (Fastify) · Next.js · Zod · Prisma · PostgreSQL · pg-boss · Groq (Llama + Whisper) · Gemini · Vercel · Render. Build cost: free tiers only (paid Gemini only on judging day, via `AI_PROFILE=demo`).
 
 ## Setup
 
-_Coming during the build: `pnpm install`, env setup from `.env.example`, `pnpm db:migrate`, `pnpm dev`._
+Requirements: Node 22+, pnpm 9, Docker.
+
+```bash
+pnpm install
+pnpm keys          # creates .env with fresh RS256 keys and secrets
+pnpm db:up         # local Postgres on :5433
+pnpm db:generate && pnpm build
+pnpm db:push && pnpm db:seed
+pnpm start         # all services (or `pnpm dev` for watch mode)
+```
+
+Then open `http://localhost:4000/status`. Each service has Swagger at `http://localhost:<port>/docs`.
+
+**Demo accounts** (synthetic, password `demo1234`): citizen `03001110001`, helper `03001110002`, officer `03001110003` and `03001110006`, admin `03001110004`, auditor `03001110005`.
+
+**AI profile:** set `AI_PROFILE=dev` (Groq first, free) during the build, `demo` (paid Gemini first) on judging day, `offline` for tests. Admins can also switch at runtime: `POST /ai/profile`.
 
 ## Real vs simulated
 

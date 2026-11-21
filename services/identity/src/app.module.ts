@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { LoginThrottlerGuard } from './login-throttler.guard';
 import { EventBusModule, KitModule } from '@haqdaar/nest-kit';
 import { env } from './env';
 import { PrismaService } from './prisma.service';
@@ -26,6 +27,11 @@ import { ConsentsService } from './consents/consents.service';
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
   ],
   controllers: [AuthController, ConsentsController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }, PrismaService, AuthService, ConsentsService],
+  providers: [
+    { provide: APP_GUARD, useClass: LoginThrottlerGuard },
+    PrismaService,
+    AuthService,
+    ConsentsService,
+  ],
 })
 export class AppModule {}

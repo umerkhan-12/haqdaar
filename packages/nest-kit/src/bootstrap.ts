@@ -37,6 +37,12 @@ export async function bootstrapService(
   });
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onSend', async (req, reply) => {
+      reply.header('x-request-id', req.id);
+    });
 
   if (o.configure) await o.configure(app);
 

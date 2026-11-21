@@ -1,0 +1,190 @@
+// Cases service — owns the `cases` schema. No other service reads these tables.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CASES_DATABASE_URL")
+}
+
+enum CaseStatus {
+  DRAFT
+  SUBMITTED
+  PROCESSING
+  NEEDS_INFO
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  PAID
+  CLOSED
+}
+
+enum CaseType {
+  relief_claim
+  complaint
+  scam_report
+}
+
+enum Lane {
+  AUTO_APPROVE
+  ASK_MORE
+  HUMAN_REVIEW
+}
+
+enum RuleStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+/// A citizen. The CNIC hash is the identity key: persons are NEVER merged on name alone.
+model Person {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  fullName       String   @map("full_name")
+  nameNormalized String   @map("name_normalized")
+  /// AES-256-GCM ciphertext
+  cnicEnc        String   @map("cnic_enc")
+  /// HMAC-SHA256 of the CNIC for lookups
+  cnicHash       String   @map("cnic_hash")
+  phoneEnc       String?  @map("phone_enc")
+  district       String?
+  payoutIban     String?  @map("payout_iban")
+  payoutAlias    String?  @map("payout_alias")
+  createdAt      DateTime @default(now()) @map("created_at")
+  cases          Case[]
+
+  @@unique([tenantId, cnicHash])
+  @@index([tenantId, nameNormalized])
+  @@map("persons")
+}
+
+model Case {
+  id             String     @id @default(uuid()) @db.Uuid
+  tenantId       String     @map("tenant_id") @db.Uuid
+  personId       String     @map("person_id") @db.Uuid
+  type           CaseType
+  status         CaseStatus @default(SUBMITTED)
+  lane           Lane?
+  priority       Int        @default(0)
+  confidence     Float?
+  amount         Int?
+  assignedTo     String?    @map("assigned_to") @db.Uuid
+  createdBy      String     @map("created_by") @db.Uuid
+  onBehalfOf     String?    @map("on_behalf_of") @db.Uuid
+  /// `<userId>:<client key>`: the same request twice returns the same case
+  idempotencyKey String     @unique @map("idempotency_key")
+  ruleVersionId  String?    @map("rule_version_id") @db.Uuid
+  /// Payout account snapshot at claim time: an approval is bound to this account, not to later edits
+  payoutIban     String?    @map("payout_iban")
+  payoutAlias    String?    @map("payout_alias")
+  extraction     Json?
+  flags          String[]
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  person    Person      @relation(fields: [personId], references: [id])
+  events    CaseEvent[]
+  decisions Decision[]
+
+  @@index([tenantId, status, priority])
+  @@index([personId, createdAt])
+  @@map("cases")
+}
+
+/// Timeline shown to citizens, officers and auditors.
+model CaseEvent {
+  id     String   @id @default(uuid()) @db.Uuid
+  caseId String   @map("case_id") @db.Uuid
+  type   String
+  /// user id, `system`, or `service:<name>`
+  actor  String
+  data   Json?
+  at     DateTime @default(now())
+
+  case Case @relation(fields: [caseId], references: [id])
+
+  @@index([caseId, at])
+  @@map("case_events")
+}
+
+/// Versioned eligibility rules (JSON Logic). Decisions store the version they used.
+model RuleVersion {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @map("tenant_id") @db.Uuid
+  version     Int
+  status      RuleStatus @default(DRAFT)
+  /// Combined expression: { and: [clause logic...] }
+  logic       Json
+  /// [{ id, logic, textUr, textEn }]
+  clauses     Json
+  amount      Int
+  notes       String?
+  createdBy   String     @map("created_by")
+  publishedBy String?    @map("published_by")
+  publishedAt DateTime?  @map("published_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  @@unique([tenantId, version])
+  @@map("rule_versions")
+}
+
+model Decision {
+  id            String   @id @default(uuid()) @db.Uuid
+  caseId        String   @map("case_id") @db.Uuid
+  ruleVersionId String?  @map("rule_version_id") @db.Uuid
+  lane          Lane
+  confidence    Float
+  eligible      Boolean?
+  /// [{ id, passed }]
+  clausesHit    Json     @map("clauses_hit")
+  hardFlags     String[] @map("hard_flags")
+  explanationUr String   @map("explanation_ur")
+  explanationEn String   @map("explanation_en")
+  /// Everything the engine saw, so the Digital Twin can replay it
+  inputs        Json
+  /// `system` or the officer's user id
+  decidedBy     String   @map("decided_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  case Case @relation(fields: [caseId], references: [id])
+
+  @@index([caseId, createdAt])
+  @@map("decisions")
+}
+
+model CostSettings {
+  tenantId      String   @id @map("tenant_id") @db.Uuid
+  wrongApproval Int      @map("wrong_approval")
+  humanReview   Int      @map("human_review")
+  askMore       Int      @map("ask_more")
+  updatedBy     String   @map("updated_by")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("cost_settings")
+}
+
+/// Idempotent consumers: an event id is processed at most once.
+model ProcessedEvent {
+  eventId     String   @id @map("event_id") @db.Uuid
+  type        String
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("processed_events")
+}
+
+/// Transactional outbox: written in the same transaction as the change, published by the relay.
+model OutboxEvent {
+  id          String    @id @db.Uuid
+  type        String
+  envelope    Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+  attempts    Int       @default(0)
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox")
+}

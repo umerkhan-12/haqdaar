@@ -1,9 +1,11 @@
 import { Controller, Get, Headers, HttpCode, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { CurrentUser, Public, ZBody, type AuthUser } from '@haqdaar/nest-kit';
+import { CurrentUser, Public, Roles, ZBody, type AuthUser } from '@haqdaar/nest-kit';
 import { LoginRequest, RefreshRequest } from '@haqdaar/shared';
 import { z } from 'zod';
+
+const ActForBody = z.object({ personId: z.string().uuid(), pin: z.string().regex(/^\d{4,6}$/) });
 import { AuthService } from './auth.service';
 import { env } from '../env';
 
@@ -12,9 +14,9 @@ import { env } from '../env';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  /** 5 attempts per minute per IP, plus a per-account lock after 5 failures. */
+  /** 10 attempts per minute per (IP, phone), plus a per-account lock after 5 failures. */
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   @HttpCode(200)
   login(
@@ -46,6 +48,26 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user);
+  }
+
+  @ApiBearerAuth()
+  @Roles('helper')
+  @Get('families')
+  families(@CurrentUser() user: AuthUser) {
+    return this.auth.families(user);
+  }
+
+  @ApiBearerAuth()
+  @Roles('helper')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('act-for')
+  @HttpCode(200)
+  actFor(
+    @CurrentUser() user: AuthUser,
+    @ZBody(ActForBody) body: z.infer<typeof ActForBody>,
+    @Headers('user-agent') ua?: string,
+  ) {
+    return this.auth.actFor(user, body.personId, body.pin, ua);
   }
 
   /** Public key so any service (or partner) can verify our tokens. Never the private key. */

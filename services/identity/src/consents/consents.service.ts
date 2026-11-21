@@ -10,15 +10,23 @@ export class ConsentsService {
     private readonly bus: EventBus,
   ) {}
 
-  /** The person a user acts for: themselves, or the family selected in Helper Mode. */
+  /** The person a citizen/helper acts for: themselves, or the family selected in Helper Mode. */
   private subjectOf(user: AuthUser): string {
-    const personId = user.onBehalfOf ?? null;
-    if (personId) return personId;
+    if (user.onBehalfOf) return user.onBehalfOf;
     throw new ForbiddenException('No person selected');
+  }
+
+  /** Citizens and helpers may only touch their own subject's consents; staff may read any. */
+  private assertSubject(user: AuthUser, personId: string): void {
+    const isStaff = user.role === 'officer' || user.role === 'admin' || user.role === 'auditor';
+    if (!isStaff && personId !== this.subjectOf(user)) {
+      throw new ForbiddenException('You can only manage your own consents');
+    }
   }
 
   async list(user: AuthUser, personId?: string) {
     const target = personId ?? this.subjectOf(user);
+    this.assertSubject(user, target);
     return this.prisma.consent.findMany({
       where: { tenantId: user.tenantId, personId: target },
       orderBy: { grantedAt: 'desc' },
@@ -26,6 +34,7 @@ export class ConsentsService {
   }
 
   async grant(user: AuthUser, personId: string, purpose: ConsentPurpose, grantedTo?: string) {
+    this.assertSubject(user, personId);
     const consent = await this.prisma.$transaction(async (tx) => {
       const c = await tx.consent.create({
         data: { tenantId: user.tenantId, personId, purpose, grantedTo },
@@ -48,6 +57,7 @@ export class ConsentsService {
       where: { id: consentId, tenantId: user.tenantId },
     });
     if (!existing) throw new NotFoundException('Consent not found');
+    this.assertSubject(user, existing.personId);
     if (existing.status === 'WITHDRAWN') return existing;
 
     const updated = await this.prisma.$transaction(async (tx) => {

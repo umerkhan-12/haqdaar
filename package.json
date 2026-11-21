@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build:packages": "pnpm --filter \"./packages/*\" run build",
-    "build": "pnpm run build:packages && pnpm --filter \"./services/*\" run build",
+    "build": "pnpm run build:packages && pnpm --filter \"./services/*\" --parallel run build",
     "dev": "pnpm run build:packages && pnpm --parallel --filter \"./services/*\" run dev",
     "dev:web": "pnpm --filter @haqdaar/web dev",
     "start": "node scripts/run-all.mjs",
@@ -21,7 +21,9 @@
     "db:push": "pnpm --filter \"./services/*\" run db:push",
     "db:generate": "pnpm --filter \"./services/*\" run db:generate",
     "db:seed": "pnpm --filter \"./services/*\" run db:seed",
-    "keys": "node scripts/gen-keys.mjs"
+    "keys": "node scripts/gen-keys.mjs",
+    "e2e": "node scripts/reset-demo.mjs && node scripts/e2e.mjs",
+    "demo:reset": "node scripts/reset-demo.mjs"
   },
   "devDependencies": {
     "@nestjs/cli": "^11",

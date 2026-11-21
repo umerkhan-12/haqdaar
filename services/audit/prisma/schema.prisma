@@ -1,0 +1,36 @@
+// Audit service — owns the `audit` schema. Append-only: no code path updates or deletes rows.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("AUDIT_DATABASE_URL")
+}
+
+/// One row per event, chained: hash = sha256(canonical(event fields + prevHash)).
+/// Editing or deleting any row breaks every hash after it.
+model AuditLog {
+  seq        BigInt   @id @default(autoincrement())
+  eventId    String   @unique @map("event_id") @db.Uuid
+  type       String
+  source     String
+  tenantId   String?  @map("tenant_id")
+  actorId    String?  @map("actor_id")
+  actor      Json?
+  entityId   String?  @map("entity_id")
+  payload    Json
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  prevHash   String   @map("prev_hash")
+  hash       String   @unique
+
+  @@index([entityId, seq])
+  @@index([type, seq])
+  @@index([actorId, seq])
+  @@index([tenantId, seq])
+  @@index([recordedAt])
+  @@map("audit_log")
+}

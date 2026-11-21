@@ -46,6 +46,11 @@ export const EventSchemas = {
     ruleVersionId: z.string(),
     amount: z.number().nullable(),
   }),
+  'cases.rule.published': z.object({
+    ruleVersionId: z.string(),
+    version: z.number().int(),
+    previousVersionId: z.string().nullable(),
+  }),
   'payments.payment.state_changed': z.object({
     paymentId: z.string(),
     caseId: z.string(),

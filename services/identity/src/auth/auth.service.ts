@@ -105,6 +105,51 @@ export class AuthService {
     });
   }
 
+  /** Helper Mode: families this helper may act for (labels only, no personal data). */
+  async families(helper: AuthUser) {
+    const links = await this.prisma.helperLink.findMany({
+      where: { helperId: helper.id },
+      select: { personId: true, label: true, lockedUntil: true },
+      orderBy: { label: 'asc' },
+    });
+    return links.map((l) => ({
+      personId: l.personId,
+      label: l.label,
+      locked: !!l.lockedUntil && l.lockedUntil > new Date(),
+    }));
+  }
+
+  /**
+   * Helper Mode: switch to a family with THAT family's PIN. Issues a new session whose tokens
+   * carry `obo` = the family, so every service scopes data and consent to them.
+   * 5 wrong PINs lock that family for this helper for 15 minutes.
+   */
+  async actFor(helper: AuthUser, personId: string, pin: string, userAgent?: string): Promise<TokenPair> {
+    const link = await this.prisma.helperLink.findUnique({
+      where: { helperId_personId: { helperId: helper.id, personId } },
+    });
+    if (!link) throw new ForbiddenException('You are not a helper for this family');
+    if (link.lockedUntil && link.lockedUntil > new Date()) {
+      throw new ForbiddenException('Too many wrong PINs. Ask the family to try later.');
+    }
+    if (!(await argon2.verify(link.pinHash, pin))) {
+      const failed = link.failedPins + 1;
+      await this.prisma.helperLink.update({
+        where: { id: link.id },
+        data: {
+          failedPins: failed,
+          lockedUntil: failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
+        },
+      });
+      throw new UnauthorizedException('Wrong PIN');
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: helper.id } });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.helperLink.update({ where: { id: link.id }, data: { failedPins: 0, lockedUntil: null } });
+      return this.issue(tx, user, randomUUID(), personId, userAgent);
+    });
+  }
+
   async logout(refreshToken: string): Promise<void> {
     const row = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: sha256(refreshToken) },

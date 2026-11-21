@@ -27,6 +27,7 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger('EventBus');
   private readonly boss: PgBoss;
   private started = false;
+  private registering: Promise<void> = Promise.resolve();
   private readonly pending: Array<{ types: EventType[]; handler: EventHandler }> = [];
   private relay?: OutboxRelay;
 
@@ -45,7 +46,7 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
   async onModuleInit(): Promise<void> {
     await this.boss.start();
     this.started = true;
-    await this.boss.createQueue(this.dlq(), { name: this.dlq() } as PgBoss.Queue).catch(() => undefined);
+    await this.ensureQueue(this.dlq(), {});
     for (const s of this.pending.splice(0)) await this.register(s.types, s.handler);
     this.relay?.start();
     this.logger.log(`Event bus ready for "${this.opts.service}"`);
@@ -61,14 +62,17 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
     await this.boss.publish(event.type, event as object);
   }
 
-  /** Subscribe this service to one or more event types. Safe to call before init. */
+  /** Subscribe this service to one or more event types. Safe to call before init and concurrently. */
   async subscribe(types: EventType | EventType[], handler: EventHandler): Promise<void> {
     const list = Array.isArray(types) ? types : [types];
     if (!this.started) {
       this.pending.push({ types: list, handler });
       return;
     }
-    await this.register(list, handler);
+    // Serialise registrations: concurrent createQueue/subscribe calls race inside pg-boss.
+    const next = this.registering.then(() => this.register(list, handler));
+    this.registering = next.catch(() => undefined);
+    await next;
   }
 
   /** Wake the relay right after a transaction commits (lower latency than waiting for the poll). */
@@ -79,19 +83,27 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
   private async register(types: EventType[], handler: EventHandler): Promise<void> {
     for (const type of types) {
       const queue = `${this.opts.service}__${type}`;
-      await this.boss
-        .createQueue(queue, {
-          name: queue,
-          retryLimit: 5,
-          retryDelay: 2,
-          retryBackoff: true,
-          deadLetter: this.dlq(),
-        } as PgBoss.Queue)
-        .catch(() => undefined); // already exists
+      await this.ensureQueue(queue, {
+        retryLimit: 5,
+        retryDelay: 2,
+        retryBackoff: true,
+        deadLetter: this.dlq(),
+      });
       await this.boss.subscribe(type, queue);
       await this.boss.work<EventEnvelope>(queue, { batchSize: 10 }, async (jobs) => {
         for (const job of jobs) await handler(job.data);
       });
+    }
+  }
+
+  /** Create the queue unless it exists. Any other error is real and must surface at boot. */
+  private async ensureQueue(name: string, options: Omit<PgBoss.Queue, 'name'>): Promise<void> {
+    if (await this.boss.getQueue(name)) return;
+    try {
+      await this.boss.createQueue(name, { name, ...options } as PgBoss.Queue);
+    } catch (err) {
+      if (await this.boss.getQueue(name)) return; // created concurrently by another replica
+      throw err;
     }
   }
 
