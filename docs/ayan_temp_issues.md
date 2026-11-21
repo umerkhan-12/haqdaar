@@ -100,38 +100,40 @@ TTS, claim conversation, spoken explanations and voice recordings are Ali's assi
 
 ### 5.1 Labelled datasets
 
-- [ ] Add `services/ai/eval/golden/claims.jsonl` with exactly 50 uniquely identified synthetic transcripts and explicit expected fields/intent.
-- [ ] Include Urdu script, Roman Urdu, English, missing fields, two different CNICs, repeated names and prompt injection.
-- [ ] Add `scams.jsonl` with exactly 40 labelled SMS covering genuine seals, forged seals, classic scams and ordinary messages.
-- [ ] Generate seal fixtures reproducibly with a test-only secret and controlled dates so expiry does not make the set silently change over time.
-- [ ] Validate dataset shape, unique IDs, label ranges and synthetic identifiers before making model calls. Keep evaluation inputs out of prompts as labels.
+- [x] Add `services/ai/eval/golden/claims.jsonl` with exactly 50 uniquely identified synthetic transcripts and explicit expected fields/intent.
+- [x] Include Urdu script, Roman Urdu, English, missing fields, two different CNICs, repeated names and prompt injection.
+- [x] Add `scams.jsonl` with exactly 40 labelled SMS covering genuine seals, forged seals, classic scams and ordinary messages.
+- [x] Generate seal fixtures reproducibly with a test-only secret and controlled dates so expiry does not make the set silently change over time.
+- [x] Validate dataset shape, unique IDs, label ranges and synthetic identifiers before making model calls. Keep evaluation inputs out of prompts as labels.
 
 ### 5.2 Evaluator and reporting
 
-- [ ] Add root `pnpm eval:ai`, using the existing extraction/scam functions and router rather than duplicating task logic.
-- [ ] Report per-field and aggregate extraction accuracy, missing/ambiguous field handling, scam precision/recall/false-alarm rate, abstentions and p50/p95 latency.
-- [ ] Record actual provider/model, profile, task version, cache hits, fallback use, dataset hash and timestamp.
-- [ ] Preserve token usage needed for cost estimation. Record the pricing basis/date and distinguish estimates from billed charges; do not treat missing usage as zero cost.
-- [ ] Separate cold provider runs from cached runs and prevent profile changes from reusing incompatible cached outputs.
-- [ ] Offline CI validates dataset format and safe regression behaviour. Offline mock performance must not be presented as real Groq/Gemini accuracy.
-- [ ] Add the offline command to CI without replacing the existing decision-engine golden-set check.
+- [x] Add root `pnpm eval:ai`, using the existing extraction/scam functions and router rather than duplicating task logic.
+- [x] Report per-field and aggregate extraction accuracy, missing/ambiguous field handling, scam precision/recall/false-alarm rate, abstentions and p50/p95 latency.
+- [x] Record actual provider/model, profile, task version, cache hits, fallback use, dataset hash and timestamp.
+- [x] Preserve token usage needed for cost estimation. Record the pricing basis/date and distinguish estimates from billed charges; do not treat missing usage as zero cost.
+- [x] Separate cold provider runs from cached runs and prevent profile changes from reusing incompatible cached outputs.
+- [x] Offline CI validates dataset format and safe regression behaviour. Offline mock performance must not be presented as real Groq/Gemini accuracy.
+- [x] Add the offline command to CI without replacing the existing decision-engine golden-set check.
 
 ### 5.3 Provider comparison and storage dependency
 
 - [ ] Capture a baseline before prompt changes, then evaluate revised prompts on the same dataset. Bump task versions and record both results.
 - [ ] Run `dev` and `demo` with authorized credentials. Record fallbacks so results are attributed to the provider that actually answered, rather than assuming profile equals provider.
-- [ ] Write `docs/EVAL_AI.md` with dataset coverage, commands, metric definitions, before/after results and the Groq/Gemini comparison.
+- [ ] Write `docs/EVAL_AI.md` with dataset coverage, commands, metric definitions, before/after results and the Groq/Gemini comparison. (Setup, coverage, commands and metrics are documented; real before/after/provider numbers await keyed live runs.)
 - [ ] Coordinate shared ownership of `docs/EVAL_AI.md` with Ali, whose voice results also belong there.
 - [ ] Confirm an AI-summary upload contract with Umer. Current `/eval/run` creates decision reports and does not accept uploaded AI summaries. Do not misuse that route or write directly to another service's schema.
-- [ ] Once agreed, publish a validated tenant-scoped report to the cases evaluation API and expose it alongside decision quality without overwriting existing reports.
+- [ ] Once agreed, publish a validated tenant-scoped report to the cases evaluation API and expose it alongside decision quality without overwriting existing reports. (Blocked pending Umer's upload contract; evaluator does not write to `/eval/run`.)
 
 ### 5.4 Acceptance and review
 
-- [ ] Both required datasets are committed and format checks pass.
-- [ ] `pnpm eval:ai` works offline and supports live dev/demo runs.
-- [ ] Reports identify unavailable or unmeasured values honestly. Real comparison remains incomplete if network or credentials block it.
-- [ ] The agreed report-upload integration works, or is explicitly listed as blocked pending Umer's contract.
+- [x] Both required datasets are present and format checks pass.
+- [x] `pnpm eval:ai` works offline and supports live dev/demo runs.
+- [x] Reports identify unavailable or unmeasured values honestly. Real comparison remains incomplete if network or credentials block it.
+- [x] The agreed report-upload integration works, or is explicitly listed as blocked pending Umer's contract.
 - [ ] Run the shared checks and present the results for review before any push.
+
+**Review status:** Implementation is ready for review on branch `ayan`. The offline evaluator passed locally. A real Groq/Gemini comparison still requires provider keys and live runs; the AI-summary upload remains blocked pending the agreed cases API contract. Do not push until the user reviews this issue's changes.
 
 ## 6. Issue #7 — B3: fraud ring signals
 

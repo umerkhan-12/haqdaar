@@ -10,6 +10,15 @@ export interface AiMeta {
   fallbackUsed: boolean;
   cached: boolean;
   repaired: boolean;
+  model?: string;
+  calls?: {
+    provider: string;
+    model: string;
+    latencyMs: number;
+    fallbackUsed: boolean;
+    inputTokens?: number;
+    outputTokens?: number;
+  }[];
 }
 
 export type StructuredResult<T> =
@@ -36,9 +45,15 @@ export class TtlCache<V> {
     if (this.map.size >= this.max) this.map.delete(this.map.keys().next().value as string);
     this.map.set(k, { v, exp: Date.now() + this.ttlMs });
   }
+  clear(): void { this.map.clear(); }
 }
 
 const cache = new TtlCache<unknown>();
+
+/** Evaluation uses a cold pass followed by a cached pass in the same process. */
+export function clearStructuredCache() {
+  cache.clear();
+}
 
 /**
  * Ask for JSON, validate with Zod, repair once with the validation error, otherwise give up.
@@ -54,16 +69,25 @@ export async function structured<S extends ZodTypeAny>(
   const hit = router.isKilled ? undefined : cache.get(key);
   const base = { task: req.task, latencyMs: 0, fallbackUsed: false, repaired: false };
   if (hit !== undefined) {
-    return { ok: true, data: hit as z.infer<S>, meta: { ...base, provider: 'cache', cached: true } };
+    return { ok: true, data: hit as z.infer<S>, meta: { ...base, provider: 'cache', cached: true, calls: [] } };
   }
 
   const first = await router.complete({ ...req, json: true });
   const meta: AiMeta = {
     ...base,
     provider: first.provider,
+    model: first.value.model,
     latencyMs: first.latencyMs,
     fallbackUsed: first.fallbackUsed,
     cached: false,
+    calls: [{
+      provider: first.provider,
+      model: first.value.model,
+      latencyMs: first.latencyMs,
+      fallbackUsed: first.fallbackUsed,
+      inputTokens: first.value.inputTokens,
+      outputTokens: first.value.outputTokens,
+    }],
   };
   if (first.isMock) return { ok: false, reason: 'ai_off', meta };
 
@@ -82,6 +106,17 @@ export async function structured<S extends ZodTypeAny>(
       ],
     });
     meta.latencyMs += second.latencyMs;
+    meta.provider = second.provider;
+    meta.model = second.value.model;
+    meta.fallbackUsed ||= second.fallbackUsed;
+    meta.calls!.push({
+      provider: second.provider,
+      model: second.value.model,
+      latencyMs: second.latencyMs,
+      fallbackUsed: second.fallbackUsed,
+      inputTokens: second.value.inputTokens,
+      outputTokens: second.value.outputTokens,
+    });
     meta.repaired = true;
     if (second.isMock) return { ok: false, reason: 'ai_off', meta };
     parsed = tryParse(schema, second.value.text);

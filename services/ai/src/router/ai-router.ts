@@ -2,6 +2,7 @@ import { CircuitBreaker } from '@haqdaar/nest-kit';
 import {
   ProviderError,
   type AiProvider,
+  type LlmResponse,
   type LlmRequest,
   type EmbeddingRequest,
   type SttRequest,
@@ -57,7 +58,11 @@ export interface CallRecord {
   isMock: boolean;
   fallbackUsed: boolean;
   latencyMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
+
+export type ProviderRoutes = Partial<Record<'llm' | 'stt' | 'embed', string[]>>;
 
 /**
  * Routes each AI call through the active profile's provider list:
@@ -74,6 +79,7 @@ export class AiRouter {
     private profile: ProfileName,
     providers: AiProvider[],
     private readonly onCall: (r: CallRecord) => void = () => undefined,
+    private readonly routeOverrides: ProviderRoutes = {},
   ) {
     this.providers = new Map(providers.map((p) => [p.id, p]));
     const mock = providers.find((p) => p.isMock);
@@ -112,32 +118,36 @@ export class AiRouter {
       profile: this.profile,
       description: prof.description,
       killed: this.killed,
-      llm: chain(prof.llm),
-      stt: chain(prof.stt),
-      embed: chain(prof.embed),
+      llm: chain(this.order('llm')),
+      stt: chain(this.order('stt')),
+      embed: chain(this.order('embed')),
       lastResort: 'mock',
     };
   }
 
-  complete(req: LlmRequest): Promise<RoutedResult<{ text: string; model: string }>> {
-    return this.route('llm', req.task, PROFILES[this.profile].llm, (p) => {
+  complete(req: LlmRequest): Promise<RoutedResult<LlmResponse>> {
+    return this.route('llm', req.task, this.order('llm'), (p) => {
       if (!p.complete) throw new ProviderError(p.id, 'no LLM support', undefined, true);
       return p.complete(req);
     });
   }
 
   transcribe(req: SttRequest, task = 'transcribe'): Promise<RoutedResult<{ text: string; model: string }>> {
-    return this.route('stt', task, PROFILES[this.profile].stt, (p) => {
+    return this.route('stt', task, this.order('stt'), (p) => {
       if (!p.transcribe) throw new ProviderError(p.id, 'no STT support', undefined, true);
       return p.transcribe(req);
     });
   }
 
   embed(req: EmbeddingRequest): Promise<RoutedResult<{ embedding: number[]; model: string }>> {
-    return this.route('embed', req.task, PROFILES[this.profile].embed, (p) => {
+    return this.route('embed', req.task, this.order('embed'), (p) => {
       if (!p.embed) throw new ProviderError(p.id, 'no embedding support', undefined, true);
       return p.embed(req);
     });
+  }
+
+  private order(kind: 'llm' | 'stt' | 'embed') {
+    return this.routeOverrides[kind] ?? PROFILES[this.profile][kind];
   }
 
   private breaker(id: string): CircuitBreaker {
@@ -196,9 +206,10 @@ export class AiRouter {
     attempts: Attempt[],
     started: number,
   ): RoutedResult<T> {
-    const firstReal = attempts.find((a) => !a.skipped);
-    const fallbackUsed = !!firstReal && firstReal.provider !== p.id;
+    // Skipped unconfigured providers count as a fallback when a later provider answers.
+    const fallbackUsed = attempts.some((attempt) => !attempt.ok);
     const latencyMs = Date.now() - started;
+    const usage = value as T & { inputTokens?: number; outputTokens?: number };
     this.onCall({
       task,
       kind,
@@ -208,6 +219,8 @@ export class AiRouter {
       isMock: p.isMock,
       fallbackUsed: fallbackUsed || p.isMock,
       latencyMs,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
     });
     return { value, provider: p.id, isMock: p.isMock, fallbackUsed: fallbackUsed || p.isMock, latencyMs, attempts };
   }

@@ -8,6 +8,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "eval:ai": "node dist/eval/run.js",
     "test": "node --test dist/**/*.test.js"
   },
   "dependencies": {

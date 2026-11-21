@@ -40,6 +40,8 @@ jobs:
         run: pnpm db:generate
       - name: Build
         run: pnpm build
+      - name: AI golden-set safety evaluation (offline)
+        run: pnpm eval:ai
       - name: Unit tests
         run: pnpm test
       - name: Golden-set evaluation (decision engine)
