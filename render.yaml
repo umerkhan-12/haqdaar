@@ -112,7 +112,7 @@ services:
       - key: GEMINI_DEMO_API_KEY
         sync: false
       - key: GROQ_LLM_MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b
       - key: GROQ_STT_MODEL
         value: whisper-large-v3
       - key: GEMINI_MODEL
