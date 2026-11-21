@@ -55,6 +55,24 @@ All `/mock/*` routes are `@InternalOnly()` unless marked. Simulated latency 50�
 |---|---|---|
 | `GET /internal/cases/:id/payout` | internal | `{ caseId, tenantId, personId, beneficiaryName, accountIban: string \| null, accountAlias: string \| null, amount }` — the account is the one **stored on the case at claim time**, so an approval stays bound to the account it was approved for |
 
+### Evaluation and metrics (`/eval`, via the gateway)
+
+| Route | Who | Notes |
+|---|---|---|
+| `POST /eval/run` | admin | Body `{ seed?: int, size?: 100–5000 }` (default seed 2026, 500 cases). Runs the decision engine on the **synthetic** labelled set at the tenant's current cost settings and stores the result (`eval_runs`). Returns `{ id, createdAt, headline, dataset, costs, metrics, rawBaseline, byArchetype, calibration, costCurve }` |
+| `GET /eval/runs` | admin, auditor | Last 20 runs: `[{ id, createdAt, createdBy, datasetSeed, datasetSize, costs, headline }]` |
+| `GET /eval/runs/:id` | admin, auditor | One full stored report |
+| `GET /eval/summary` | admin, auditor, officer | Live numbers from real relief claims: `{ claims: { total, byStatus }, lanes: { decided, AUTO_APPROVE, HUMAN_REVIEW, ASK_MORE, automationRate }, queue: { size, inReview, needsInfo, waitingMinutes: { median, p90, max } }, timeToMoney: { paidCases, medianSeconds, p90Seconds, medianSecondsAutoApproved, medianSecondsOfficerApproved }, lastEval }` — time to money = case created → first `payment.success` timeline event |
+
+Report fields: all numbers are on the **held-out 40%** split; calibration is fitted on the other 60%.
+
+- `headline`: `accuracyOnDecided` (share of auto-approvals that were right — automation only approves), `routingAccuracy` (payable → auto-approved, not payable → human/question), `automationRate`, `wrongAutoApprovals` / `wrongAutoApprovalRate` (of auto-approved), `falseAlarms` (payable claims sent to a human or asked for more), `costPerCase` vs `costPerCaseAllHuman`, `calibratedEce` / `rawEce`.
+- `metrics`: the engine as deployed (lanes, confusion matrix, false alarms by reason, wrong approvals with a 95% Wilson upper bound, fraud caught). `rawBaseline`: the same cases scored without calibration.
+- `calibration`: Platt parameters fitted on this run vs the ones stored in the engine (`storedMatchesFit`), Brier / log loss / ECE before and after, and `reliability`: 10 equal-count bins of `{ from, to, n, predicted, observed }`.
+- `costCurve.points[]`: per threshold 0.90–0.999 `{ threshold, automationRate, wrongAutoApprovals, observedCostPerCase, expectedCostPerCase, raw }`; `expectedMinimum` and `observedMinimum` give the threshold range with the lowest cost.
+
+CI runs `pnpm --filter @haqdaar/cases eval:check` (golden-set gates: wrong auto-approvals ≤ 0.5%, routing accuracy ≥ 65%, automation of payable ≥ 45%, cost below all-human, ECE ≤ 0.06, stored calibration matches a refit).
+
 **Events:** `cases.case.decided` is emitted **only when a case is finally approved** (automatically or by an officer), with `amount` > 0. Rejections and other moves emit `cases.case.status_changed`. Cases consumes `payments.payment.state_changed` (`SUCCESS` → case `PAID`) and `identity.consent.withdrawn`.
 
 ## payments (port 4004)

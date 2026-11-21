@@ -29,6 +29,7 @@ export const GATEWAY_ROUTES: Record<string, ServiceName> = {
   '/rules': 'cases',
   '/decisions': 'cases',
   '/cost-settings': 'cases',
+  '/eval': 'cases',
   '/ai': 'ai',
   '/payments': 'payments',
   '/ledger': 'payments',
