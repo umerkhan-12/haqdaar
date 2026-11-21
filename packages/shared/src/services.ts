@@ -15,7 +15,10 @@ export type ServiceName = keyof typeof SERVICES;
 
 export function serviceUrl(name: ServiceName, env: NodeJS.ProcessEnv = process.env): string {
   const s = SERVICES[name];
-  return env[s.urlEnv] ?? `http://127.0.0.1:${s.port}`;
+  const v = env[s.urlEnv];
+  if (!v) return `http://127.0.0.1:${s.port}`;
+  // Hosts wired by the platform (e.g. Render `fromService`) come without a scheme.
+  return v.includes('://') ? v : `https://${v}`;
 }
 
 /** Public route prefixes the gateway forwards to each service. */

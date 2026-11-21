@@ -29,6 +29,9 @@ RUN pnpm --filter @haqdaar/shared --filter @haqdaar/nest-kit run build
 RUN mkdir -p "services/${SERVICE}/generated" \
  && if [ -f "services/${SERVICE}/prisma/schema.prisma" ]; then pnpm --filter "@haqdaar/${SERVICE}" run db:generate; fi
 RUN pnpm --filter "@haqdaar/${SERVICE}" run build
+# Tables for the first boot on an empty database (applied by scripts/docker/db-init.mjs).
+RUN if [ -f "services/${SERVICE}/prisma/schema.prisma" ]; then cd "services/${SERVICE}" \
+      && pnpm exec prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > dist/schema.sql; fi
 
 # ---------- production dependencies only (no TypeScript, Nest CLI, Prisma CLI) ----------
 FROM base AS prod-deps
@@ -47,7 +50,8 @@ FROM node:${NODE_VERSION}-alpine AS runtime
 ARG SERVICE
 RUN apk add --no-cache openssl libc6-compat tini \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx
-ENV NODE_ENV=production \
+ENV SERVICE=${SERVICE} \
+    NODE_ENV=production \
     PORT=8080 \
     LOG_PRETTY=
 WORKDIR /app
@@ -63,10 +67,10 @@ COPY --from=build --chown=node:node /app/packages/shared/dist ./packages/shared/
 COPY --from=build --chown=node:node /app/packages/nest-kit/dist ./packages/nest-kit/dist
 COPY --from=build --chown=node:node /app/services/${SERVICE}/dist ./services/${SERVICE}/dist
 COPY --from=build --chown=node:node /app/services/${SERVICE}/generated ./services/${SERVICE}/generated
+COPY --chown=node:node scripts/docker ./scripts/docker
 USER node
 WORKDIR /app/services/${SERVICE}
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -qO- "http://127.0.0.1:${PORT}/health" > /dev/null || exit 1
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["/sbin/tini", "--", "/bin/sh", "/app/scripts/docker/entrypoint.sh"]

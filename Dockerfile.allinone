@@ -1,0 +1,24 @@
+# Everything in one container: 8 services + web app on one public port (PUBLIC_PORT, default 7860).
+#   docker build -f Dockerfile.allinone -t haqdaar-all .
+#   docker run -p 7860:7860 --env-file .env.prod haqdaar-all
+# For small single-box hosting (a VPS, Hugging Face Spaces). The per-service Dockerfile stays the
+# production path when each service scales on its own.
+FROM node:22-bookworm-slim AS build
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/* \
+ && corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /app
+COPY . .
+RUN pnpm install --frozen-lockfile --config.shamefully-hoist=true
+RUN pnpm db:generate && pnpm build && pnpm --filter @haqdaar/web build
+RUN for s in identity cases payments audit; do \
+      (cd services/$s && pnpm exec prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > dist/schema.sql) || exit 1; \
+    done
+
+FROM node:22-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates tini && rm -rf /var/lib/apt/lists/*
+ENV NODE_ENV=production PUBLIC_PORT=7860 TESSDATA_DIR=/tmp/tessdata HOME=/tmp
+WORKDIR /app
+COPY --from=build --chown=1000:1000 /app /app
+USER 1000
+EXPOSE 7860
+ENTRYPOINT ["/usr/bin/tini", "--", "node", "/app/scripts/docker/all-in-one.mjs"]
