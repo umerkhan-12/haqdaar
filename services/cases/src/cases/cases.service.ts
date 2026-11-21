@@ -24,8 +24,10 @@ import { RulesService, type ActiveRule } from '../rules/rules.service';
 import { Upstream, type HouseholdRecord, type NadraVerifyResponse } from '../upstream';
 import { decide, type DecisionInputs, type HardFlag } from '../engine/decide';
 import {
-  DEFAULT_ANOMALY_THRESHOLDS,
+  ANOMALY_WINDOWS,
   detectAnomalies,
+  detectAnomaliesForCase,
+  flagsVisibleTo,
   type AnomalyCandidateGroups,
   type AnomalyObservation,
   type AnomalySignal,
@@ -48,6 +50,38 @@ const DUPLICATE_NAME_MIN = 0.92;
 const ANOMALY_OPEN_STATUSES = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW'] as const;
 const ANOMALY_COUNTED_STATUSES = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW', 'APPROVED', 'PAID'] as const;
 const ANOMALY_BATCH_SIZE = 250;
+/** Submit path: most recent rows read per group. Far above every threshold, and it bounds the work. */
+const ANOMALY_GROUP_LIMIT = 200;
+const ANOMALY_OBSERVATION_SELECT = {
+  id: true,
+  tenantId: true,
+  status: true,
+  personId: true,
+  payoutKey: true,
+  helperId: true,
+  districtSnapshot: true,
+  householdSize: true,
+  nameNormalizedSnapshot: true,
+  createdAt: true,
+  person: { select: { cnicHash: true } },
+} satisfies Prisma.CaseSelect;
+type AnomalyRow = Prisma.CaseGetPayload<{ select: typeof ANOMALY_OBSERVATION_SELECT }>;
+
+function toObservation(row: AnomalyRow): AnomalyObservation {
+  return {
+    tenantId: row.tenantId,
+    caseId: row.id,
+    status: row.status,
+    personId: row.personId,
+    cnicHash: row.person.cnicHash,
+    nameNormalized: row.nameNormalizedSnapshot ?? '',
+    district: row.districtSnapshot,
+    payoutKey: row.payoutKey,
+    helperId: row.helperId,
+    householdSize: row.householdSize,
+    createdAt: row.createdAt,
+  };
+}
 
 @Injectable()
 export class CasesService {
@@ -153,21 +187,18 @@ export class CasesService {
     const rule = await this.rules.published(c.tenantId);
     const costs = await this.rules.costs(c.tenantId);
     const inputs = await this.gather(c, c.person, requestId);
+    // Fraud-ring check: a few indexed lookups for this claim's own groups, outside any transaction
+    // and without a lock, so claims never wait for each other. The claim's row is already committed,
+    // so whichever claim of a ring arrives last always sees the others.
+    const signals = await this.anomaliesForCase(c, new Date());
+    inputs.externalFlags.push(...signals.map((signal) => this.anomalyHardFlag(signal.type)));
+    const outcome = decide(inputs, { clauses: rule.clauses, amount: rule.amount, costs, amountCap: env.AUTO_APPROVE_AMOUNT_CAP_PKR });
+
+    const to: CaseStatus =
+      outcome.lane === 'AUTO_APPROVE' ? 'APPROVED' : outcome.lane === 'ASK_MORE' ? 'NEEDS_INFO' : 'IN_REVIEW';
     const ctx = { source: 'cases', principal: actor, correlationId: requestId };
 
     await this.prisma.$transaction(async (tx) => {
-      await this.lockTenantAnomalyScan(tx, c.tenantId);
-      const now = new Date();
-      const observations = await this.anomalyObservations(tx, c.tenantId, now);
-      const candidates = await this.anomalyCandidateGroups(tx, c.tenantId, now);
-      const signals = this.detectTenantAnomalies(c.tenantId, observations, now, candidates);
-      const currentSignals = signals.filter((signal) => signal.evidenceCaseIds.includes(c.id));
-      inputs.externalFlags.push(...currentSignals.map((signal) => this.anomalyHardFlag(signal.type)));
-      await this.persistOpenFindings(tx, signals, observations);
-
-      const outcome = decide(inputs, { clauses: rule.clauses, amount: rule.amount, costs, amountCap: env.AUTO_APPROVE_AMOUNT_CAP_PKR });
-      const to: CaseStatus =
-        outcome.lane === 'AUTO_APPROVE' ? 'APPROVED' : outcome.lane === 'ASK_MORE' ? 'NEEDS_INFO' : 'IN_REVIEW';
       const claimed = await tx.case.updateMany({
         where: { id: c.id, status: { in: PROCESSABLE } },
         data: {
@@ -214,8 +245,56 @@ export class CasesService {
       if (to === 'APPROVED') {
         await this.emit(tx, this.decidedEvent(c.id, c.personId, 'AUTO_APPROVE', outcome.confidence, rule, ctx));
       }
-    }, { maxWait: 10_000, timeout: 30_000 });
+    });
     this.bus.kick();
+
+    // After the decision is committed: evidence for officers, and the flag on the ring's other open
+    // claims. It only ever adds a flag; it never changes a status, so a failure here is not fatal.
+    if (signals.length) {
+      try {
+        await this.prisma.$transaction((tx) => this.persistOpenFindings(tx, c.tenantId, signals));
+      } catch (err) {
+        this.logger.warn({ err: String(err), caseId: c.id }, 'Could not record anomaly evidence');
+      }
+    }
+  }
+
+  /** The rows that share a payout key, helper, district + household size or name + district with this claim. */
+  private async anomaliesForCase(c: Case, now: Date): Promise<AnomalySignal[]> {
+    if (c.type !== 'relief_claim') return [];
+    const group = (where: Prisma.CaseWhereInput, windowMs: number) =>
+      this.prisma.case.findMany({
+        where: {
+          tenantId: c.tenantId,
+          type: 'relief_claim',
+          status: { in: [...ANOMALY_COUNTED_STATUSES] },
+          createdAt: { gte: new Date(now.getTime() - windowMs), lte: now },
+          ...where,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: ANOMALY_GROUP_LIMIT,
+        select: ANOMALY_OBSERVATION_SELECT,
+      });
+    const groups = await Promise.all([
+      c.payoutKey ? group({ payoutKey: c.payoutKey }, ANOMALY_WINDOWS.sharedPayoutMs) : [],
+      c.helperId ? group({ helperId: c.helperId }, ANOMALY_WINDOWS.helperVelocityMs) : [],
+      c.districtSnapshot && c.householdSize !== null
+        ? group({ districtSnapshot: c.districtSnapshot, householdSize: c.householdSize }, ANOMALY_WINDOWS.householdPatternMs)
+        : [],
+      c.nameNormalizedSnapshot && c.districtSnapshot
+        ? group({ nameNormalizedSnapshot: c.nameNormalizedSnapshot, districtSnapshot: c.districtSnapshot }, ANOMALY_WINDOWS.identityCollisionMs)
+        : [],
+    ]);
+    return detectAnomaliesForCase(c.tenantId, c.id, groups.flat().map(toObservation), now, this.anomalyThresholds());
+  }
+
+  private anomalyThresholds() {
+    return {
+      sharedPayoutPeople: env.ANOMALY_SHARED_PAYOUT_PEOPLE,
+      helperClaimsPerHour: env.ANOMALY_HELPER_CLAIMS_PER_HOUR,
+      householdPatternPeople: env.ANOMALY_HOUSEHOLD_PATTERN_PEOPLE,
+      identityCorroboratingDetails: env.ANOMALY_IDENTITY_CORROBORATION_DETAILS,
+    };
   }
 
   /** Authenticated, tenant-scoped, repeatable scan. It only adds evidence to open claims. */
@@ -226,7 +305,7 @@ export class CasesService {
       const observations = await this.anomalyObservations(tx, user.tenantId, now);
       const candidates = await this.anomalyCandidateGroups(tx, user.tenantId, now);
       const signals = this.detectTenantAnomalies(user.tenantId, observations, now, candidates);
-      const result = await this.persistOpenFindings(tx, signals, observations);
+      const result = await this.persistOpenFindings(tx, user.tenantId, signals);
       return {
         tenantId: user.tenantId,
         scannedCases: observations.length,
@@ -246,8 +325,8 @@ export class CasesService {
   }
 
   private async lockTenantAnomalyScan(tx: Tx, tenantId: string) {
-    // Serializes decisions/scans within one tenant so concurrent submissions cannot all miss a ring.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId}))`;
+    // Serializes on-demand scans of one tenant. Claim submission never takes this lock.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId}))`;
   }
 
   private async anomalyObservations(tx: Tx, tenantId: string, now: Date): Promise<AnomalyObservation[]> {
@@ -265,34 +344,10 @@ export class CasesService {
         },
         orderBy: { id: 'asc' },
         take: ANOMALY_BATCH_SIZE,
-        select: {
-          id: true,
-          tenantId: true,
-          status: true,
-          personId: true,
-          payoutKey: true,
-          helperId: true,
-          districtSnapshot: true,
-          householdSize: true,
-          nameNormalizedSnapshot: true,
-          createdAt: true,
-          person: { select: { cnicHash: true } },
-        },
+        select: ANOMALY_OBSERVATION_SELECT,
       });
       if (batch.length === 0) break;
-      rows.push(...batch.map((row) => ({
-        tenantId: row.tenantId,
-        caseId: row.id,
-        status: row.status,
-        personId: row.personId,
-        cnicHash: row.person.cnicHash,
-        nameNormalized: row.nameNormalizedSnapshot ?? '',
-        district: row.districtSnapshot,
-        payoutKey: row.payoutKey,
-        helperId: row.helperId,
-        householdSize: row.householdSize,
-        createdAt: row.createdAt,
-      })));
+      rows.push(...batch.map(toObservation));
       afterId = batch[batch.length - 1]!.id;
       if (batch.length < ANOMALY_BATCH_SIZE) break;
     }
@@ -305,12 +360,7 @@ export class CasesService {
     now: Date,
     candidates: AnomalyCandidateGroups,
   ): AnomalySignal[] {
-    return detectAnomalies(tenantId, observations, now, {
-      sharedPayoutPeople: env.ANOMALY_SHARED_PAYOUT_PEOPLE,
-      helperClaimsPerHour: env.ANOMALY_HELPER_CLAIMS_PER_HOUR,
-      householdPatternPeople: env.ANOMALY_HOUSEHOLD_PATTERN_PEOPLE,
-      identityCorroboratingDetails: env.ANOMALY_IDENTITY_CORROBORATION_DETAILS,
-    }, candidates);
+    return detectAnomalies(tenantId, observations, now, this.anomalyThresholds(), candidates);
   }
 
   /** Candidate clusters are SQL GROUP BY aggregates; the pure engine verifies them and builds evidence. */
@@ -347,19 +397,20 @@ export class CasesService {
       if (people.size > env.ANOMALY_SHARED_PAYOUT_PEOPLE) candidates.shared_payout.add(key);
     }
 
-    const helpers = await tx.case.groupBy({
-      by: ['helperId'],
+    const helperPeople = await tx.case.groupBy({
+      by: ['helperId', 'personId'],
       where: {
         ...base,
         helperId: { not: null },
         createdAt: { gte: new Date(now.getTime() - 60 * 60_000), lte: now },
       },
-      _count: { _all: true },
     });
-    for (const item of helpers) {
-      if (item.helperId && item._count._all > env.ANOMALY_HELPER_CLAIMS_PER_HOUR) {
-        candidates.helper_velocity.add(item.helperId);
-      }
+    const helperCounts = new Map<string, number>();
+    for (const item of helperPeople) {
+      if (item.helperId) helperCounts.set(item.helperId, (helperCounts.get(item.helperId) ?? 0) + 1);
+    }
+    for (const [helperId, people] of helperCounts) {
+      if (people > env.ANOMALY_HELPER_CLAIMS_PER_HOUR) candidates.helper_velocity.add(helperId);
     }
 
     const householdPeople = await tx.case.groupBy({
@@ -422,22 +473,39 @@ export class CasesService {
     return candidates;
   }
 
-  private async persistOpenFindings(tx: Tx, signals: AnomalySignal[], observations: AnomalyObservation[]) {
-    const rowById = new Map(observations.map((row) => [row.caseId, row]));
+  /**
+   * Adds evidence and the hard flag to the open claims of each signal. Idempotent and additive:
+   * it never changes a status or lane, and never touches a decided claim.
+   */
+  private async persistOpenFindings(tx: Tx, tenantId: string, signals: AnomalySignal[]) {
+    const byCase = new Map<string, AnomalySignal[]>();
+    for (const signal of signals) {
+      for (const caseId of signal.evidenceCaseIds) byCase.set(caseId, [...(byCase.get(caseId) ?? []), signal]);
+    }
+    const open = { in: [...ANOMALY_OPEN_STATUSES] };
+    const targets = await tx.case.findMany({
+      where: { id: { in: [...byCase.keys()] }, tenantId, status: open },
+      select: { id: true },
+      orderBy: { id: 'asc' }, // one lock order for every writer, so two submissions cannot deadlock
+    });
     let created = 0;
     let updated = 0;
-    for (const signal of signals) {
-      const signalKey = createHmac('sha256', env.PII_HASH_KEY)
-        .update(`${signal.type}:${signal.groupKey}`)
-        .digest('hex');
-      for (const caseId of signal.evidenceCaseIds) {
-        const row = rowById.get(caseId);
-        if (!row || !(ANOMALY_OPEN_STATUSES as readonly string[]).includes(row.status)) continue;
-        const target = await tx.case.findUniqueOrThrow({ where: { id: caseId }, select: { flags: true, status: true } });
-        if (!(ANOMALY_OPEN_STATUSES as readonly string[]).includes(target.status)) continue;
-        const existing = await tx.anomalyFinding.findUnique({ where: { caseId_signalKey: { caseId, signalKey } } });
+    for (const { id: caseId } of targets) {
+      for (const signal of byCase.get(caseId)!) {
+        const signalKey = createHmac('sha256', env.PII_HASH_KEY)
+          .update(`${signal.type}:${signal.groupKey}`)
+          .digest('hex');
+        const flag = this.anomalyHardFlag(signal.type);
+        const marked = await tx.case.updateMany({
+          where: { id: caseId, status: open, NOT: { flags: { has: flag } } },
+          data: { flags: { push: flag } },
+        });
+        if (marked.count === 0) {
+          const still = await tx.case.count({ where: { id: caseId, status: open } });
+          if (still === 0) continue; // decided in the meantime: leave it alone
+        }
         const data = {
-          tenantId: row.tenantId,
+          tenantId,
           signalType: signal.type,
           signalKey,
           evidenceCaseIds: signal.evidenceCaseIds,
@@ -446,18 +514,12 @@ export class CasesService {
           observedCount: signal.observedCount,
           threshold: signal.threshold,
         };
-        if (existing) {
-          await tx.anomalyFinding.update({ where: { id: existing.id }, data });
-          const flag = this.anomalyHardFlag(signal.type);
-          const flags = target.flags.includes(flag) ? target.flags : [...target.flags, flag];
-          await tx.case.update({ where: { id: caseId }, data: { flags, lane: 'HUMAN_REVIEW' } });
+        const inserted = await tx.anomalyFinding.createMany({ data: [{ ...data, caseId }], skipDuplicates: true });
+        if (inserted.count === 0) {
+          await tx.anomalyFinding.update({ where: { caseId_signalKey: { caseId, signalKey } }, data });
           updated++;
           continue;
         }
-        await tx.anomalyFinding.create({ data: { ...data, caseId } });
-        const flag = this.anomalyHardFlag(signal.type);
-        const flags = target.flags.includes(flag) ? target.flags : [...target.flags, flag];
-        await tx.case.update({ where: { id: caseId }, data: { flags, lane: 'HUMAN_REVIEW' } });
         await tx.caseEvent.create({
           data: {
             caseId,
@@ -705,13 +767,7 @@ export class CasesService {
   /** Officer queue: no names or CNICs here, only what is needed to pick the next case. */
   async queue(user: AuthUser) {
     const rows = await this.prisma.case.findMany({
-      where: {
-        tenantId: user.tenantId,
-        OR: [
-          { status: { in: REVIEWABLE } },
-          { flags: { hasSome: ['anomaly:shared_payout', 'anomaly:helper_velocity', 'anomaly:household_pattern', 'anomaly:identity_collision'] } },
-        ],
-      },
+      where: { tenantId: user.tenantId, status: { in: REVIEWABLE } },
       include: {
         person: { select: { district: true } },
         anomalies: { orderBy: { createdAt: 'desc' } },
@@ -780,7 +836,7 @@ export class CasesService {
       lane: c.lane,
       confidence: c.confidence,
       amount: c.amount,
-      flags: revealAnomalyFlags ? c.flags : c.flags.filter((flag) => !flag.startsWith('anomaly:')),
+      flags: flagsVisibleTo(c.flags, revealAnomalyFlags),
       assignedTo: c.assignedTo,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
@@ -814,7 +870,7 @@ export class CasesService {
       confidence: d.confidence,
       eligible: d.eligible,
       clauses: d.clausesHit,
-      hardFlags: revealAnomalyFlags ? d.hardFlags : d.hardFlags.filter((flag) => !flag.startsWith('anomaly:')),
+      hardFlags: flagsVisibleTo(d.hardFlags, revealAnomalyFlags),
       explanationUr: d.explanationUr,
       explanationEn: d.explanationEn,
       decidedBy: d.decidedBy === 'system' ? 'system' : 'officer',

@@ -18,7 +18,7 @@ const Env = BaseEnv.extend({
   /** Above this amount a human must approve, whatever the confidence. */
   AUTO_APPROVE_AMOUNT_CAP_PKR: z.coerce.number().int().positive().default(15_000),
   ANOMALY_SHARED_PAYOUT_PEOPLE: z.coerce.number().int().min(2).max(100).default(2),
-  ANOMALY_HELPER_CLAIMS_PER_HOUR: z.coerce.number().int().min(1).max(1000).default(5),
+  ANOMALY_HELPER_CLAIMS_PER_HOUR: z.coerce.number().int().min(1).max(1000).default(10),
   ANOMALY_HOUSEHOLD_PATTERN_PEOPLE: z.coerce.number().int().min(2).max(100).default(5),
   ANOMALY_IDENTITY_CORROBORATION_DETAILS: z.coerce.number().int().min(1).max(3).default(2),
   LOG_PRETTY: z.string().optional(),
