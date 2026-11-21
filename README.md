@@ -65,6 +65,16 @@ Then open `http://localhost:4000/status`. Each service has Swagger at `http://lo
 
 **Demo accounts** (synthetic, password `demo1234`): citizen `03001110001`, helper `03001110002`, officer `03001110003` and `03001110006`, admin `03001110004`, auditor `03001110005`.
 
+## Testing
+
+| Command | What it proves |
+|---|---|
+| `pnpm test` | Unit tests for every package and service (decision engine, state machine, seal, hash chain, name matching, PII redaction, AI fallback…) |
+| `pnpm e2e` | 47 end-to-end worst cases through the gateway: forged / `alg:none` / algorithm-confusion / expired tokens, refresh-token theft, brute force, injection, double-submit races, consent, Helper Mode PINs, Raast timeout after debit (paid once), mule account hold, maker-checker, Haq Receipt seal, partner API scopes, audit chain |
+| `pnpm chaos` | Kills services mid-flow: rails down → human review; audit down → no event lost; payments down → paid once after restart; AI down → clean 503 |
+| `pnpm load` | Concurrent load through the gateway: p50 / p95 / p99 and error rate per endpoint |
+| `pnpm demo:reset` | Clears claims, payouts and consents for a fresh rehearsal (audit log is never touched) |
+
 **AI profile:** set `AI_PROFILE=dev` (Groq first, free) during the build, `demo` (paid Gemini first) on judging day, `offline` for tests. Admins can also switch at runtime: `POST /ai/profile`.
 
 ## Real vs simulated

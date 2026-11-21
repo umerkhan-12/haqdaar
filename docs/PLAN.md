@@ -454,18 +454,17 @@ haqdaar/
 └─ docs/              this plan, PDF, architecture notes
 ```
 
-## 13. Team split (4 people)
+## 13. Team split (3 people)
 
-> Update names and swap areas once we know everyone's strongest skill.
+> Status Sat 21 Nov, 4 AM: **the whole backend is built and tested** (7 microservices, 70+ unit tests, 47 e2e worst-case tests, 4 chaos tests). See `docs/ARCHITECTURE.md` and `docs/CONTRACTS.md`. The remaining work is mostly frontend, AI quality and demo.
 
-| Person | Owns | First deliverable (by H6) |
+| Person | Owns | Next deliverable |
 |---|---|---|
-| **A — Umer (backend core)** | Monorepo, NestJS app setup, Prisma schema + migrations (sole owner), auth (Passport JWT) + global guards (Roles, Tenant, Consent, Throttler), audit + idempotency interceptors, tenants, cases + events, audit hash chain, API keys, Swagger, deploy API | Login + roles + cases CRUD deployed with Swagger |
-| **B — AI / decision engine** | Rule engine (JSON Logic) + versions, decision lanes + cost math, calibration, synthetic data generators, eval dashboard data, scam classifier + Seal, OCR/forgery/blur, Langfuse | `decide(case)` returns lane + trace on synthetic cases |
-| **C — Frontend** | Next.js PWA, voice-first citizen flow, icons + audio, officer queue, admin rule editor + Digital Twin UI, auditor screens, Judge Mode panel, eval charts | Citizen flow screens with audio playing, mocked API |
-| **D — Integrations / agent / offline** | Mock NADRA/Raast/household/SMS services, Claim Agent + tools, Whisper STT, TTS clip generation, offline outbox + idempotency, Helper Mode, Haq Receipt, RAG, deploy web, demo script | Mock services live + Whisper transcribing Urdu |
+| **A — Umer (backend + integration)** | All 7 services (gateway, identity, cases, ai, payments, audit, rails-mock), Prisma schemas, event bus, security, Judge Mode endpoints, eval/metrics API, deploy (Render + Supabase), CI. Explains architecture + fintech flow to judges | Deploy all services; Judge Mode scenario endpoints; `/eval/summary` |
+| **B — AI quality** | Real Groq/Gemini keys, prompt tuning, golden set (50 labelled cases) + calibration (Platt), Urdu Whisper testing, OCR/forgery (tesseract + ELA), RAG over policy docs, Urdu audio clips (Edge TTS) | Golden set passing in CI; real Urdu voice claim extracting correctly |
+| **C — Frontend** | Next.js PWA: voice-first citizen flow (icons + audio), Helper Mode screens, officer queue, admin rule editor + Digital Twin, auditor trace, mock phone (SMS + Haq Receipt), Judge Mode panel, offline outbox | Citizen claim flow end to end against the gateway at `:4000` |
 
-**Git rules:** branch per feature (`a/auth`, `b/rules`…), small PRs, merge to `main` at least every 4 hours. Only A edits `schema.prisma` — others request changes in the team chat. Zod contracts in `packages/shared` are agreed in the first 2 hours and changed only with a heads-up.
+**Git rules:** branch per feature (`a/...`, `b/...`, `c/...`), small PRs, merge to `main` at least every 4 hours. A owns the Prisma schemas; contracts in `packages/shared` and `docs/CONTRACTS.md` change only with a heads-up. Before every merge: `pnpm build && pnpm test`, and `pnpm e2e` with the stack running.
 
 ## 14. 48-hour timeline
 
