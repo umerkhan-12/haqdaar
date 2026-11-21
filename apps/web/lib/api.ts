@@ -293,7 +293,8 @@ export const api = {
   setKill: (killed: boolean) => request<AiStatus>('POST', '/ai/kill-switch', { body: { killed } }),
   setProfile: (profile: AiStatus['profile']) => request<AiStatus>('POST', '/ai/profile', { body: { profile } }),
 
-  payments: (state?: string) => request<Payment[]>('GET', `/payments${state ? `?state=${state}` : ''}`),
+  payments: (state?: string, caseId?: string) =>
+    request<Payment[]>('GET', `/payments?${new URLSearchParams({ ...(state ? { state } : {}), ...(caseId ? { caseId } : {}) })}`),
   release: (id: string, note: string) => request<Payment>('POST', `/payments/${id}/release`, { body: { note } }),
   approvePayment: (id: string) => request<Payment>('POST', `/payments/${id}/approve`, { body: {} }),
   balances: () =>

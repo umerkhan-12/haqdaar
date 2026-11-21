@@ -8,6 +8,7 @@ import { PayoutService } from './payout.service';
 
 const ListQuery = z.object({
   state: PaymentState.optional(),
+  caseId: z.string().uuid().optional(),
   take: z.coerce.number().int().min(1).max(200).default(50),
 });
 const NoteBody = z.object({ note: z.string().max(300).optional() }).default({});
@@ -26,7 +27,7 @@ export class PaymentsController {
   @Get()
   list(@CurrentUser() user: AuthUser, @ZQuery(ListQuery) q: z.infer<typeof ListQuery>) {
     return this.prisma.payment.findMany({
-      where: { tenantId: user.tenantId, ...(q.state ? { state: q.state } : {}) },
+      where: { tenantId: user.tenantId, ...(q.state ? { state: q.state } : {}), ...(q.caseId ? { caseId: q.caseId } : {}) },
       orderBy: { createdAt: 'desc' },
       take: q.take,
     });
