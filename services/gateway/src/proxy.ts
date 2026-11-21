@@ -6,6 +6,7 @@ import rateLimit from '@fastify/rate-limit';
 import { GATEWAY_ROUTES, serviceUrl } from '@haqdaar/shared';
 import { INTERNAL_HEADER } from '@haqdaar/nest-kit';
 import { env } from './env';
+import { UsageMeter } from './usage-meter';
 
 /**
  * Headers never forwarded upstream: internal credentials a client could try to inject,
@@ -33,6 +34,15 @@ export async function configureEdge(app: NestFastifyApplication): Promise<void> 
     timeWindow: '1 minute',
     allowList: (req: { url?: string }) => req.url === '/health',
   });
+
+  // Usage metering per tenant (see UsageMeter). Registered before the proxies so it covers them.
+  const meter = app.get(UsageMeter);
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onResponse', async (req, reply) => {
+      meter.record(req.headers.authorization, req.url, reply.statusCode);
+    });
 
   for (const [prefix, service] of Object.entries(GATEWAY_ROUTES)) {
     await app.register(proxy as never, {

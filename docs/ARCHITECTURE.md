@@ -68,11 +68,12 @@
 
 | Event | Producer | Consumers |
 |---|---|---|
+| `identity.tenant.created` | identity | cases (publish rule v1 + default costs), audit |
 | `identity.consent.withdrawn` | identity | cases (block access), audit |
 | `cases.case.submitted` | cases | ai (pre-process docs), audit |
 | `cases.case.decided` | cases | payments (create payout if approved), audit, webhooks |
 | `payments.payment.state_changed` | payments | cases (timeline), audit, webhooks |
-| `ai.call.completed` | ai | audit (AI usage trail) |
+| `ai.call.completed` | ai | audit (AI usage trail), identity (per-tenant AI usage) |
 | `*` | all | audit (everything is logged) |
 
 ## 4. Security model

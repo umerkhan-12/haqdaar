@@ -162,6 +162,105 @@ async function partnerSuite() {
   });
 }
 
+async function saasSuite() {
+  describe('SaaS: launch a program, usage metering, quota');
+  const platform = await token('admin'); // Admin Hira: seeded platform admin
+  const phone = `0345${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`;
+  const password = `launch-${randomUUID().slice(0, 8)}`;
+  let launched;
+  let newAdmin;
+
+  await it('an officer cannot launch a program', async () => {
+    const r = await api('POST', '/tenants', {
+      token: await token('officer'),
+      body: { programName: 'Nope', type: 'relief', adminName: 'X Y', adminPhone: phone, adminPassword: password },
+    });
+    expectStatus(r, 403);
+  });
+
+  await it('platform admin launches a program: tenant + first admin in one step', async () => {
+    const r = await api('POST', '/tenants', {
+      token: platform,
+      body: { programName: `E2E Flood Relief ${phone.slice(-4)}`, type: 'relief', adminName: 'Admin Noor', adminPhone: phone, adminPassword: password },
+    });
+    expectStatus(r, 201);
+    launched = r.body;
+    expect(launched.tenant.id && launched.admin.role === 'admin', JSON.stringify(r.body));
+    expect(launched.tenant.monthlyRequestQuota === 100000, 'default quota');
+    expect(!JSON.stringify(r.body).includes(phone), 'phone is masked in the response');
+  });
+
+  await it('the same admin phone cannot be used twice → 409', async () => {
+    const r = await api('POST', '/tenants', {
+      token: platform,
+      body: { programName: 'Duplicate', type: 'relief', adminName: 'Admin Two', adminPhone: phone, adminPassword: password },
+    });
+    expectStatus(r, 409);
+  });
+
+  await it('the new admin logs in and lands in the new tenant', async () => {
+    const r = await api('POST', '/auth/login', { body: { phone, password } });
+    expectStatus(r, 200);
+    newAdmin = r.body.accessToken;
+    const me = await api('GET', '/tenants/me', { token: newAdmin });
+    expectStatus(me, 200);
+    expect(me.body.id === launched.tenant.id && me.body.platformAdmin === false, JSON.stringify(me.body));
+  });
+
+  await it('no claims yet, but /rules already shows a published v1 (onboarding event)', async () => {
+    const cases = await api('GET', '/cases', { token: newAdmin });
+    expectStatus(cases, 200);
+    const list = Array.isArray(cases.body) ? cases.body : (cases.body.items ?? cases.body.data ?? []);
+    expect(list.length === 0, `expected no cases, got ${list.length}`);
+    let rules;
+    for (let i = 0; i < 40; i++) {
+      rules = await api('GET', '/rules', { token: newAdmin });
+      if (rules.body?.some?.((v) => v.version === 1 && v.status === 'PUBLISHED')) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    expect(rules.body.some((v) => v.version === 1 && v.status === 'PUBLISHED'), JSON.stringify(rules.body).slice(0, 200));
+    const costs = await api('GET', '/cost-settings', { token: newAdmin });
+    expectStatus(costs, 200);
+  });
+
+  await it('a normal (tenant) admin cannot launch programs or list tenants', async () => {
+    const r = await api('POST', '/tenants', {
+      token: newAdmin,
+      body: { programName: 'Sneaky', type: 'relief', adminName: 'X Y', adminPhone: '03459999999', adminPassword: password },
+    });
+    expectStatus(r, 403);
+    expectStatus(await api('GET', '/tenants', { token: newAdmin }), 403);
+  });
+
+  await it("a tenant admin cannot read another tenant's usage", async () => {
+    const other = '00000000-0000-4000-8000-000000000001';
+    expectStatus(await api('GET', `/tenants/${other}/usage`, { token: newAdmin }), 403);
+    expectStatus(await api('GET', `/tenants/${launched.tenant.id}/usage`, { token: await token('officer') }), 403);
+  });
+
+  await it('usage shows the new tenant’s requests per service within one flush (~15 s)', async () => {
+    let u;
+    for (let i = 0; i < 25; i++) {
+      u = await api('GET', `/tenants/${launched.tenant.id}/usage?days=7`, { token: newAdmin });
+      expectStatus(u, 200);
+      const today = u.body.daily.at(-1);
+      if (today.services.cases?.requests > 0 && today.services.identity?.requests > 0) break;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    const today = u.body.daily.at(-1);
+    expect(u.body.daily.length === 7, 'seven days');
+    expect(today.services.cases?.requests > 0 && today.services.identity?.requests > 0, JSON.stringify(today));
+    expect(u.body.quota.monthToDateRequests > 0 && u.body.quota.percentUsed >= 0, JSON.stringify(u.body.quota));
+  });
+
+  await it('platform admin sees every tenant and can read any tenant’s usage', async () => {
+    const list = await api('GET', '/tenants', { token: platform });
+    expectStatus(list, 200);
+    expect(list.body.some((t) => t.id === launched.tenant.id && t.users === 1), 'launched tenant listed with 1 user');
+    expectStatus(await api('GET', `/tenants/${launched.tenant.id}/usage`, { token: platform }), 200);
+  });
+}
+
 async function aiSuite() {
   describe('AI service & Kill AI');
   const admin = await token('admin');
@@ -234,6 +333,7 @@ registerSuite(gatewaySuite);
 registerSuite(identitySuite);
 registerSuite(aiSuite);
 registerSuite(partnerSuite);
+registerSuite(saasSuite);
 await import('./e2e-flows.mjs');
 registerSuite(auditSuite);
 await runAll();

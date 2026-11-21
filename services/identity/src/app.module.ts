@@ -12,6 +12,9 @@ import { ConsentsController } from './consents/consents.controller';
 import { ConsentsService } from './consents/consents.service';
 import { ApiKeysController } from './api-keys/api-keys.controller';
 import { ApiKeysService } from './api-keys/api-keys.service';
+import { InternalUsageController, TenantsController } from './tenants/tenants.controller';
+import { TenantsService } from './tenants/tenants.service';
+import { EventsConsumer } from './events.consumer';
 
 @Module({
   imports: [
@@ -29,7 +32,14 @@ import { ApiKeysService } from './api-keys/api-keys.service';
     }),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
   ],
-  controllers: [AuthController, ConsentsController, ApiKeysController, DemoResetController],
+  controllers: [
+    AuthController,
+    ConsentsController,
+    ApiKeysController,
+    TenantsController,
+    InternalUsageController,
+    DemoResetController,
+  ],
   providers: [
     { provide: DemoResetter, useClass: IdentityDemoReset },
     { provide: APP_GUARD, useClass: LoginThrottlerGuard },
@@ -37,6 +47,8 @@ import { ApiKeysService } from './api-keys/api-keys.service';
     AuthService,
     ConsentsService,
     ApiKeysService,
+    TenantsService,
+    EventsConsumer,
   ],
 })
 export class AppModule {}
