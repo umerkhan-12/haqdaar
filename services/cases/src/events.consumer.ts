@@ -16,9 +16,15 @@ export class EventsConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.bus.subscribe('payments.payment.state_changed', (e) => this.once(e, (tx) => this.onPayment(tx, e)));
-    await this.bus.subscribe('identity.consent.withdrawn', (e) => this.once(e, (tx) => this.onConsentWithdrawn(tx, e)));
-    await this.bus.subscribe('identity.tenant.created', (e) => this.once(e, (tx) => this.onTenantCreated(tx, e)));
+    await this.bus.subscribe('payments.payment.state_changed', (e) =>
+      this.once(e, (tx) => this.onPayment(tx, e)),
+    );
+    await this.bus.subscribe('identity.consent.withdrawn', (e) =>
+      this.once(e, (tx) => this.onConsentWithdrawn(tx, e)),
+    );
+    await this.bus.subscribe('identity.tenant.created', (e) =>
+      this.once(e, (tx) => this.onTenantCreated(tx, e)),
+    );
   }
 
   private async once(e: EventEnvelope, handle: (tx: Prisma.TransactionClient) => Promise<void>) {
@@ -112,10 +118,18 @@ export class EventsConsumer implements OnModuleInit {
     });
     for (const c of open) {
       if (!c.flags.includes('consent_withdrawn')) {
-        await tx.case.update({ where: { id: c.id }, data: { flags: { push: 'consent_withdrawn' } } });
+        await tx.case.update({
+          where: { id: c.id },
+          data: { flags: { push: 'consent_withdrawn' } },
+        });
       }
       await tx.caseEvent.create({
-        data: { caseId: c.id, type: 'consent_withdrawn', actor: 'service:identity', data: { purpose: p.purpose } },
+        data: {
+          caseId: c.id,
+          type: 'consent_withdrawn',
+          actor: 'service:identity',
+          data: { purpose: p.purpose },
+        },
       });
     }
   }

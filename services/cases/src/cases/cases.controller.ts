@@ -1,11 +1,29 @@
-import { Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { CurrentUser, Roles, ZBody, ZQuery, type AuthUser } from '@haqdaar/nest-kit';
 import { requireUser } from '../access';
 import { CasesService } from './cases.service';
-import { ApproveBody, AssignBody, CreateCase, ListQuery, RejectBody, RequestInfoBody } from './cases.schemas';
+import {
+  ApproveBody,
+  AssignBody,
+  CloseBody,
+  CreateCase,
+  EscalateBody,
+  ListQuery,
+  RejectBody,
+  RequestInfoBody,
+} from './cases.schemas';
 
 @ApiTags('cases')
 @ApiBearerAuth()
@@ -28,7 +46,11 @@ export class CasesController {
   @Roles('citizen', 'helper')
   @Post('cases/:id/resubmit')
   @HttpCode(200)
-  resubmit(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: FastifyRequest) {
+  resubmit(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
     return this.cases.resubmit(requireUser(user), id, req.id);
   }
 
@@ -95,7 +117,34 @@ export class CasesController {
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
     @ZBody(AssignBody) b: z.infer<typeof AssignBody>,
+    @Req() req: FastifyRequest,
   ) {
-    return this.cases.assign(requireUser(user), id, b.officerId);
+    return this.cases.assign(requireUser(user), id, b.officerId, req.id);
+  }
+
+  /** Officer -> supervisor queue, with the officer's reason. */
+  @Roles('officer', 'admin')
+  @Post('cases/:id/escalate')
+  @HttpCode(200)
+  escalate(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ZBody(EscalateBody) b: z.infer<typeof EscalateBody>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.cases.escalate(requireUser(user), id, b.reason, req.id);
+  }
+
+  /** Only finished cases (PAID / REJECTED) can be closed. */
+  @Roles('officer', 'admin')
+  @Post('cases/:id/close')
+  @HttpCode(200)
+  close(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ZBody(CloseBody) b: z.infer<typeof CloseBody>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.cases.close(requireUser(user), id, b.note, req.id);
   }
 }

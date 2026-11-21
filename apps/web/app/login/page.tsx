@@ -1,11 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { Button, ErrorState, Field, inputCls, StatusCard } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { HOME, saveHelperSession, saveSession, sessionFrom } from '@/lib/session';
+import { HOME, saveHelperSession, rememberPhone, saveSession, sessionFrom } from '@/lib/session';
 
 const DEMO = [
   { role: 'Citizen — Zainab', phone: '03001110001' },
@@ -32,6 +33,7 @@ export default function LoginPage() {
       const s = sessionFrom(await api.login(phone, password));
       saveHelperSession(null);
       saveSession(s);
+      rememberPhone(phone);
       router.replace(HOME[s.role]);
     } catch (err) {
       setError(err);
@@ -44,7 +46,9 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-6">
-      <p className="mb-4 rounded-lg bg-amber-100 px-3 py-1 text-center text-xs font-semibold text-amber-900">{t('prototype')}</p>
+      <p className="mb-4 rounded-lg bg-amber-100 px-3 py-1 text-center text-xs font-semibold text-amber-900">
+        {t('prototype')}
+      </p>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-4xl font-bold text-brand">{t('appName')}</h1>
         <button onClick={toggle} className="min-h-12 rounded-lg px-3 text-sm text-brand underline">
@@ -66,7 +70,7 @@ export default function LoginPage() {
             required
           />
         </Field>
-        <Field label={t('password')}>
+        <Field label={t('passwordOrPin')}>
           <input
             className={inputCls}
             dir="ltr"
@@ -77,14 +81,30 @@ export default function LoginPage() {
             required
           />
         </Field>
-        {wrong ? <StatusCard tone="bad" title={t('wrongLogin')} /> : error ? <ErrorState error={error} /> : null}
+        {wrong ? (
+          <StatusCard tone="bad" title={t('wrongLogin')} />
+        ) : error ? (
+          <ErrorState error={error} />
+        ) : null}
         <Button type="submit" disabled={busy} className="w-full">
           {busy ? t('loading') : t('signIn')}
         </Button>
       </form>
 
-      <section className="latin mt-6 rounded-2xl border border-dashed border-slate-300 p-4" dir="ltr">
-        <h2 className="mb-2 text-sm font-semibold text-muted">{t('demoAccounts')} · password demo1234</h2>
+      <Link
+        href="/signup"
+        className="mt-4 flex min-h-16 w-full items-center justify-center rounded-xl border-2 border-brand bg-white px-5 text-xl font-semibold text-brand-dark hover:bg-brand-soft"
+      >
+        {t('signupTitle')}
+      </Link>
+
+      <section
+        className="latin mt-6 rounded-2xl border border-dashed border-slate-300 p-4"
+        dir="ltr"
+      >
+        <h2 className="mb-2 text-sm font-semibold text-muted">
+          {t('demoAccounts')} · password demo1234
+        </h2>
         <div className="grid gap-2">
           {DEMO.map((d) => (
             <button

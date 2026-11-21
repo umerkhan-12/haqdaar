@@ -1,7 +1,11 @@
 import { hmacSha256, safeEqual } from '@haqdaar/nest-kit';
 
 /** `x-haqdaar-signature: t=<unix>,v1=<hex hmac_sha256(secret, "<t>.<body>")>` (Stripe-style). */
-export function signWebhook(body: string, secret: string, t = Math.floor(Date.now() / 1000)): string {
+export function signWebhook(
+  body: string,
+  secret: string,
+  t = Math.floor(Date.now() / 1000),
+): string {
   return `t=${t},v1=${hmacSha256(`${t}.${body}`, secret)}`;
 }
 

@@ -37,7 +37,11 @@ export class AuthGuard implements CanActivate {
     const internal = req.headers[INTERNAL_HEADER] as string | undefined;
     if (internal) {
       try {
-        const { service } = verifyInternalToken(internal, this.opts.service, this.opts.internalSecret);
+        const { service } = verifyInternalToken(
+          internal,
+          this.opts.service,
+          this.opts.internalSecret,
+        );
         req.principal = { kind: 'service', service } satisfies Principal;
         return true;
       } catch {
@@ -87,7 +91,9 @@ export class RolesGuard implements CanActivate {
     if (p?.kind === 'user' && p.role === 'partner') {
       const scope = this.reflector.getAllAndOverride<string | undefined>(SCOPE, targets);
       if (!scope || !p.scopes?.includes(scope)) {
-        throw new ForbiddenException(scope ? `API key lacks scope: ${scope}` : 'Not available to API keys');
+        throw new ForbiddenException(
+          scope ? `API key lacks scope: ${scope}` : 'Not available to API keys',
+        );
       }
       return true;
     }
@@ -96,7 +102,8 @@ export class RolesGuard implements CanActivate {
     if (!roles?.length) return true;
     if (!p) throw new UnauthorizedException();
     if (p.kind === 'service') return true;
-    if (!roles.includes(p.role)) throw new ForbiddenException(`Requires role: ${roles.join(' | ')}`);
+    if (!roles.includes(p.role))
+      throw new ForbiddenException(`Requires role: ${roles.join(' | ')}`);
     return true;
   }
 }

@@ -6,7 +6,7 @@
 
 We help **a low-literacy widow** **claim her monthly relief payment** even though **she cannot read forms, has a weak phone signal, and keeps receiving fake "relief payment" messages that could steal her savings.**
 
-*Knows when it doesn't know. Proves who's real.*
+_Knows when it doesn't know. Proves who's real._
 
 ## Start here
 
@@ -24,15 +24,15 @@ We help **a low-literacy widow** **claim her monthly relief payment** even thoug
 
 Microservices behind a gateway, one Postgres schema per service, durable events through a transactional outbox + pg-boss. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · service contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
 
-| Service | Port | Owns |
-|---|---|---|
-| `gateway` | 4000 | Public entry: routing, Helmet, CORS allowlist, rate limit, `/status` |
-| `identity` | 4001 | Tenants, users, RS256 tokens + refresh rotation, consent, Helper Mode |
-| `cases` | 4002 | Claims, JSON Logic rules + versions, decision engine, officer queue, Digital Twin |
-| `ai` | 4003 | `AI_PROFILE` switch (dev / demo / offline), LLM + Urdu STT with fallback, scam check, Kill AI |
-| `payments` | 4004 | Payout state machine, idempotency, maker-checker, double-entry ledger, reconciliation, webhooks |
-| `audit` | 4005 | Append-only hash-chained log of every event |
-| `rails-mock` | 4006 | Simulated NADRA, Raast, household data, SMS, with failure injection |
+| Service      | Port | Owns                                                                                            |
+| ------------ | ---- | ----------------------------------------------------------------------------------------------- |
+| `gateway`    | 4000 | Public entry: routing, Helmet, CORS allowlist, rate limit, `/status`                            |
+| `identity`   | 4001 | Tenants, users, RS256 tokens + refresh rotation, consent, Helper Mode                           |
+| `cases`      | 4002 | Claims, JSON Logic rules + versions, decision engine, officer queue, Digital Twin               |
+| `ai`         | 4003 | `AI_PROFILE` switch (dev / demo / offline), LLM + Urdu STT with fallback, scam check, Kill AI   |
+| `payments`   | 4004 | Payout state machine, idempotency, maker-checker, double-entry ledger, reconciliation, webhooks |
+| `audit`      | 4005 | Append-only hash-chained log of every event                                                     |
+| `rails-mock` | 4006 | Simulated NADRA, Raast, household data, SMS, with failure injection                             |
 
 ```
 apps/web            Next.js PWA (citizen, helper, officer, admin, auditor, Judge Mode)
@@ -67,13 +67,13 @@ Then open `http://localhost:4000/status`. Each service has Swagger at `http://lo
 
 ## Testing
 
-| Command | What it proves |
-|---|---|
-| `pnpm test` | Unit tests for every package and service (decision engine, state machine, seal, hash chain, name matching, PII redaction, AI fallback…) |
-| `pnpm e2e` | 47 end-to-end worst cases through the gateway: forged / `alg:none` / algorithm-confusion / expired tokens, refresh-token theft, brute force, injection, double-submit races, consent, Helper Mode PINs, Raast timeout after debit (paid once), mule account hold, maker-checker, Haq Receipt seal, partner API scopes, audit chain |
-| `pnpm chaos` | Kills services mid-flow: rails down → human review; audit down → no event lost; payments down → paid once after restart; AI down → clean 503 |
-| `pnpm load` | Concurrent load through the gateway: p50 / p95 / p99 and error rate per endpoint |
-| `pnpm demo:reset` | Clears claims, payouts and consents for a fresh rehearsal (audit log is never touched) |
+| Command           | What it proves                                                                                                                                                                                                                                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm test`       | Unit tests for every package and service (decision engine, state machine, seal, hash chain, name matching, PII redaction, AI fallback…)                                                                                                                                                                                            |
+| `pnpm e2e`        | 47 end-to-end worst cases through the gateway: forged / `alg:none` / algorithm-confusion / expired tokens, refresh-token theft, brute force, injection, double-submit races, consent, Helper Mode PINs, Raast timeout after debit (paid once), mule account hold, maker-checker, Haq Receipt seal, partner API scopes, audit chain |
+| `pnpm chaos`      | Kills services mid-flow: rails down → human review; audit down → no event lost; payments down → paid once after restart; AI down → clean 503                                                                                                                                                                                       |
+| `pnpm load`       | Concurrent load through the gateway: p50 / p95 / p99 and error rate per endpoint                                                                                                                                                                                                                                                   |
+| `pnpm demo:reset` | Clears claims, payouts and consents for a fresh rehearsal (audit log is never touched)                                                                                                                                                                                                                                             |
 
 **AI profile:** set `AI_PROFILE=dev` (Groq first, free) during the build, `demo` (paid Gemini first) on judging day, `offline` for tests. Admins can also switch at runtime: `POST /ai/profile`.
 

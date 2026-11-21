@@ -1,4 +1,13 @@
-import { Controller, Get, HttpCode, NotFoundException, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { CurrentUser, Roles, ZBody, type AuthUser } from '@haqdaar/nest-kit';
@@ -29,7 +38,10 @@ export class RulesController {
 
   @Roles('admin')
   @Post('rules/versions')
-  create(@CurrentUser() user: AuthUser, @ZBody(RuleDefinition) body: z.infer<typeof RuleDefinition>) {
+  create(
+    @CurrentUser() user: AuthUser,
+    @ZBody(RuleDefinition) body: z.infer<typeof RuleDefinition>,
+  ) {
     return this.rules.createDraft(requireUser(user), body);
   }
 
@@ -73,7 +85,13 @@ export class RulesController {
       : null;
     return {
       decision: d,
-      ruleVersion: rule && { id: rule.id, version: rule.version, status: rule.status, clauses: rule.clauses, amount: rule.amount },
+      ruleVersion: rule && {
+        id: rule.id,
+        version: rule.version,
+        status: rule.status,
+        clauses: rule.clauses,
+        amount: rule.amount,
+      },
     };
   }
 }

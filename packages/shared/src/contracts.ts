@@ -4,9 +4,24 @@ import { Role, TenantType } from './domain';
 // ---------- identity ----------
 export const LoginRequest = z.object({
   phone: z.string().min(10).max(15),
-  password: z.string().min(6).max(128),
+  /** Staff password, or the 4-digit PIN a citizen chose at sign-up. */
+  password: z.string().min(4).max(128),
 });
 export type LoginRequest = z.infer<typeof LoginRequest>;
+
+/** Citizen self sign-up, step 1: a Pakistani mobile number, 03XXXXXXXXX. */
+export const SignupStartRequest = z.object({
+  phone: z.string().regex(/^03\d{9}$/, 'Mobile number must look like 03XXXXXXXXX'),
+});
+export type SignupStartRequest = z.infer<typeof SignupStartRequest>;
+
+/** Step 2: the 6-digit SMS code, the citizen's name and the 4-digit PIN they will log in with. */
+export const SignupVerifyRequest = SignupStartRequest.extend({
+  code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
+  fullName: z.string().trim().min(2).max(80),
+  pin: z.string().regex(/^\d{4}$/, 'PIN must be 4 digits'),
+});
+export type SignupVerifyRequest = z.infer<typeof SignupVerifyRequest>;
 
 export const RefreshRequest = z.object({ refreshToken: z.string().min(20) });
 

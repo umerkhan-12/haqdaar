@@ -2,7 +2,15 @@
 
 import { useState } from 'react';
 import { Shell } from '@/components/shell';
-import { Button, ConfirmDialog, DataTable, Skeleton, StatusPill, staffError, type Tone } from '@/components/ui';
+import {
+  Button,
+  ConfirmDialog,
+  DataTable,
+  Skeleton,
+  StatusPill,
+  staffError,
+  type Tone,
+} from '@/components/ui';
 import { api, ApiError, type Payment } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
@@ -20,9 +28,13 @@ const FILTERS = ['', 'HELD', 'AWAITING_APPROVAL', 'UNKNOWN', 'SUCCESS', 'FAILED'
 /** Payouts with holds explained, and four-eyes approval (the releaser can never approve). */
 export function OfficerPayments() {
   const [filter, setFilter] = useState('');
-  const { data, error, loading, reload } = useAsync(() => api.payments(filter || undefined), [filter]);
+  const { data, error, loading, reload } = useAsync(
+    () => api.payments(filter || undefined),
+    [filter],
+  );
   const [releasing, setReleasing] = useState<Payment | null>(null);
   const [note, setNote] = useState('');
+  const [retrying, setRetrying] = useState<Payment | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -42,6 +54,7 @@ export function OfficerPayments() {
     } finally {
       setBusy(false);
       setReleasing(null);
+      setRetrying(null);
       setNote('');
     }
   }
@@ -52,7 +65,11 @@ export function OfficerPayments() {
         <h1 className="mr-auto text-xl font-bold">Payouts</h1>
         <label className="flex items-center gap-2 text-sm">
           State
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} className="min-h-12 rounded-lg border-2 border-slate-400 bg-white px-2">
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="min-h-12 rounded-lg border-2 border-slate-400 bg-white px-2"
+          >
             {FILTERS.map((f) => (
               <option key={f} value={f}>
                 {f || 'All'}
@@ -69,7 +86,9 @@ export function OfficerPayments() {
       {loading && !data ? (
         <Skeleton lines={5} />
       ) : error ? (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">{staffError(error)}</p>
+        <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">
+          {staffError(error)}
+        </p>
       ) : (
         <DataTable
           caption="Payouts"
@@ -77,8 +96,16 @@ export function OfficerPayments() {
           rowKey={(p) => p.id}
           empty="No payouts in this state."
           columns={[
-            { header: 'Payout', cell: (p) => <span className="font-mono text-xs">{p.id.slice(0, 8)}</span> },
-            { header: 'State', cell: (p) => <StatusPill tone={STATE_TONE[p.state] ?? 'neutral'}>{p.state}</StatusPill> },
+            {
+              header: 'Payout',
+              cell: (p) => <span className="font-mono text-xs">{p.id.slice(0, 8)}</span>,
+            },
+            {
+              header: 'State',
+              cell: (p) => (
+                <StatusPill tone={STATE_TONE[p.state] ?? 'neutral'}>{p.state}</StatusPill>
+              ),
+            },
             { header: 'Amount', cell: (p) => `Rs ${p.amount.toLocaleString('en-PK')}` },
             { header: 'Beneficiary', cell: (p) => p.creditorName },
             {
@@ -101,12 +128,47 @@ export function OfficerPayments() {
               header: 'Action',
               cell: (p) =>
                 p.state === 'HELD' ? (
-                  <Button variant="ghost" className="min-h-10 text-sm" disabled={busy} onClick={() => setReleasing(p)}>
+                  <Button
+                    variant="ghost"
+                    className="min-h-10 text-sm"
+                    disabled={busy}
+                    onClick={() => setReleasing(p)}
+                  >
                     Release…
                   </Button>
                 ) : p.state === 'AWAITING_APPROVAL' ? (
-                  <Button className="min-h-10 text-sm" disabled={busy} onClick={() => act(() => api.approvePayment(p.id), 'Approved by a second officer. Sending.')}>
+                  <Button
+                    className="min-h-10 text-sm"
+                    disabled={busy}
+                    onClick={() =>
+                      act(() => api.approvePayment(p.id), 'Approved by a second officer. Sending.')
+                    }
+                  >
                     Approve
+                  </Button>
+                ) : p.state === 'UNKNOWN' ? (
+                  // The bank did not answer in time: ask what happened. An inquiry never sends money again.
+                  <Button
+                    variant="ghost"
+                    className="min-h-10 text-sm"
+                    disabled={busy}
+                    onClick={() =>
+                      act(
+                        () => api.paymentInquiry(p.id),
+                        'Asked the bank. The payout now shows its real result.',
+                      )
+                    }
+                  >
+                    Ask bank (inquiry)
+                  </Button>
+                ) : p.state === 'FAILED' ? (
+                  <Button
+                    variant="ghost"
+                    className="min-h-10 text-sm"
+                    disabled={busy}
+                    onClick={() => setRetrying(p)}
+                  >
+                    Retry…
                   </Button>
                 ) : null,
             },
@@ -119,12 +181,39 @@ export function OfficerPayments() {
         confirmLabel="Release (needs a second officer to approve)"
         busy={busy || note.trim().length < 5}
         onClose={() => setReleasing(null)}
-        onConfirm={() => releasing && act(() => api.release(releasing.id, note.trim()), 'Released. A different officer must now approve it.')}
+        onConfirm={() =>
+          releasing &&
+          act(
+            () => api.release(releasing.id, note.trim()),
+            'Released. A different officer must now approve it.',
+          )
+        }
       >
         <label className="block space-y-1">
           <span className="text-sm font-medium">How did you verify the account? (required)</span>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} className="w-full rounded-xl border-2 border-slate-400 p-2" />
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            className="w-full rounded-xl border-2 border-slate-400 p-2"
+          />
         </label>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={!!retrying}
+        title="Retry a failed payout"
+        confirmLabel="Send again"
+        busy={busy}
+        onClose={() => setRetrying(null)}
+        onConfirm={() =>
+          retrying &&
+          act(() => api.paymentRetry(retrying.id), 'Sent again with the same payment reference.')
+        }
+      >
+        <p className="text-sm">
+          Rs {retrying?.amount.toLocaleString('en-PK')} to {retrying?.creditorName}. The retry
+          reuses the same payment reference, so the bank cannot pay it twice.
+        </p>
       </ConfirmDialog>
     </Shell>
   );

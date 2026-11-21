@@ -21,7 +21,9 @@ export class ReceiptsService {
     private readonly client: ServiceClient,
   ) {}
 
-  async onStateChanged(e: EventEnvelope<EventPayload<'payments.payment.state_changed'>>): Promise<void> {
+  async onStateChanged(
+    e: EventEnvelope<EventPayload<'payments.payment.state_changed'>>,
+  ): Promise<void> {
     if (e.payload.to !== 'SUCCESS') return;
     const p = await this.prisma.payment.findUnique({ where: { id: e.payload.paymentId } });
     if (!p?.creditorAlias || p.receiptSentAt) return;

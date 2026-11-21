@@ -10,7 +10,8 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 export class LoginThrottlerGuard extends ThrottlerGuard {
   protected override async getTracker(req: Record<string, any>): Promise<string> {
     const ip: string = req.ips?.[0] ?? req.ip;
-    const phone = typeof req.body?.phone === 'string' ? req.body.phone.replace(/\D/g, '').slice(-10) : '';
+    const phone =
+      typeof req.body?.phone === 'string' ? req.body.phone.replace(/\D/g, '').slice(-10) : '';
     return phone ? `${ip}:${phone}` : ip;
   }
 }

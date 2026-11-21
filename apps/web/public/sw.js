@@ -1,14 +1,19 @@
 // Haqdaar service worker: the app opens with no signal.
 // Pages: network first, then cache, then /offline. Build assets: cache first (immutable hashes).
 // API calls are never cached: offline claims go to the IndexedDB outbox instead.
-const VERSION = 'haqdaar-v1';
-const SHELL = ['/', '/login', '/citizen', '/citizen/claim', '/citizen/status', '/citizen/scam', '/helper', '/offline', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
+const VERSION = 'haqdaar-v2';
+const SHELL = ['/', '/login', '/citizen', '/citizen/claim', '/citizen/status', '/citizen/scam', '/citizen/consents', '/signup', '/helper', '/offline', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(VERSION)
-      .then((cache) => Promise.allSettled(SHELL.map((url) => cache.add(url))))
+      .then(async (cache) => {
+        await Promise.allSettled(SHELL.map((url) => cache.add(url)));
+        // Every recorded Urdu sentence, so the app still speaks with no signal.
+        const spoken = await fetch('/audio/manifest.json').then((r) => r.json()).catch(() => []);
+        await Promise.allSettled(spoken.map((hash) => cache.add(`/audio/${hash}.mp3`)));
+      })
       .then(() => self.skipWaiting()),
   );
 });
@@ -40,7 +45,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/') || url.pathname.endsWith('.woff2')) {
+  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/') || url.pathname.startsWith('/audio/') || url.pathname.endsWith('.woff2')) {
     event.respondWith(
       caches.match(req).then(
         (hit) =>

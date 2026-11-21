@@ -53,7 +53,11 @@ export async function structured<S extends ZodTypeAny>(
   const hit = cache.get(key);
   const base = { task: req.task, latencyMs: 0, fallbackUsed: false, repaired: false };
   if (hit !== undefined) {
-    return { ok: true, data: hit as z.infer<S>, meta: { ...base, provider: 'cache', cached: true } };
+    return {
+      ok: true,
+      data: hit as z.infer<S>,
+      meta: { ...base, provider: 'cache', cached: true },
+    };
   }
 
   const first = await router.complete({ ...req, json: true });
@@ -101,7 +105,10 @@ function tryParse<S extends ZodTypeAny>(
     if (r.success) return { ok: true, data: r.data };
     return {
       ok: false,
-      error: r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 400),
+      error: r.error.issues
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ')
+        .slice(0, 400),
     };
   } catch (e) {
     return { ok: false, error: `not JSON (${(e as Error).message})` };

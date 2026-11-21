@@ -25,7 +25,10 @@ export class EventsConsumer implements OnModuleInit {
     await this.bus.subscribe('payments.payment.state_changed', (e) => this.webhooks.dispatch(e));
     await this.bus.subscribe(
       'payments.payment.state_changed',
-      (e) => this.receipts.onStateChanged(e as EventEnvelope<EventPayload<'payments.payment.state_changed'>>),
+      (e) =>
+        this.receipts.onStateChanged(
+          e as EventEnvelope<EventPayload<'payments.payment.state_changed'>>,
+        ),
       'receipts',
     );
   }

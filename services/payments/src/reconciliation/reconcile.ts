@@ -39,7 +39,13 @@ export function reconcile(ours: OurPayout[], provider: ProviderEntry[]): ReconIt
   const items: ReconItem[] = [];
   const duplicates = (endToEndId: string, entries: ProviderEntry[], paymentId: string | null) => {
     for (const extra of entries.slice(1)) {
-      items.push({ endToEndId, paymentId, ourAmount: null, providerAmount: extra.amount, status: 'duplicate_in_provider' });
+      items.push({
+        endToEndId,
+        paymentId,
+        ourAmount: null,
+        providerAmount: extra.amount,
+        status: 'duplicate_in_provider',
+      });
     }
   };
 
@@ -57,7 +63,13 @@ export function reconcile(ours: OurPayout[], provider: ProviderEntry[]): ReconIt
     duplicates(o.endToEndId, entries, o.paymentId);
   }
   for (const [endToEndId, entries] of settled) {
-    items.push({ endToEndId, paymentId: null, ourAmount: null, providerAmount: entries[0]!.amount, status: 'missing_in_ledger' });
+    items.push({
+      endToEndId,
+      paymentId: null,
+      ourAmount: null,
+      providerAmount: entries[0]!.amount,
+      status: 'missing_in_ledger',
+    });
     duplicates(endToEndId, entries, null);
   }
   return items;

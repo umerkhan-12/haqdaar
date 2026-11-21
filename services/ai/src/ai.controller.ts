@@ -1,4 +1,14 @@
-import { BadRequestException, Controller, Get, HttpCode, PayloadTooLargeException, Post, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  PayloadTooLargeException,
+  Post,
+  Req,
+  StreamableFile,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { MultipartFile } from '@fastify/multipart';
 import type { FastifyRequest } from 'fastify';
@@ -9,6 +19,11 @@ import { AiService } from './ai.service';
 
 const ProfileBody = z.object({ profile: z.enum(['dev', 'demo', 'offline']) });
 const KillBody = z.object({ killed: z.boolean() });
+/** One or two sentences at a time: long text is the caller's job to split, so every piece caches well. */
+const SpeakBody = z.object({
+  text: z.string().trim().min(1).max(600),
+  lang: z.enum(['ur', 'en']).default('ur'),
+});
 const ExtractBody = z.object({ transcript: z.string().min(1).max(4000) });
 
 const TypedCnic = z
@@ -19,11 +34,20 @@ const TypedCnic = z
 /** Upload body; over the multipart limit → 413 (multipart throws, which would otherwise be a 500). */
 const readLimited = (file: MultipartFile, what: string) =>
   file.toBuffer().catch((err: { code?: string }) => {
-    if (err.code === 'FST_REQ_FILE_TOO_LARGE') throw new PayloadTooLargeException(`${what} too large (max 5 MB)`);
+    if (err.code === 'FST_REQ_FILE_TOO_LARGE')
+      throw new PayloadTooLargeException(`${what} too large (max 5 MB)`);
     throw err;
   });
 
-const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/m4a'];
+const AUDIO_TYPES = [
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/m4a',
+];
 
 @ApiTags('ai')
 @ApiBearerAuth()
@@ -69,6 +93,20 @@ export class AiController {
     return this.ai.scamCheck(b.text);
   }
 
+  /**
+   * Text → speech (audio/mpeg) in a Pakistani Urdu voice, for people who cannot read.
+   * 503 with `details.fallback = "browser"` means: use the phone's own voice instead.
+   */
+  @Roles('citizen', 'helper', 'officer', 'admin', 'auditor')
+  @Post('speak')
+  @HttpCode(200)
+  @Header('content-type', 'audio/mpeg')
+  @Header('cache-control', 'private, max-age=86400')
+  async speak(@ZBody(SpeakBody) b: z.infer<typeof SpeakBody>) {
+    const { audio } = await this.ai.speak(b.text, b.lang);
+    return new StreamableFile(audio, { type: 'audio/mpeg', length: audio.length });
+  }
+
   /** Urdu speech → text. multipart/form-data with field `file` (max 5 MB, audio only). */
   @Roles('citizen', 'helper', 'officer')
   @ApiConsumes('multipart/form-data')
@@ -78,7 +116,8 @@ export class AiController {
     const file = await req.file();
     if (!file) throw new BadRequestException('Audio file is required (field "file")');
     const mime = file.mimetype.split(';')[0]!;
-    if (!AUDIO_TYPES.includes(mime)) throw new BadRequestException(`Unsupported audio type: ${mime}`);
+    if (!AUDIO_TYPES.includes(mime))
+      throw new BadRequestException(`Unsupported audio type: ${mime}`);
     return this.ai.transcribe(await readLimited(file, 'Audio'), mime);
   }
 

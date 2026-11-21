@@ -96,18 +96,24 @@ async function renderCard(c: CardSpec): Promise<Buffer> {
 /** "Phone photo": JPEG at camera-like quality with camera EXIF. */
 const asPhoto = (img: Buffer | Sharp, software?: string) =>
   (Buffer.isBuffer(img) ? sharp(img) : img)
-    .withExif({ IFD0: { Make: 'HaqdaarSim', Model: 'Fixture', ...(software ? { Software: software } : {}) } })
+    .withExif({
+      IFD0: { Make: 'HaqdaarSim', Model: 'Fixture', ...(software ? { Software: software } : {}) },
+    })
     .jpeg({ quality: 75 })
     .toBuffer();
 
-export type FixtureName = 'genuine' | 'genuinePng' | 'tampered' | 'blurred' | 'editedExif' | 'mismatchedQr' | 'expired';
+export type FixtureName =
+  'genuine' | 'genuinePng' | 'tampered' | 'blurred' | 'editedExif' | 'mismatchedQr' | 'expired';
 
 export async function buildFixtures(): Promise<Record<FixtureName, Buffer>> {
   const card = await renderCard(ZAINAB);
   const genuine = await asPhoto(card);
 
   // Number region pasted from a different, freshly rendered card, then saved once more.
-  const patch = await sharp(await renderCard(RASHIDA)).extract(NUMBER_BOX).png().toBuffer();
+  const patch = await sharp(await renderCard(RASHIDA))
+    .extract(NUMBER_BOX)
+    .png()
+    .toBuffer();
   const tampered = await sharp(genuine)
     .composite([{ input: patch, left: NUMBER_BOX.left, top: NUMBER_BOX.top }])
     .jpeg({ quality: 95 })
@@ -120,7 +126,9 @@ export async function buildFixtures(): Promise<Record<FixtureName, Buffer>> {
     blurred: await asPhoto(sharp(card).blur(5)),
     editedExif: await asPhoto(card, 'Adobe Photoshop 25.1 (Windows)'),
     mismatchedQr: await asPhoto(await renderCard({ ...ZAINAB, qrCnic: OTHER_CNIC })),
-    expired: await asPhoto(await renderCard({ ...ZAINAB, dateOfIssue: '10.02.2012', dateOfExpiry: '10.02.2022' })),
+    expired: await asPhoto(
+      await renderCard({ ...ZAINAB, dateOfIssue: '10.02.2012', dateOfExpiry: '10.02.2022' }),
+    ),
   };
 }
 

@@ -1,6 +1,21 @@
-import { readError, type AiProvider, type LlmRequest, type LlmResponse, type SttRequest, type SttResponse } from './types';
+import {
+  readError,
+  type AiProvider,
+  type LlmRequest,
+  type LlmResponse,
+  type SttRequest,
+  type SttResponse,
+} from './types';
 
 const BASE = 'https://api.groq.com/openai/v1';
+
+/**
+ * Vocabulary hint for Whisper: the program's words, districts and the CNIC format. Measured on Urdu and
+ * English test recordings, it fixes place names (Thatta, not Thada) and returns spoken numbers as digits.
+ */
+const WHISPER_HINT =
+  'Assalam o alaikum. Mera naam hai. Main Thatta, Sujawal, Badin, Tharparkar, Karachi se hoon. ' +
+  'Ghar mein 5 log hain. Bewa. Madad. Shanakhti card number 42101-1234567-1. Phone 0300-1234567.';
 
 /** Groq: Llama for text, Whisper large-v3 for Urdu speech. OpenAI-compatible REST, no SDK needed. */
 export class GroqProvider implements AiProvider {
@@ -47,9 +62,14 @@ export class GroqProvider implements AiProvider {
   async transcribe(req: SttRequest): Promise<SttResponse> {
     const form = new FormData();
     const ext = req.mimeType.split('/')[1]?.split(';')[0] ?? 'webm';
-    form.append('file', new Blob([new Uint8Array(req.audio)], { type: req.mimeType }), `audio.${ext}`);
+    form.append(
+      'file',
+      new Blob([new Uint8Array(req.audio)], { type: req.mimeType }),
+      `audio.${ext}`,
+    );
     form.append('model', this.sttModel);
-    form.append('language', req.language);
+    if (req.language) form.append('language', req.language);
+    form.append('prompt', WHISPER_HINT);
     form.append('temperature', '0');
     form.append('response_format', 'json');
     const res = await fetch(`${BASE}/audio/transcriptions`, {

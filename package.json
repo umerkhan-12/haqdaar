@@ -25,7 +25,9 @@
     "e2e": "node scripts/reset-demo.mjs && node scripts/e2e.mjs",
     "demo:reset": "node scripts/reset-demo.mjs",
     "chaos": "node scripts/reset-demo.mjs && node scripts/chaos.mjs",
-    "load": "node scripts/load.mjs"
+    "load": "node scripts/load.mjs",
+    "fuzz": "node scripts/fuzz.mjs",
+    "audio": "node services/ai/scripts/gen-audio.mjs"
   },
   "devDependencies": {
     "@nestjs/cli": "^11",

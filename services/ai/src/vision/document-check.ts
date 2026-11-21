@@ -84,7 +84,11 @@ export async function documentCheck(
   const img = await prepare(file).catch(() => {
     throw new UnsupportedImageError('The image could not be decoded');
   });
-  const [lines, ela, editor] = await Promise.all([deps.ocr(img.ocrPng), errorLevel(file), editorTag(file)]);
+  const [lines, ela, editor] = await Promise.all([
+    deps.ocr(img.ocrPng),
+    errorLevel(file),
+    editorTag(file),
+  ]);
   const blur = blurScore(img.gray);
   const qrText = readQr(img.rgba);
   const parsed = lines ? parseCardText(lines) : null;
@@ -97,19 +101,29 @@ export async function documentCheck(
   add(
     'cnic_read',
     !!cnicFromOcr,
-    cnicFromOcr ? `Read ${cnicFromOcr} from the card` : lines ? 'No CNIC-shaped number found by OCR' : 'OCR unavailable',
+    cnicFromOcr
+      ? `Read ${cnicFromOcr} from the card`
+      : lines
+        ? 'No CNIC-shaped number found by OCR'
+        : 'OCR unavailable',
   );
   // Many cards carry the QR on the back: a missing QR is not a doubt, only nothing to cross-check.
   add(
     'qr_read',
     !qrText || !!cnicFromQr,
-    !qrText ? 'No QR code visible' : cnicFromQr ? `QR holds ${cnicFromQr}` : 'QR found but holds no CNIC',
+    !qrText
+      ? 'No QR code visible'
+      : cnicFromQr
+        ? `QR holds ${cnicFromQr}`
+        : 'QR found but holds no CNIC',
   );
   if (cnicFromOcr && cnicFromQr) {
     add(
       'ocr_matches_qr',
       cnicFromOcr === cnicFromQr,
-      cnicFromOcr === cnicFromQr ? 'Printed number and QR agree' : `Printed ${cnicFromOcr}, QR ${cnicFromQr}`,
+      cnicFromOcr === cnicFromQr
+        ? 'Printed number and QR agree'
+        : `Printed ${cnicFromOcr}, QR ${cnicFromQr}`,
     );
   }
   // Compared with the printed number (QR if unreadable); a QR conflict is its own check above.
@@ -117,14 +131,24 @@ export async function documentCheck(
   const onCard = cnicFromOcr ?? cnicFromQr;
   if (typedCnic && onCard) {
     const ok = onCard === typedCnic;
-    add('typed_matches_card', ok, ok ? 'Typed CNIC matches the card' : `Typed ${typedCnic}, card shows ${onCard}`);
+    add(
+      'typed_matches_card',
+      ok,
+      ok ? 'Typed CNIC matches the card' : `Typed ${typedCnic}, card shows ${onCard}`,
+    );
   }
   add(
     'compression_consistent',
     ela.regions.length === 0,
-    ela.regions.length ? `${ela.regions.length} region(s) with a different compression history` : 'Uniform compression',
+    ela.regions.length
+      ? `${ela.regions.length} region(s) with a different compression history`
+      : 'Uniform compression',
   );
-  add('no_editor_software', !editor, editor ? `Saved by "${editor}"` : 'No editing software recorded');
+  add(
+    'no_editor_software',
+    !editor,
+    editor ? `Saved by "${editor}"` : 'No editing software recorded',
+  );
   add('sharp_enough', blur < BLUR_RETAKE, `Blur score ${blur} (retake at ${BLUR_RETAKE})`);
 
   const expiry = parsed?.dateOfExpiry ? toDate(parsed.dateOfExpiry) : null;

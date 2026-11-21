@@ -112,7 +112,10 @@ export async function scamCheck(
 
   const normalized = normalizeDigits(text);
   const hits = RED_FLAGS.filter((f) => f.re.test(normalized));
-  const rulesScore = Math.min(1, hits.reduce((s, f) => s + f.weight, 0));
+  const rulesScore = Math.min(
+    1,
+    hits.reduce((s, f) => s + f.weight, 0),
+  );
 
   if (seal.present && !seal.valid) {
     return {
@@ -141,7 +144,8 @@ export async function scamCheck(
   const explain = (verdict: ScamVerdict['verdict']) => {
     if (verdict === 'SCAM') {
       const ur = hits.map((h) => h.ur).join(' ') || 'یہ پیغام مشکوک ہے۔ اس پر عمل نہ کریں۔';
-      const en = hits.map((h) => h.en).join(' ') || `Looks like a scam: ${llmVerdict?.reason ?? ''}`;
+      const en =
+        hits.map((h) => h.en).join(' ') || `Looks like a scam: ${llmVerdict?.reason ?? ''}`;
       return { ur, en };
     }
     if (verdict === 'GENUINE') {
@@ -183,7 +187,11 @@ export async function scamCheck(
     redFlags: hits.map((h) => h.id),
     explanationUr: ex.ur,
     explanationEn: ex.en,
-    layers: { seal: 'absent', rulesScore, llm: llmVerdict?.verdict ?? (llm.ok ? null : llm.reason) },
+    layers: {
+      seal: 'absent',
+      rulesScore,
+      llm: llmVerdict?.verdict ?? (llm.ok ? null : llm.reason),
+    },
     meta,
   };
 }

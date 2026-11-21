@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { Account, Household, PersonRecord, SeedData } from './data/seed-data';
 import { nameScore } from './names';
 
-export const RAAST_FAULT_MODES = ['none', 'fail', 'timeout', 'timeout_after_debit', 'duplicate_statement'] as const;
+export const RAAST_FAULT_MODES = [
+  'none',
+  'fail',
+  'timeout',
+  'timeout_after_debit',
+  'duplicate_statement',
+] as const;
 export type RaastFaultMode = (typeof RAAST_FAULT_MODES)[number];
 export interface Faults {
   raast: { mode: RaastFaultMode; remaining: number; alias?: string };
@@ -42,17 +48,20 @@ export interface SmsMessage {
   receivedAt: string;
 }
 
-export const normalizeCnic = (cnic: string) => cnic.replace(/\D/g, '').replace(/^(\d{5})(\d{7})(\d)$/, '$1-$2-$3');
+export const normalizeCnic = (cnic: string) =>
+  cnic.replace(/\D/g, '').replace(/^(\d{5})(\d{7})(\d)$/, '$1-$2-$3');
 
 export const normalizeAlias = (alias: string) => {
   const d = alias.replace(/\D/g, '');
   return d.startsWith('92') ? `0${d.slice(2)}` : d;
 };
 
-const maskIban = (iban: string) => `${iban.slice(0, 8)}${'*'.repeat(iban.length - 12)}${iban.slice(-4)}`;
+const maskIban = (iban: string) =>
+  `${iban.slice(0, 8)}${'*'.repeat(iban.length - 12)}${iban.slice(-4)}`;
 
 /** Statement dates follow Pakistan time (UTC+5), like a local bank statement. */
-export const pktDate = (d: Date) => new Date(d.getTime() + 5 * 3_600_000).toISOString().slice(0, 10);
+export const pktDate = (d: Date) =>
+  new Date(d.getTime() + 5 * 3_600_000).toISOString().slice(0, 10);
 
 /**
  * In-memory simulated rails. Pure logic, no Nest: transfers are deduplicated by endToEndId
@@ -116,10 +125,14 @@ export class RailsStore {
 
     const creditor = this.resolve(req.creditor);
     // Targeted faults match the resolved account, whether the payer used the IBAN or the alias.
-    const fault = this.takeFault(['fail', 'timeout', 'timeout_after_debit'], creditor?.alias ?? req.creditor.alias);
+    const fault = this.takeFault(
+      ['fail', 'timeout', 'timeout_after_debit'],
+      creditor?.alias ?? req.creditor.alias,
+    );
     // Fault rejections settle nothing and are not remembered, so the same id can be retried.
     if (fault === 'fail') return { result: this.reject(req, 'PROVIDER_UNAVAILABLE'), delayMs: 0 };
-    if (fault === 'timeout') return { result: this.reject(req, 'TIMEOUT'), delayMs: TIMEOUT_DELAY_MS };
+    if (fault === 'timeout')
+      return { result: this.reject(req, 'TIMEOUT'), delayMs: TIMEOUT_DELAY_MS };
 
     const debtor = this.byIban.get(req.debtor.iban);
     const result = !debtor
@@ -160,7 +173,12 @@ export class RailsStore {
 
   sendSms(to: string, body: string, from = 'SAHARA'): { messageId: string } {
     const phone = normalizeAlias(to);
-    const msg: SmsMessage = { messageId: randomUUID(), from, body, receivedAt: this.now().toISOString() };
+    const msg: SmsMessage = {
+      messageId: randomUUID(),
+      from,
+      body,
+      receivedAt: this.now().toISOString(),
+    };
     this.inboxes.set(phone, [msg, ...(this.inboxes.get(phone) ?? [])]);
     return { messageId: msg.messageId };
   }
@@ -183,14 +201,16 @@ export class RailsStore {
   }
 
   setFaults(f: Faults): Faults {
-    this.faults = f.raast.mode === 'none' ? { raast: { mode: 'none', remaining: 0 } } : structuredClone(f);
+    this.faults =
+      f.raast.mode === 'none' ? { raast: { mode: 'none', remaining: 0 } } : structuredClone(f);
     return this.getFaults();
   }
 
   private takeFault(modes: RaastFaultMode[], creditorAlias?: string): RaastFaultMode | null {
     const f = this.faults.raast;
     if (!modes.includes(f.mode) || f.remaining <= 0) return null;
-    if (f.alias && (!creditorAlias || normalizeAlias(creditorAlias) !== normalizeAlias(f.alias))) return null;
+    if (f.alias && (!creditorAlias || normalizeAlias(creditorAlias) !== normalizeAlias(f.alias)))
+      return null;
     const mode = f.mode;
     f.remaining -= 1;
     if (f.remaining === 0) f.mode = 'none';

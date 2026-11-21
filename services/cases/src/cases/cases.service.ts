@@ -16,7 +16,12 @@ import {
   outboxRow,
   type AuthUser,
 } from '@haqdaar/nest-kit';
-import type { CaseStatus, ConsentPurpose, EventEnvelope } from '@haqdaar/shared';
+import {
+  autoApproveThreshold,
+  type CaseStatus,
+  type ConsentPurpose,
+  type EventEnvelope,
+} from '@haqdaar/shared';
 import { Prisma, type Case, type Decision, type Person } from '../../generated/prisma';
 import { PrismaService } from '../prisma.service';
 import { RulesService, type ActiveRule } from '../rules/rules.service';
@@ -28,11 +33,21 @@ import type { Facts } from '../engine/rules';
 import { isStaff, subjectPerson } from '../access';
 import { env } from '../env';
 import type { CreateCaseBody } from './cases.schemas';
+import {
+  applyCaution,
+  auditNotes,
+  PHOTO_SKIPPED,
+  softFlags,
+  storedDocumentCheck,
+  storedExtraction,
+  trustedExtractionConfidence,
+  viewNotes,
+} from './ai-notes';
+import { boosted, refusal, REVIEWABLE, type OfficerMove } from './lifecycle';
 
 type Tx = Prisma.TransactionClient;
 
 const OPEN: CaseStatus[] = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW', 'APPROVED'];
-const REVIEWABLE: CaseStatus[] = ['IN_REVIEW', 'NEEDS_INFO'];
 const PROCESSABLE: CaseStatus[] = ['SUBMITTED', 'NEEDS_INFO'];
 const CONSENTS: ConsentPurpose[] = ['identity_verification', 'household_data'];
 const DUPLICATE_NAME_MIN = 0.92;
@@ -51,7 +66,12 @@ export class CasesService {
   // ---------- citizen / helper ----------
 
   /** Same idempotency key → same case. The CNIC must belong to the person this session acts for. */
-  async create(user: AuthUser, body: CreateCaseBody, clientKey: string | undefined, requestId?: string) {
+  async create(
+    user: AuthUser,
+    body: CreateCaseBody,
+    clientKey: string | undefined,
+    requestId?: string,
+  ) {
     if (!clientKey || clientKey.length < 8 || clientKey.length > 100) {
       throw new BadRequestException('Header idempotency-key (8-100 chars) is required');
     }
@@ -78,12 +98,38 @@ export class CasesService {
             payoutIban: body.payout.iban ?? null,
             payoutAlias: body.payout.alias ?? null,
             extraction: (body.extraction as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+            documentCheck:
+              body.documentCheck === undefined
+                ? Prisma.JsonNull
+                : ((body.documentCheck ?? PHOTO_SKIPPED) as Prisma.InputJsonValue),
             events: { create: { type: 'submitted', actor: user.id, data: { via: user.role } } },
           },
         });
         const ctx = { source: 'cases', principal: user, correlationId: requestId };
-        await this.emit(tx, buildEvent('cases.case.submitted', { caseId: c.id, personId: person.id, type: c.type }, ctx));
-        await this.emit(tx, buildEvent('cases.case.status_changed', { caseId: c.id, from: null, to: 'SUBMITTED' }, ctx));
+        const hasNotes = body.extraction != null || body.documentCheck !== undefined;
+        const aiNotes = hasNotes
+          ? auditNotes(
+              body.extraction,
+              body.documentCheck,
+              softFlags(body.cnic, body.extraction, body.documentCheck),
+            )
+          : undefined;
+        await this.emit(
+          tx,
+          buildEvent(
+            'cases.case.submitted',
+            { caseId: c.id, personId: person.id, type: c.type, aiNotes },
+            ctx,
+          ),
+        );
+        await this.emit(
+          tx,
+          buildEvent(
+            'cases.case.status_changed',
+            { caseId: c.id, from: null, to: 'SUBMITTED' },
+            ctx,
+          ),
+        );
         return c;
       });
     } catch (e) {
@@ -105,9 +151,18 @@ export class CasesService {
     return this.view(user, c.id);
   }
 
-  private async resolvePerson(tx: Tx, tenantId: string, personId: string, cnicHash: string, body: CreateCaseBody) {
-    const byCnic = await tx.person.findUnique({ where: { tenantId_cnicHash: { tenantId, cnicHash } } });
-    if (byCnic && byCnic.id !== personId) throw new ForbiddenException('This CNIC belongs to another person');
+  private async resolvePerson(
+    tx: Tx,
+    tenantId: string,
+    personId: string,
+    cnicHash: string,
+    body: CreateCaseBody,
+  ) {
+    const byCnic = await tx.person.findUnique({
+      where: { tenantId_cnicHash: { tenantId, cnicHash } },
+    });
+    if (byCnic && byCnic.id !== personId)
+      throw new ForbiddenException('This CNIC belongs to another person');
     const byId = byCnic ?? (await tx.person.findUnique({ where: { id: personId } }));
     if (byId && byId.cnicHash !== cnicHash) {
       throw new ForbiddenException('CNIC does not match the registered identity');
@@ -121,7 +176,13 @@ export class CasesService {
     };
     if (byId) return tx.person.update({ where: { id: byId.id }, data });
     return tx.person.create({
-      data: { id: personId, tenantId, cnicHash, cnicEnc: encryptField(body.cnic, env.PII_ENC_KEY), ...data },
+      data: {
+        id: personId,
+        tenantId,
+        cnicHash,
+        cnicEnc: encryptField(body.cnic, env.PII_ENC_KEY),
+        ...data,
+      },
     });
   }
 
@@ -132,14 +193,34 @@ export class CasesService {
    * Any upstream failure degrades to human review; it never crashes the claim or guesses.
    */
   private async process(caseId: string, actor: AuthUser, requestId?: string) {
-    const c = await this.prisma.case.findUniqueOrThrow({ where: { id: caseId }, include: { person: true } });
+    const c = await this.prisma.case.findUniqueOrThrow({
+      where: { id: caseId },
+      include: { person: true },
+    });
     const rule = await this.rules.published(c.tenantId);
     const costs = await this.rules.costs(c.tenantId);
     const inputs = await this.gather(c, c.person, requestId);
-    const outcome = decide(inputs, { clauses: rule.clauses, amount: rule.amount, costs, amountCap: env.AUTO_APPROVE_AMOUNT_CAP_PKR });
+    const engine = decide(inputs, {
+      clauses: rule.clauses,
+      amount: rule.amount,
+      costs,
+      amountCap: env.AUTO_APPROVE_AMOUNT_CAP_PKR,
+    });
+    // AI notes come from the client: applied after the engine, they can only send the case to a human.
+    const soft = softFlags(
+      decryptField(c.person.cnicEnc, env.PII_ENC_KEY),
+      storedExtraction(c.extraction),
+      storedDocumentCheck(c.documentCheck),
+    );
+    const outcome = applyCaution(engine, soft);
+    const flags = [...outcome.hardFlags, ...soft];
 
     const to: CaseStatus =
-      outcome.lane === 'AUTO_APPROVE' ? 'APPROVED' : outcome.lane === 'ASK_MORE' ? 'NEEDS_INFO' : 'IN_REVIEW';
+      outcome.lane === 'AUTO_APPROVE'
+        ? 'APPROVED'
+        : outcome.lane === 'ASK_MORE'
+          ? 'NEEDS_INFO'
+          : 'IN_REVIEW';
     const ctx = { source: 'cases', principal: actor, correlationId: requestId };
 
     await this.prisma.$transaction(async (tx) => {
@@ -151,10 +232,10 @@ export class CasesService {
           confidence: outcome.confidence,
           amount: rule.amount,
           ruleVersionId: rule.id,
-          flags: outcome.hardFlags,
+          flags,
           priority: priority({
             confidence: outcome.confidence,
-            hardFlagCount: outcome.hardFlags.length,
+            hardFlagCount: flags.length,
             amount: rule.amount,
             createdAt: c.createdAt,
           }),
@@ -168,12 +249,13 @@ export class CasesService {
           ruleVersionId: rule.id,
           lane: outcome.lane,
           confidence: outcome.confidence,
+          threshold: outcome.threshold,
           eligible: outcome.eligible,
           clausesHit: outcome.clauses as object[],
-          hardFlags: outcome.hardFlags,
+          hardFlags: flags,
           explanationUr: outcome.explanationUr,
           explanationEn: outcome.explanationEn,
-          inputs: inputs as unknown as Prisma.InputJsonValue,
+          inputs: { ...inputs, softFlags: soft } as unknown as Prisma.InputJsonValue,
           decidedBy: 'system',
         },
       });
@@ -182,12 +264,23 @@ export class CasesService {
           caseId: c.id,
           type: 'decision',
           actor: 'system',
-          data: { decisionId: decision.id, lane: outcome.lane, ruleVersion: rule.version, confidence: outcome.confidence },
+          data: {
+            decisionId: decision.id,
+            lane: outcome.lane,
+            ruleVersion: rule.version,
+            confidence: outcome.confidence,
+          },
         },
       });
-      await this.emit(tx, buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, ctx));
+      await this.emit(
+        tx,
+        buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, ctx),
+      );
       if (to === 'APPROVED') {
-        await this.emit(tx, this.decidedEvent(c.id, c.personId, 'AUTO_APPROVE', outcome.confidence, rule, ctx));
+        await this.emit(
+          tx,
+          this.decidedEvent(c.id, c.personId, 'AUTO_APPROVE', outcome.confidence, rule, ctx),
+        );
       }
     });
     this.bus.kick();
@@ -195,7 +288,7 @@ export class CasesService {
 
   private async gather(c: Case, person: Person, requestId?: string): Promise<DecisionInputs> {
     const cnic = decryptField(person.cnicEnc, env.PII_ENC_KEY);
-    const extraction = c.extraction as { confidence?: number; isWidow?: boolean; householdSize?: number } | null;
+    const extraction = c.extraction as { isWidow?: boolean; householdSize?: number } | null;
     const facts: Facts = {
       claim: {
         fullName: person.fullName,
@@ -210,7 +303,7 @@ export class CasesService {
       nadraMatch: false,
       nameScore: 0,
       householdVerified: false,
-      extractionConfidence: typeof extraction?.confidence === 'number' ? extraction.confidence : null,
+      extractionConfidence: trustedExtractionConfidence(c.extraction),
       possibleDuplicate: await this.possibleDuplicatePerson(person),
     };
     const externalFlags: HardFlag[] = [];
@@ -219,11 +312,18 @@ export class CasesService {
     // Consent first: without it we do not even ask NADRA.
     let missing: string[];
     try {
-      const allowed = await Promise.all(CONSENTS.map((p) => this.upstream.consentAllowed(person.id, p, requestId)));
+      const allowed = await Promise.all(
+        CONSENTS.map((p) => this.upstream.consentAllowed(person.id, p, requestId)),
+      );
       missing = CONSENTS.filter((_, i) => !allowed[i]).map((p) => `consent:${p}`);
     } catch (err) {
       this.logger.warn({ err: String(err), caseId: c.id }, 'Consent check unavailable');
-      return { facts, evidence, externalFlags: [...externalFlags, 'verification_unavailable'], missing: [] };
+      return {
+        facts,
+        evidence,
+        externalFlags: [...externalFlags, 'verification_unavailable'],
+        missing: [],
+      };
     }
     if (missing.length) return { facts, evidence, externalFlags, missing };
 
@@ -236,7 +336,12 @@ export class CasesService {
       ]);
     } catch (err) {
       this.logger.warn({ err: String(err), caseId: c.id }, 'Verification services unavailable');
-      return { facts, evidence, externalFlags: [...externalFlags, 'verification_unavailable'], missing };
+      return {
+        facts,
+        evidence,
+        externalFlags: [...externalFlags, 'verification_unavailable'],
+        missing,
+      };
     }
 
     const r = nadra.record;
@@ -259,12 +364,18 @@ export class CasesService {
     } else {
       externalFlags.push('household_not_found');
     }
-    Object.assign(evidence, { nadraMatch: facts.nadra.match, nameScore, householdVerified: !!household });
+    Object.assign(evidence, {
+      nadraMatch: facts.nadra.match,
+      nameScore,
+      householdVerified: !!household,
+    });
     return { facts, evidence, externalFlags, missing };
   }
 
   private async hasOtherClaimThisMonth(c: Case): Promise<boolean> {
-    const monthStart = new Date(Date.UTC(c.createdAt.getUTCFullYear(), c.createdAt.getUTCMonth(), 1));
+    const monthStart = new Date(
+      Date.UTC(c.createdAt.getUTCFullYear(), c.createdAt.getUTCMonth(), 1),
+    );
     const n = await this.prisma.case.count({
       where: {
         personId: c.personId,
@@ -295,7 +406,8 @@ export class CasesService {
 
   async approve(user: AuthUser, id: string, note: string | undefined, requestId?: string) {
     const c = await this.staffCase(user, id);
-    if (c.createdBy === user.id) throw new ForbiddenException('You cannot approve a case you created');
+    if (c.createdBy === user.id)
+      throw new ForbiddenException('You cannot approve a case you created');
     const rule = c.ruleVersionId
       ? await this.prisma.ruleVersion.findUniqueOrThrow({ where: { id: c.ruleVersionId } })
       : await this.rules.published(c.tenantId);
@@ -306,10 +418,21 @@ export class CasesService {
     await this.humanDecision(c, user, 'APPROVED', {
       eligible: true,
       confidence: last?.confidence ?? 0,
+      threshold: last?.threshold ?? null,
       ur: `افسر نے آپ کی درخواست منظور کر دی۔${note ? ` ${note}` : ''}`,
       en: `Approved by an officer.${note ? ` Note: ${note}` : ''}`,
       extra: (tx) =>
-        this.emit(tx, this.decidedEvent(c.id, c.personId, 'HUMAN_REVIEW', last?.confidence ?? 0, { id: rule.id, amount }, ctx)),
+        this.emit(
+          tx,
+          this.decidedEvent(
+            c.id,
+            c.personId,
+            'HUMAN_REVIEW',
+            last?.confidence ?? 0,
+            { id: rule.id, amount },
+            ctx,
+          ),
+        ),
       ctx,
     });
     return this.view(user, c.id);
@@ -321,6 +444,7 @@ export class CasesService {
     await this.humanDecision(c, user, 'REJECTED', {
       eligible: false,
       confidence: last?.confidence ?? 0,
+      threshold: last?.threshold ?? null,
       ur: `افسر نے یہ درخواست منظور نہیں کی۔ وجہ: ${reason}`,
       en: `Not approved by an officer. Reason: ${reason}`,
       ctx: { source: 'cases', principal: user, correlationId: requestId },
@@ -334,14 +458,96 @@ export class CasesService {
     return this.view(user, c.id);
   }
 
-  async assign(user: AuthUser, id: string, officerId: string | undefined) {
+  /** "Assign to me" (or to a named officer): the queue shows who is already looking at a case. */
+  async assign(user: AuthUser, id: string, officerId: string | undefined, requestId?: string) {
     const c = await this.staffCase(user, id);
+    this.allow('assign', c);
     const to = officerId ?? user.id;
-    await this.prisma.$transaction([
-      this.prisma.case.update({ where: { id: c.id }, data: { assignedTo: to } }),
-      this.prisma.caseEvent.create({ data: { caseId: c.id, type: 'assigned', actor: user.id, data: { to } } }),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      const moved = await tx.case.updateMany({
+        where: { id: c.id, status: { in: REVIEWABLE } },
+        data: { assignedTo: to },
+      });
+      if (moved.count === 0) throw new ConflictException('Case is no longer waiting for review');
+      await tx.caseEvent.create({
+        data: { caseId: c.id, type: 'assigned', actor: user.id, data: { to } },
+      });
+      await this.emit(tx, this.managed(c, c.status, 'assigned', undefined, user, requestId));
+    });
+    this.bus.kick();
     return this.view(user, c.id);
+  }
+
+  /**
+   * Officer -> supervisor: the case stays in review but jumps the queue and carries the officer's reason.
+   * The status does not change, so approval/rejection rules stay exactly as they were.
+   */
+  async escalate(user: AuthUser, id: string, reason: string, requestId?: string) {
+    const c = await this.staffCase(user, id);
+    this.allow('escalate', c);
+    await this.prisma.$transaction(async (tx) => {
+      const moved = await tx.case.updateMany({
+        where: { id: c.id, status: { in: REVIEWABLE }, escalatedAt: null },
+        data: {
+          escalatedAt: new Date(),
+          escalationReason: reason,
+          priority: boosted(c.priority, true),
+        },
+      });
+      if (moved.count === 0)
+        throw new ConflictException('Case was escalated or decided by someone else');
+      await tx.caseEvent.create({
+        data: { caseId: c.id, type: 'escalated', actor: user.id, data: { reason } },
+      });
+      await this.emit(tx, this.managed(c, c.status, 'escalated', reason, user, requestId));
+    });
+    this.bus.kick();
+    return this.view(user, c.id);
+  }
+
+  /** File a finished case away. Only PAID or REJECTED cases can be closed; nothing open ever is. */
+  async close(user: AuthUser, id: string, note: string | undefined, requestId?: string) {
+    const c = await this.staffCase(user, id);
+    this.allow('close', c);
+    await this.prisma.$transaction(async (tx) => {
+      const moved = await tx.case.updateMany({
+        where: { id: c.id, status: c.status },
+        data: { status: 'CLOSED' },
+      });
+      if (moved.count === 0) throw new ConflictException('Case changed while closing; reload it');
+      await tx.caseEvent.create({
+        data: {
+          caseId: c.id,
+          type: 'closed',
+          actor: user.id,
+          data: { note: note ?? null, from: c.status },
+        },
+      });
+      await this.emit(tx, this.managed(c, 'CLOSED', 'closed', note, user, requestId));
+    });
+    this.bus.kick();
+    return this.view(user, c.id);
+  }
+
+  private allow(move: OfficerMove, c: Case) {
+    const why = refusal(move, c);
+    if (why) throw new ConflictException(why);
+  }
+
+  /** Audit event for a case-management step (kept as a status event so the audit service needs no new subscription). */
+  private managed(
+    c: Case,
+    to: CaseStatus,
+    action: string,
+    note: string | undefined,
+    user: AuthUser,
+    requestId?: string,
+  ) {
+    return buildEvent(
+      'cases.case.status_changed',
+      { caseId: c.id, from: c.status, to, action, ...(note ? { note } : {}) },
+      { source: 'cases', principal: user, correlationId: requestId },
+    );
   }
 
   private async humanDecision(
@@ -351,6 +557,8 @@ export class CasesService {
     d: {
       eligible: boolean;
       confidence: number;
+      /** Threshold of the automated decision the officer is overruling or confirming */
+      threshold: number | null;
       ur: string;
       en: string;
       ctx: { source: string; principal: AuthUser; correlationId?: string };
@@ -358,7 +566,10 @@ export class CasesService {
     },
   ) {
     await this.prisma.$transaction(async (tx) => {
-      const moved = await tx.case.updateMany({ where: { id: c.id, status: { in: REVIEWABLE } }, data: { status: to } });
+      const moved = await tx.case.updateMany({
+        where: { id: c.id, status: { in: REVIEWABLE } },
+        data: { status: to },
+      });
       if (moved.count === 0) throw new ConflictException(`Case is ${c.status}`);
       const decision = await tx.decision.create({
         data: {
@@ -366,6 +577,7 @@ export class CasesService {
           ruleVersionId: c.ruleVersionId,
           lane: 'HUMAN_REVIEW',
           confidence: d.confidence,
+          threshold: d.threshold,
           eligible: d.eligible,
           clausesHit: [],
           hardFlags: c.flags,
@@ -376,22 +588,44 @@ export class CasesService {
         },
       });
       await tx.caseEvent.create({
-        data: { caseId: c.id, type: to === 'APPROVED' ? 'approved' : 'rejected', actor: user.id, data: { decisionId: decision.id } },
+        data: {
+          caseId: c.id,
+          type: to === 'APPROVED' ? 'approved' : 'rejected',
+          actor: user.id,
+          data: { decisionId: decision.id },
+        },
       });
-      await this.emit(tx, buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, d.ctx));
+      await this.emit(
+        tx,
+        buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, d.ctx),
+      );
       await d.extra?.(tx);
     });
     this.bus.kick();
   }
 
-  private async transition(c: Case, user: AuthUser, to: CaseStatus, type: string, data: object, requestId?: string) {
+  private async transition(
+    c: Case,
+    user: AuthUser,
+    to: CaseStatus,
+    type: string,
+    data: object,
+    requestId?: string,
+  ) {
     await this.prisma.$transaction(async (tx) => {
-      const moved = await tx.case.updateMany({ where: { id: c.id, status: { in: REVIEWABLE } }, data: { status: to } });
+      const moved = await tx.case.updateMany({
+        where: { id: c.id, status: { in: REVIEWABLE } },
+        data: { status: to },
+      });
       if (moved.count === 0) throw new ConflictException(`Case is ${c.status}`);
       await tx.caseEvent.create({ data: { caseId: c.id, type, actor: user.id, data } });
       await this.emit(
         tx,
-        buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, { source: 'cases', principal: user, correlationId: requestId }),
+        buildEvent(
+          'cases.case.status_changed',
+          { caseId: c.id, from: c.status, to },
+          { source: 'cases', principal: user, correlationId: requestId },
+        ),
       );
     });
     this.bus.kick();
@@ -402,7 +636,11 @@ export class CasesService {
   async list(user: AuthUser, status?: CaseStatus) {
     const where: Prisma.CaseWhereInput = { tenantId: user.tenantId, ...(status ? { status } : {}) };
     if (!isStaff(user)) where.personId = subjectPerson(user);
-    const rows = await this.prisma.case.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100 });
+    const rows = await this.prisma.case.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
     return rows.map((c) => this.summary(c));
   }
 
@@ -418,9 +656,17 @@ export class CasesService {
       .map((c) => ({
         ...this.summary(c),
         district: c.person.district,
-        priority: priority(
-          { confidence: c.confidence, hardFlagCount: c.flags.length, amount: c.amount, createdAt: c.createdAt },
-          now,
+        priority: boosted(
+          priority(
+            {
+              confidence: c.confidence,
+              hardFlagCount: c.flags.length,
+              amount: c.amount,
+              createdAt: c.createdAt,
+            },
+            now,
+          ),
+          !!c.escalatedAt,
         ),
         waitingMinutes: Math.round((now.getTime() - c.createdAt.getTime()) / 60_000),
       }))
@@ -430,21 +676,38 @@ export class CasesService {
   async view(user: AuthUser, id: string) {
     const c = isStaff(user) ? await this.staffCase(user, id) : await this.ownCase(user, id);
     if (isStaff(user) && user.role !== 'auditor') await this.requireConsent(c.personId);
-    const [person, events, decision] = await Promise.all([
+    const [person, events, decision, costs] = await Promise.all([
       this.prisma.person.findUniqueOrThrow({ where: { id: c.personId } }),
       this.prisma.caseEvent.findMany({ where: { caseId: c.id }, orderBy: { at: 'asc' } }),
       this.lastDecision(c.id),
+      this.rules.costs(c.tenantId),
     ]);
+    const ruleId = decision?.ruleVersionId ?? c.ruleVersionId;
+    const rule = ruleId
+      ? await this.prisma.ruleVersion.findUnique({
+          where: { id: ruleId },
+          select: { version: true, clauses: true },
+        })
+      : null;
+    const cnic = decryptField(person.cnicEnc, env.PII_ENC_KEY);
     return {
       ...this.summary(c),
+      escalationReason: c.escalationReason,
       person: {
         id: person.id,
         fullName: person.fullName,
-        cnicMasked: maskCnic(decryptField(person.cnicEnc, env.PII_ENC_KEY)),
+        cnicMasked: maskCnic(cnic),
         district: person.district,
       },
       payout: { ibanMasked: maskTail(c.payoutIban), aliasMasked: maskTail(c.payoutAlias) },
-      decision: decision && this.decisionView(decision),
+      /** Reached only through ownCase / staffCase above: the citizen herself, or staff of her program. */
+      aiNotes: viewNotes(cnic, c.extraction, c.documentCheck),
+      decision: decision && {
+        ...this.decisionView(decision),
+        ruleVersion: rule?.version ?? null,
+        threshold: decision.threshold ?? autoApproveThreshold(costs),
+        clauseTexts: clauseTexts(rule?.clauses),
+      },
       timeline: events.map((e) => ({ type: e.type, actor: e.actor, data: e.data, at: e.at })),
     };
   }
@@ -470,6 +733,8 @@ export class CasesService {
       amount: c.amount,
       flags: c.flags,
       assignedTo: c.assignedTo,
+      escalated: !!c.escalatedAt,
+      escalatedAt: c.escalatedAt,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
     };
@@ -495,7 +760,9 @@ export class CasesService {
   }
 
   private async ownCase(user: AuthUser, id: string) {
-    const c = await this.prisma.case.findFirst({ where: { id, tenantId: user.tenantId, personId: subjectPerson(user) } });
+    const c = await this.prisma.case.findFirst({
+      where: { id, tenantId: user.tenantId, personId: subjectPerson(user) },
+    });
     if (!c) throw new NotFoundException('Case not found');
     return c;
   }
@@ -526,6 +793,16 @@ export class CasesService {
   private emit(tx: Tx, event: EventEnvelope) {
     return tx.outboxEvent.create({ data: outboxRow(event) });
   }
+}
+
+/** English clause texts by id, so staff read the condition and not its internal name. */
+function clauseTexts(clauses: unknown): Record<string, string> {
+  if (!Array.isArray(clauses)) return {};
+  return Object.fromEntries(
+    (clauses as { id?: unknown; textEn?: unknown }[])
+      .filter((c) => typeof c.id === 'string' && typeof c.textEn === 'string')
+      .map((c) => [c.id as string, c.textEn as string]),
+  );
 }
 
 function maskTail(v: string | null): string | null {

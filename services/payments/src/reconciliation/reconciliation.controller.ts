@@ -7,7 +7,12 @@ import { RailsClient } from '../payments/rails.client';
 import { reconcile } from './reconcile';
 
 const RunBody = z
-  .object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })
+  .object({
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+  })
   .default({});
 
 @ApiTags('reconciliation')

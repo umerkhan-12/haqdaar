@@ -3,7 +3,12 @@ import { DemoResetController, DemoResetter, HealthRegistry, KitModule } from '@h
 import { env } from './env';
 import { buildSeed } from './data/seed-data';
 import { RailsStore } from './rails.store';
-import { FaultsController, NadraController, RaastController, SmsController } from './rails.controller';
+import {
+  FaultsController,
+  NadraController,
+  RaastController,
+  SmsController,
+} from './rails.controller';
 
 @Module({
   imports: [
@@ -15,7 +20,13 @@ import { FaultsController, NadraController, RaastController, SmsController } fro
       prettyLogs: env.LOG_PRETTY === '1',
     }),
   ],
-  controllers: [NadraController, RaastController, SmsController, FaultsController, DemoResetController],
+  controllers: [
+    NadraController,
+    RaastController,
+    SmsController,
+    FaultsController,
+    DemoResetController,
+  ],
   providers: [
     { provide: RailsStore, useFactory: () => new RailsStore(buildSeed()) },
     {
@@ -32,6 +43,9 @@ export class AppModule implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.health.register('store', async () => ({ ...this.rails.counts, faults: this.rails.getFaults() }));
+    this.health.register('store', async () => ({
+      ...this.rails.counts,
+      faults: this.rails.getFaults(),
+    }));
   }
 }

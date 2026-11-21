@@ -1,6 +1,16 @@
-import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { buildEvent, EventBus, HealthRegistry, type Principal } from '@haqdaar/nest-kit';
 import { env } from './env';
+import { edgeSynthesizer, Speech, SpeechUnavailableError, type SpeechLang } from './speech/speech';
 import { AiRouter, PROFILES, type CallRecord, type ProfileName } from './router/ai-router';
 import { GroqProvider } from './providers/groq.provider';
 import { GeminiProvider } from './providers/gemini.provider';
@@ -25,7 +35,18 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AiService.name);
   readonly router: AiRouter;
   private readonly ocr = new OcrEngine(env.TESSDATA_DIR);
-  private readonly stats: Stats = { calls: 0, failures: 0, fallbacks: 0, mockAnswers: 0, byProvider: {} };
+  private readonly speech = new Speech(
+    env.TTS_CACHE_DIR ?? join(tmpdir(), 'haqdaar-tts'),
+    edgeSynthesizer,
+    env.TTS_TIMEOUT_MS,
+  );
+  private readonly stats: Stats = {
+    calls: 0,
+    failures: 0,
+    fallbacks: 0,
+    mockAnswers: 0,
+    byProvider: {},
+  };
 
   constructor(
     private readonly bus: EventBus,
@@ -35,8 +56,13 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       env.AI_PROFILE,
       [
         new GroqProvider(env.GROQ_API_KEY, env.GROQ_LLM_MODEL, env.GROQ_STT_MODEL),
-        new GeminiProvider('gemini', env.GEMINI_API_KEY, env.GEMINI_MODEL),
-        new GeminiProvider('gemini-demo', env.GEMINI_DEMO_API_KEY, env.GEMINI_MODEL),
+        new GeminiProvider('gemini', env.GEMINI_API_KEY, env.GEMINI_MODEL, env.GEMINI_BUDGET_USD),
+        new GeminiProvider(
+          'gemini-demo',
+          env.GEMINI_DEMO_API_KEY,
+          env.GEMINI_MODEL,
+          env.GEMINI_BUDGET_USD,
+        ),
         new MockProvider(),
       ],
       (r) => this.record(r),
@@ -87,8 +113,13 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     return scamCheck(this.router, text, env.SEAL_SECRET);
   }
 
-  async transcribe(audio: Buffer, mimeType: string, language = 'ur') {
-    const r = await this.router.transcribe({ audio, mimeType, language, timeoutMs: env.AI_TIMEOUT_MS });
+  async transcribe(audio: Buffer, mimeType: string, language?: string) {
+    const r = await this.router.transcribe({
+      audio,
+      mimeType,
+      language,
+      timeoutMs: env.AI_TIMEOUT_MS,
+    });
     return {
       text: r.value.text,
       provider: r.provider,
@@ -98,6 +129,30 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       // Empty text from the mock = "I could not hear you" → UI falls back to icons / helper.
       understood: !r.isMock && r.value.text.length > 0,
     };
+  }
+
+  /**
+   * Text → spoken Urdu or English (mp3). Speech only reads out text the system already decided to show,
+   * so Kill AI does not silence it; only the `offline` profile does (no network by definition).
+   * Unavailable → 503 with `fallback: 'browser'`: the phone then uses its own built-in voice.
+   */
+  async speak(text: string, lang: SpeechLang) {
+    const unavailable = () =>
+      new ServiceUnavailableException({
+        message: 'Speech is unavailable',
+        details: { code: 'SPEECH_UNAVAILABLE', fallback: 'browser' },
+      });
+    if (this.router.activeProfile === 'offline') throw unavailable();
+    try {
+      return await this.speech.speak(text, lang);
+    } catch (err) {
+      if (!(err instanceof SpeechUnavailableError)) throw err;
+      this.logger.warn(
+        { err: err.message },
+        'Speech synthesis failed; phone falls back to its own voice',
+      );
+      throw unavailable();
+    }
   }
 
   /** Local only: the image never reaches an external model. Kill AI → every document to a human. */

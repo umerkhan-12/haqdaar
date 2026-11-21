@@ -73,7 +73,13 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
           },
         });
         await tx.paymentTransition.create({
-          data: { paymentId: p.id, from: null, to: 'CREATED', reason: 'CASE_APPROVED', actor: 'system' },
+          data: {
+            paymentId: p.id,
+            from: null,
+            to: 'CREATED',
+            reason: 'CASE_APPROVED',
+            actor: 'system',
+          },
         });
         return p;
       });
@@ -124,7 +130,10 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
     }
 
     const awaiting = await this.sm.transition(payment, 'AWAITING_APPROVAL', {
-      reason: payment.amount > env.MAKER_CHECKER_LIMIT_PKR ? 'ABOVE_MAKER_CHECKER_LIMIT' : 'SCREENING_PASSED',
+      reason:
+        payment.amount > env.MAKER_CHECKER_LIMIT_PKR
+          ? 'ABOVE_MAKER_CHECKER_LIMIT'
+          : 'SCREENING_PASSED',
       patch: facts,
     });
     if (awaiting.amount > env.MAKER_CHECKER_LIMIT_PKR) return awaiting;
@@ -141,7 +150,9 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
   /** Officer clears a hold after checking it. They become the maker; someone else must approve. */
   async release(id: string, user: AuthUser, note?: string) {
     const p = await this.sm.get(id, user.tenantId);
-    await this.prisma.approval.create({ data: { paymentId: id, action: 'RELEASE', actorId: user.id, note } });
+    await this.prisma.approval.create({
+      data: { paymentId: id, action: 'RELEASE', actorId: user.id, note },
+    });
     return this.sm.transition(p, 'AWAITING_APPROVAL', {
       by: user,
       reason: `RELEASED: ${note ?? p.holdReason ?? ''}`.trim(),
@@ -154,7 +165,9 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
     if (p.makerId === user.id) {
       throw new ForbiddenException('Maker-checker: you cannot approve your own request');
     }
-    await this.prisma.approval.create({ data: { paymentId: id, action: 'APPROVE', actorId: user.id, note } });
+    await this.prisma.approval.create({
+      data: { paymentId: id, action: 'APPROVE', actorId: user.id, note },
+    });
     const approved = await this.sm.transition(p, 'APPROVED', {
       by: user,
       reason: 'CHECKER_APPROVED',
@@ -183,13 +196,18 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
     await this.prisma.approval.create({
       data: { paymentId: id, action: 'REVERSAL_APPROVE', actorId: user.id },
     });
-    return this.sm.transition(p, 'REVERSED', { by: user, reason: 'REVERSAL_APPROVED', ledger: 'REVERSAL' });
+    return this.sm.transition(p, 'REVERSED', {
+      by: user,
+      reason: 'REVERSAL_APPROVED',
+      ledger: 'REVERSAL',
+    });
   }
 
   /** FAILED → SENT again with the SAME endToEndId, so the provider can never pay twice. */
   async retry(id: string, user: AuthUser) {
     const p = await this.sm.get(id, user.tenantId);
-    if (p.state !== 'FAILED') throw new ConflictException(`Only FAILED payments can be retried (is ${p.state})`);
+    if (p.state !== 'FAILED')
+      throw new ConflictException(`Only FAILED payments can be retried (is ${p.state})`);
     return this.send(p, user);
   }
 
@@ -201,7 +219,10 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
 
   private async send(payment: Payment, by: Principal = SYSTEM): Promise<Payment> {
     if (!this.rails.canSend()) {
-      this.logger.warn({ paymentId: payment.id }, 'Raast circuit open: payout stays APPROVED, sweeper retries');
+      this.logger.warn(
+        { paymentId: payment.id },
+        'Raast circuit open: payout stays APPROVED, sweeper retries',
+      );
       return payment;
     }
     const sent = await this.sm.transition(payment, 'SENT', {
@@ -230,27 +251,52 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
     } catch (err) {
       // 4xx = provider rejected our request before processing it: nothing moved.
       if (err instanceof HttpException && err.getStatus() < 500) {
-        await this.attempt(sent.id, 'TRANSFER', 'REJECTED_REQUEST', { error: err.message }, started);
+        await this.attempt(
+          sent.id,
+          'TRANSFER',
+          'REJECTED_REQUEST',
+          { error: err.message },
+          started,
+        );
         return this.sm.transition(sent, 'FAILED', { reason: `REQUEST_REJECTED: ${err.message}` });
       }
       // Timeout / network / 5xx: the money may or may not have moved. Never resend; ask.
-      await this.attempt(sent.id, 'TRANSFER', 'NO_RESPONSE', { error: String((err as Error).message) }, started);
-      const unknown = await this.sm.transition(sent, 'UNKNOWN', { reason: 'NO_RESPONSE_FROM_RAAST' });
-      setTimeout(() => void this.settleUnknown(unknown).catch(() => undefined), INQUIRY_DELAY_MS).unref();
+      await this.attempt(
+        sent.id,
+        'TRANSFER',
+        'NO_RESPONSE',
+        { error: String((err as Error).message) },
+        started,
+      );
+      const unknown = await this.sm.transition(sent, 'UNKNOWN', {
+        reason: 'NO_RESPONSE_FROM_RAAST',
+      });
+      setTimeout(
+        () => void this.settleUnknown(unknown).catch(() => undefined),
+        INQUIRY_DELAY_MS,
+      ).unref();
       return unknown;
     }
   }
 
   private async settleUnknown(payment: Payment, by: Principal = SYSTEM): Promise<Payment> {
     if (payment.state !== 'UNKNOWN') {
-      throw new ConflictException(`Status inquiry is only for UNKNOWN payments (is ${payment.state})`);
+      throw new ConflictException(
+        `Status inquiry is only for UNKNOWN payments (is ${payment.state})`,
+      );
     }
     const started = Date.now();
     let r;
     try {
       r = await this.rails.status(payment.endToEndId);
     } catch (err) {
-      await this.attempt(payment.id, 'INQUIRY', 'NO_RESPONSE', { error: String((err as Error).message) }, started);
+      await this.attempt(
+        payment.id,
+        'INQUIRY',
+        'NO_RESPONSE',
+        { error: String((err as Error).message) },
+        started,
+      );
       return payment; // still UNKNOWN; the sweeper asks again
     }
     await this.attempt(payment.id, 'INQUIRY', r.status, r, started);
@@ -266,7 +312,8 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
     }
     return this.sm.transition(fresh, 'FAILED', {
       by,
-      reason: r.status === 'NOT_FOUND' ? 'INQUIRY_NOT_RECEIVED_SAFE_TO_RETRY' : 'INQUIRY_CONFIRMED_RJCT',
+      reason:
+        r.status === 'NOT_FOUND' ? 'INQUIRY_NOT_RECEIVED_SAFE_TO_RETRY' : 'INQUIRY_CONFIRMED_RJCT',
     });
   }
 
@@ -274,14 +321,26 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
   private async sweep() {
     const stale = new Date(Date.now() - 5_000);
     const [unknown, approved] = await Promise.all([
-      this.prisma.payment.findMany({ where: { state: 'UNKNOWN', updatedAt: { lt: stale } }, take: 20 }),
-      this.prisma.payment.findMany({ where: { state: 'APPROVED', updatedAt: { lt: stale } }, take: 20 }),
+      this.prisma.payment.findMany({
+        where: { state: 'UNKNOWN', updatedAt: { lt: stale } },
+        take: 20,
+      }),
+      this.prisma.payment.findMany({
+        where: { state: 'APPROVED', updatedAt: { lt: stale } },
+        take: 20,
+      }),
     ]).catch(() => [[], []] as Payment[][]);
     for (const p of unknown) await this.settleUnknown(p).catch(() => undefined);
     for (const p of approved) await this.send(p).catch(() => undefined);
   }
 
-  private attempt(paymentId: string, kind: string, outcome: string, detail: object, started: number) {
+  private attempt(
+    paymentId: string,
+    kind: string,
+    outcome: string,
+    detail: object,
+    started: number,
+  ) {
     return this.prisma.paymentAttempt.create({
       data: { paymentId, kind, outcome, detail: detail as object, latencyMs: Date.now() - started },
     });

@@ -2,7 +2,12 @@ import { Controller, Get, Headers, HttpCode, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser, Public, Roles, ZBody, type AuthUser } from '@haqdaar/nest-kit';
-import { LoginRequest, RefreshRequest } from '@haqdaar/shared';
+import {
+  LoginRequest,
+  RefreshRequest,
+  SignupStartRequest,
+  SignupVerifyRequest,
+} from '@haqdaar/shared';
 import { z } from 'zod';
 
 const ActForBody = z.object({ personId: z.string().uuid(), pin: z.string().regex(/^\d{4,6}$/) });
@@ -24,6 +29,27 @@ export class AuthController {
     @Headers('user-agent') ua?: string,
   ) {
     return this.auth.login(body.phone, body.password, ua);
+  }
+
+  /** Citizen self sign-up, step 1. 3 codes per minute per (IP, phone); always answers { sent: true }. */
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('signup/start')
+  @HttpCode(200)
+  signupStart(@ZBody(SignupStartRequest) body: z.infer<typeof SignupStartRequest>) {
+    return this.auth.signupStart(body.phone);
+  }
+
+  /** Step 2: code + name + 4-digit PIN → a citizen account and the same token pair as login. */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('signup/verify')
+  @HttpCode(201)
+  signupVerify(
+    @ZBody(SignupVerifyRequest) body: z.infer<typeof SignupVerifyRequest>,
+    @Headers('user-agent') ua?: string,
+  ) {
+    return this.auth.signupVerify(body, ua);
   }
 
   @Public()

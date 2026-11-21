@@ -4,25 +4,26 @@ The PWA that every Haqdaar user touches: a low-literacy widow on a cheap phone, 
 
 ## 1. Personas and constraints
 
-| Persona | Device / context | Constraints | What the UI must do |
-|---|---|---|---|
-| **Zainab — citizen** (low-literacy widow, Thatta) | Cheap Android, 2G, shared phone, often offline | Cannot read forms; Urdu speaker; small screen; fears scams | Voice first, icon + colour + spoken audio on every state, Urdu RTL, **one primary action per screen**, works offline, never a dead end |
-| **Asif — shopkeeper helper** | His own phone, serves many families a day | Speed; must not mix families; must not see a family without its PIN | Family list, **PIN pad** per family, a permanent "Acting for …" banner, one tap to switch |
-| **Sana — officer** | Office laptop, keyboard | Throughput on a long queue; needs evidence, not noise | Dense but readable **queue**, keyboard-only flow, masked CNIC, reasons required for rejection, clear maker-checker messages |
-| **Hira — admin** | Laptop | Changing rules is risky | Digital Twin **before** publish, cost model with live threshold, AI controls (profile, Kill AI) with clear state |
-| **Bilal — auditor** | Laptop | Read-only; must trust the record | Filterable log, decision trace, **Verify chain** with an unambiguous result |
-| **Judges** | Projector / laptop, 6 minutes | Want proof, not claims | **Judge Mode**: one button per challenge, live steps with ✓/✗, durations and a one-line summary |
-| **Inclusive needs** | Any | Low vision, motor impairment, screen readers, colour blindness, older users | ≥ 48 px targets, 200 % text resize, visible focus, labels + `aria-live`, status never by colour alone |
+| Persona                                           | Device / context                               | Constraints                                                                 | What the UI must do                                                                                                                    |
+| ------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Zainab — citizen** (low-literacy widow, Thatta) | Cheap Android, 2G, shared phone, often offline | Cannot read forms; Urdu speaker; small screen; fears scams                  | Voice first, icon + colour + spoken audio on every state, Urdu RTL, **one primary action per screen**, works offline, never a dead end |
+| **Asif — shopkeeper helper**                      | His own phone, serves many families a day      | Speed; must not mix families; must not see a family without its PIN         | Family list, **PIN pad** per family, a permanent "Acting for …" banner, one tap to switch                                              |
+| **Sana — officer**                                | Office laptop, keyboard                        | Throughput on a long queue; needs evidence, not noise                       | Dense but readable **queue**, keyboard-only flow, masked CNIC, reasons required for rejection, clear maker-checker messages            |
+| **Hira — admin**                                  | Laptop                                         | Changing rules is risky                                                     | Digital Twin **before** publish, cost model with live threshold, AI controls (profile, Kill AI) with clear state                       |
+| **Bilal — auditor**                               | Laptop                                         | Read-only; must trust the record                                            | Filterable log, decision trace, **Verify chain** with an unambiguous result                                                            |
+| **Judges**                                        | Projector / laptop, 6 minutes                  | Want proof, not claims                                                      | **Judge Mode**: one button per challenge, live steps with ✓/✗, durations and a one-line summary                                        |
+| **Inclusive needs**                               | Any                                            | Low vision, motor impairment, screen readers, colour blindness, older users | ≥ 48 px targets, 200 % text resize, visible focus, labels + `aria-live`, status never by colour alone                                  |
 
 ## 2. Journeys and information architecture
 
 **Citizen — claim money (the north-star journey, "time to money")**
+
 1. Login (or helper switches to her family) → Home: three big cards.
-2. *Claim my money* → hold the mic and speak → system transcribes and fills the form.
+2. _Claim my money_ → hold the mic and speak → system transcribes and fills the form.
 3. Check details (pre-filled; typing allowed when AI is unsure or off).
 4. Consent: two plain-language permissions, each a big toggle, withdrawable later.
 5. Send → result card spoken aloud: approved / officer checking / more info needed. Offline → "saved on your phone, will send itself".
-6. *Where is my money?* → status, Urdu reason, timeline; **Haq Receipt** with the exact amount when paid.
+6. _Where is my money?_ → status, Urdu reason, timeline; **Haq Receipt** with the exact amount when paid.
 
 **Citizen — is this message real?** Paste/type the SMS → Verdict card (Genuine / Scam / Not sure) with reasons, spoken.
 
@@ -59,14 +60,14 @@ The PWA that every Haqdaar user touches: a low-literacy widow on a cheap phone, 
 
 ### Tokens
 
-| Token | Value | Use | Contrast |
-|---|---|---|---|
-| `brand` | `#0b6b4f` | primary actions, headers | white on brand **6.5 : 1** |
-| `brand-dark` | `#08513c` | hover/pressed | white on it 9.3 : 1 |
-| `brand-soft` | `#e6f3ee` | selected / info background | brand-dark text on it 8.2 : 1 |
-| `ink` | `#1d2433` | body text | 15.5 : 1 on white |
-| `muted` | `#5b6677` | secondary text | 5.8 : 1 on white, 5.5 : 1 on the page background |
-| ok / bad / warn | 900-text on 50-tint, 600-700 border | status | green 8.7, red 9.2, amber 8.7 : 1 |
+| Token           | Value                               | Use                        | Contrast                                         |
+| --------------- | ----------------------------------- | -------------------------- | ------------------------------------------------ |
+| `brand`         | `#0b6b4f`                           | primary actions, headers   | white on brand **6.5 : 1**                       |
+| `brand-dark`    | `#08513c`                           | hover/pressed              | white on it 9.3 : 1                              |
+| `brand-soft`    | `#e6f3ee`                           | selected / info background | brand-dark text on it 8.2 : 1                    |
+| `ink`           | `#1d2433`                           | body text                  | 15.5 : 1 on white                                |
+| `muted`         | `#5b6677`                           | secondary text             | 5.8 : 1 on white, 5.5 : 1 on the page background |
+| ok / bad / warn | 900-text on 50-tint, 600-700 border | status                     | green 8.7, red 9.2, amber 8.7 : 1                |
 
 All ratios computed with the WCAG relative-luminance formula. Rejected during design: white on amber-500 (2.1 : 1) — the offline banner uses amber-900 on amber-100 (8.1 : 1) instead.
 
@@ -77,46 +78,46 @@ All ratios computed with the WCAG relative-luminance formula. Rejected during de
 
 ### Components (`components/`)
 
-| Component | Purpose |
-|---|---|
-| `Button` | primary / ghost / danger, min 48 px |
-| `BigActionCard` | citizen home actions: icon + label, 96 px tall |
-| `AudioButton` | speaks any text (SpeechSynthesis, Urdu voice when available) |
-| `StatusCard` | icon + title + body + AudioButton; the single way to show any state |
-| `StatusPill` | compact status for staff tables (icon/letter + text) |
-| `VerdictCard` | scam verdict: shield/x/question icon, colour, reasons, audio |
-| `Timeline` | ordered case events |
-| `Field` | label + input; every input has a visible label |
-| `PinPad` | 3×4 numeric pad, 64 px keys, masked dots, works without a keyboard |
-| `OfflineBanner` | persistent, `role="alert"`, with outbox count |
-| `EmptyState` / `ErrorState` / `Skeleton` | designed states; skeletons keep layout stable (no shift) |
-| `DataTable` | staff lists: semantic `<table>`, header scope, keyboard-reachable row actions |
-| `ConfirmDialog` | native `<dialog>` for irreversible staff actions (reject, publish, revoke) with focus trap |
+| Component                                | Purpose                                                                                    |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `Button`                                 | primary / ghost / danger, min 48 px                                                        |
+| `BigActionCard`                          | citizen home actions: icon + label, 96 px tall                                             |
+| `AudioButton`                            | speaks any text (SpeechSynthesis, Urdu voice when available)                               |
+| `StatusCard`                             | icon + title + body + AudioButton; the single way to show any state                        |
+| `StatusPill`                             | compact status for staff tables (icon/letter + text)                                       |
+| `VerdictCard`                            | scam verdict: shield/x/question icon, colour, reasons, audio                               |
+| `Timeline`                               | ordered case events                                                                        |
+| `Field`                                  | label + input; every input has a visible label                                             |
+| `PinPad`                                 | 3×4 numeric pad, 64 px keys, masked dots, works without a keyboard                         |
+| `OfflineBanner`                          | persistent, `role="alert"`, with outbox count                                              |
+| `EmptyState` / `ErrorState` / `Skeleton` | designed states; skeletons keep layout stable (no shift)                                   |
+| `DataTable`                              | staff lists: semantic `<table>`, header scope, keyboard-reachable row actions              |
+| `ConfirmDialog`                          | native `<dialog>` for irreversible staff actions (reject, publish, revoke) with focus trap |
 
 ### Every screen state
 
-| State | Citizen | Staff |
-|---|---|---|
-| Loading | Skeleton + "Please wait" | Skeleton rows |
-| Empty | StatusCard (neutral) + the next action | EmptyState line |
-| Error | StatusCard (bad) in plain words, Retry, short ref id — never raw errors | exact server message + ref id |
-| Offline | OfflineBanner; claims go to the outbox | OfflineBanner; actions disabled |
-| Waiting | "A person will decide, not a machine" | queue age shown |
-| Success | StatusCard (ok) spoken aloud | inline confirmation |
+| State   | Citizen                                                                 | Staff                           |
+| ------- | ----------------------------------------------------------------------- | ------------------------------- |
+| Loading | Skeleton + "Please wait"                                                | Skeleton rows                   |
+| Empty   | StatusCard (neutral) + the next action                                  | EmptyState line                 |
+| Error   | StatusCard (bad) in plain words, Retry, short ref id — never raw errors | exact server message + ref id   |
+| Offline | OfflineBanner; claims go to the outbox                                  | OfflineBanner; actions disabled |
+| Waiting | "A person will decide, not a machine"                                   | queue age shown                 |
+| Success | StatusCard (ok) spoken aloud                                            | inline confirmation             |
 
 ## 4. Accessibility (WCAG 2.2 AA)
 
-| Requirement | How |
-|---|---|
-| Focus order + visible focus | DOM order = visual order; global `:focus-visible` 3 px amber ring |
-| Labels | every input wrapped in `Field` with a visible label; icon-only buttons have `aria-label` |
-| Async results announced | StatusCard is `role="status"` (polite); errors/offline `role="alert"` |
-| Target size | all interactive elements ≥ 48 × 48 px (2.5.8 asks 24) |
-| RTL / LTR | `dir` on `<html>` follows the language; numbers, CNICs and phones are `dir="ltr"`; logical properties (`text-start`, `ms-`) so layouts mirror |
-| Resize to 200 % | fluid single-column citizen layout, no fixed heights on text containers |
-| Keyboard-only officer flow | queue rows are buttons; approve/reject reachable by Tab; dialogs trap and return focus |
-| Reduced motion | `motion-safe:` on all animation |
-| Not colour alone | icon + text + audio for every status |
+| Requirement                 | How                                                                                                                                           |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Focus order + visible focus | DOM order = visual order; global `:focus-visible` 3 px amber ring                                                                             |
+| Labels                      | every input wrapped in `Field` with a visible label; icon-only buttons have `aria-label`                                                      |
+| Async results announced     | StatusCard is `role="status"` (polite); errors/offline `role="alert"`                                                                         |
+| Target size                 | all interactive elements ≥ 48 × 48 px (2.5.8 asks 24)                                                                                         |
+| RTL / LTR                   | `dir` on `<html>` follows the language; numbers, CNICs and phones are `dir="ltr"`; logical properties (`text-start`, `ms-`) so layouts mirror |
+| Resize to 200 %             | fluid single-column citizen layout, no fixed heights on text containers                                                                       |
+| Keyboard-only officer flow  | queue rows are buttons; approve/reject reachable by Tab; dialogs trap and return focus                                                        |
+| Reduced motion              | `motion-safe:` on all animation                                                                                                               |
+| Not colour alone            | icon + text + audio for every status                                                                                                          |
 
 Verification is recorded in the report of each change (axe run in the browser on the main screens, manual keyboard pass on the officer flow).
 

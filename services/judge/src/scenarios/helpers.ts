@@ -8,7 +8,12 @@ export interface CaseView {
   lane: string | null;
   confidence: number | null;
   flags: string[];
-  decision?: { id: string; explanationUr: string; explanationEn: string; hardFlags: string[] } | null;
+  decision?: {
+    id: string;
+    explanationUr: string;
+    explanationEn: string;
+    hardFlags: string[];
+  } | null;
 }
 
 export interface Payment {
@@ -22,9 +27,14 @@ export interface Payment {
   creditorName?: string;
 }
 
-export const items = <T>(b: unknown): T[] => (Array.isArray(b) ? b : ((b as { items?: T[] })?.items ?? []));
+export const items = <T>(b: unknown): T[] =>
+  Array.isArray(b) ? b : ((b as { items?: T[] })?.items ?? []);
 
-export async function grantConsents(api: GatewayApi, token: string, personId: string): Promise<void> {
+export async function grantConsents(
+  api: GatewayApi,
+  token: string,
+  personId: string,
+): Promise<void> {
   for (const purpose of ['identity_verification', 'household_data']) {
     const r = await api.call('POST', '/consents', { token, body: { personId, purpose } });
     if (r.status >= 300) throw new Error(`Consent ${purpose} failed (HTTP ${r.status})`);
@@ -55,9 +65,11 @@ export async function claimFor(
           payout: { alias: o.alias ?? f.alias },
         },
       }),
-    (v) => `HTTP ${v.status} → ${v.body?.status} / ${v.body?.lane} (confidence ${fmt(v.body?.confidence)})`,
+    (v) =>
+      `HTTP ${v.status} → ${v.body?.status} / ${v.body?.lane} (confidence ${fmt(v.body?.confidence)})`,
   );
-  if (r.status >= 300) throw new Error(`Claim failed: HTTP ${r.status} ${JSON.stringify(r.body).slice(0, 200)}`);
+  if (r.status >= 300)
+    throw new Error(`Claim failed: HTTP ${r.status} ${JSON.stringify(r.body).slice(0, 200)}`);
   return r.body;
 }
 
@@ -67,7 +79,8 @@ export async function ensureApproved(api: GatewayApi, run: Run, c: CaseView): Pr
   const officer = await api.as('officer');
   await run.step(
     'Officer reviews and approves (automation never approves repeat claims)',
-    () => api.call('POST', `/cases/${c.id}/approve`, { token: officer, body: { note: 'Judge Mode' } }),
+    () =>
+      api.call('POST', `/cases/${c.id}/approve`, { token: officer, body: { note: 'Judge Mode' } }),
     (v) => `HTTP ${v.status}`,
   );
 }
@@ -91,7 +104,12 @@ export async function waitForPayment(
 }
 
 /** Inject a Raast fault; with `alias`, only that family's transfer is affected (no cross-talk). */
-export async function setRaastFault(api: GatewayApi, mode: string, remaining = 1, alias?: string): Promise<void> {
+export async function setRaastFault(
+  api: GatewayApi,
+  mode: string,
+  remaining = 1,
+  alias?: string,
+): Promise<void> {
   const r = await api.call('POST', '/mock/faults', {
     token: await api.as('admin'),
     body: { raast: { mode, remaining, ...(alias ? { alias } : {}) } },

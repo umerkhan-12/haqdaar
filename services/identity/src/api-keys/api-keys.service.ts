@@ -24,13 +24,28 @@ export class ApiKeysService {
         scopes,
       },
     });
-    return { id: row.id, name: row.name, prefix: row.prefix, scopes: row.scopes, key, note: 'Shown once. Store it securely.' };
+    return {
+      id: row.id,
+      name: row.name,
+      prefix: row.prefix,
+      scopes: row.scopes,
+      key,
+      note: 'Shown once. Store it securely.',
+    };
   }
 
   list(admin: AuthUser) {
     return this.prisma.apiKey.findMany({
       where: { tenantId: admin.tenantId },
-      select: { id: true, name: true, prefix: true, scopes: true, createdAt: true, lastUsedAt: true, revokedAt: true },
+      select: {
+        id: true,
+        name: true,
+        prefix: true,
+        scopes: true,
+        createdAt: true,
+        lastUsedAt: true,
+        revokedAt: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -49,7 +64,13 @@ export class ApiKeysService {
     if (!row || row.revokedAt) throw new UnauthorizedException('Invalid API key');
     await this.prisma.apiKey.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
     const accessToken = signAccessToken(
-      { sub: `apikey:${row.id}`, tid: row.tenantId, role: 'partner', name: row.name, scp: row.scopes },
+      {
+        sub: `apikey:${row.id}`,
+        tid: row.tenantId,
+        role: 'partner',
+        name: row.name,
+        scp: row.scopes,
+      },
       env.JWT_PRIVATE_KEY,
       PARTNER_TOKEN_TTL_SECONDS,
     );

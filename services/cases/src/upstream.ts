@@ -33,9 +33,15 @@ export interface HouseholdRecord {
 export class Upstream {
   constructor(private readonly client: ServiceClient) {}
 
-  async consentAllowed(personId: string, purpose: ConsentPurpose, correlationId?: string): Promise<boolean> {
+  async consentAllowed(
+    personId: string,
+    purpose: ConsentPurpose,
+    correlationId?: string,
+  ): Promise<boolean> {
     const q = new URLSearchParams({ personId, purpose });
-    const r = await this.client.call<{ allowed: boolean }>('identity', `/consents/check?${q}`, { correlationId });
+    const r = await this.client.call<{ allowed: boolean }>('identity', `/consents/check?${q}`, {
+      correlationId,
+    });
     return r.allowed;
   }
 
@@ -51,9 +57,13 @@ export class Upstream {
   /** `null` when no household record exists (404); throws when the service is unavailable. */
   async household(cnic: string, correlationId?: string): Promise<HouseholdRecord | null> {
     try {
-      return await this.client.call<HouseholdRecord>('rails-mock', `/mock/household/${encodeURIComponent(cnic)}`, {
-        correlationId,
-      });
+      return await this.client.call<HouseholdRecord>(
+        'rails-mock',
+        `/mock/household/${encodeURIComponent(cnic)}`,
+        {
+          correlationId,
+        },
+      );
     } catch (e) {
       if (e instanceof HttpException && e.getStatus() === 404) return null;
       throw e;

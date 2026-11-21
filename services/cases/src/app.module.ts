@@ -28,7 +28,13 @@ import { EvalService } from './eval/eval.service';
       outboxDatabaseUrl: env.CASES_DATABASE_URL,
     }),
   ],
-  controllers: [CasesController, RulesController, EvalController, InternalController, DemoResetController],
+  controllers: [
+    CasesController,
+    RulesController,
+    EvalController,
+    InternalController,
+    DemoResetController,
+  ],
   providers: [
     PrismaService,
     Upstream,

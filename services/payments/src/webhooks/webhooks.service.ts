@@ -41,7 +41,10 @@ export class WebhooksService implements OnModuleInit, OnApplicationShutdown {
   }
 
   list(tenantId: string) {
-    return this.prisma.webhookSubscription.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } });
+    return this.prisma.webhookSubscription.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async deliveries(tenantId: string, subscriptionId: string) {
@@ -73,7 +76,12 @@ export class WebhooksService implements OnModuleInit, OnApplicationShutdown {
     for (const s of subs) {
       const d = await this.prisma.webhookDelivery
         .create({
-          data: { subscriptionId: s.id, eventId: event.eventId, eventType: event.type, payload: event as object },
+          data: {
+            subscriptionId: s.id,
+            eventId: event.eventId,
+            eventType: event.type,
+            payload: event as object,
+          },
         })
         .catch((err: { code?: string }) => {
           if (err.code === 'P2002') return null; // already queued for this event
@@ -84,7 +92,9 @@ export class WebhooksService implements OnModuleInit, OnApplicationShutdown {
   }
 
   private async deliver(d: WebhookDelivery): Promise<WebhookDelivery> {
-    const sub = await this.prisma.webhookSubscription.findUniqueOrThrow({ where: { id: d.subscriptionId } });
+    const sub = await this.prisma.webhookSubscription.findUniqueOrThrow({
+      where: { id: d.subscriptionId },
+    });
     const body = JSON.stringify(d.payload);
     const attempts = d.attempts + 1;
     let statusCode: number | null = null;
@@ -108,7 +118,8 @@ export class WebhooksService implements OnModuleInit, OnApplicationShutdown {
     }
 
     const delivered = !error;
-    if (!delivered) this.logger.warn({ deliveryId: d.id, attempts, error }, 'Webhook delivery failed');
+    if (!delivered)
+      this.logger.warn({ deliveryId: d.id, attempts, error }, 'Webhook delivery failed');
     return this.prisma.webhookDelivery.update({
       where: { id: d.id },
       data: {

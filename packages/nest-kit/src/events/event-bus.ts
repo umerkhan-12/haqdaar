@@ -28,7 +28,11 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
   private readonly boss: PgBoss;
   private started = false;
   private registering: Promise<void> = Promise.resolve();
-  private readonly pending: Array<{ types: EventType[]; handler: EventHandler; consumer?: string }> = [];
+  private readonly pending: Array<{
+    types: EventType[];
+    handler: EventHandler;
+    consumer?: string;
+  }> = [];
   private relay?: OutboxRelay;
 
   constructor(private readonly opts: EventBusOptions) {
@@ -67,7 +71,11 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
    * `consumer` names the handler: two handlers of the same event need different names, each gets
    * its own queue (same queue = jobs would be split between them, not delivered to both).
    */
-  async subscribe(types: EventType | EventType[], handler: EventHandler, consumer?: string): Promise<void> {
+  async subscribe(
+    types: EventType | EventType[],
+    handler: EventHandler,
+    consumer?: string,
+  ): Promise<void> {
     const list = Array.isArray(types) ? types : [types];
     if (!this.started) {
       this.pending.push({ types: list, handler, consumer });
@@ -84,9 +92,15 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
     this.relay?.kick();
   }
 
-  private async register(types: EventType[], handler: EventHandler, consumer?: string): Promise<void> {
+  private async register(
+    types: EventType[],
+    handler: EventHandler,
+    consumer?: string,
+  ): Promise<void> {
     for (const type of types) {
-      const queue = consumer ? `${this.opts.service}__${type}__${consumer}` : `${this.opts.service}__${type}`;
+      const queue = consumer
+        ? `${this.opts.service}__${type}__${consumer}`
+        : `${this.opts.service}__${type}`;
       await this.ensureQueue(queue, {
         retryLimit: 5,
         retryDelay: 2,
@@ -95,9 +109,13 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
       });
       await this.boss.subscribe(type, queue);
       // pg-boss defaults (poll 2 s, batch 10) cap a queue at ~5 events/s and add up to 2 s latency.
-      await this.boss.work<EventEnvelope>(queue, { batchSize: 50, pollingIntervalSeconds: 0.5 }, async (jobs) => {
-        for (const job of jobs) await handler(job.data);
-      });
+      await this.boss.work<EventEnvelope>(
+        queue,
+        { batchSize: 50, pollingIntervalSeconds: 0.5 },
+        async (jobs) => {
+          for (const job of jobs) await handler(job.data);
+        },
+      );
     }
   }
 
@@ -113,7 +131,9 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
         return;
       } catch (err) {
         if (await this.boss.getQueue(name)) return; // created concurrently by another service
-        const transient = ['40P01', '40001', '23505'].includes((err as { code?: string }).code ?? '');
+        const transient = ['40P01', '40001', '23505'].includes(
+          (err as { code?: string }).code ?? '',
+        );
         if (!transient || attempt >= 6) throw err;
         await new Promise((r) => setTimeout(r, 100 * 2 ** attempt + Math.random() * 100));
       }
@@ -179,14 +199,17 @@ class OutboxRelay {
           done.push(row.id);
         } catch (err) {
           this.logger.warn({ err, id: row.id }, 'Publish failed, will retry');
-          await client.query(`UPDATE ${this.table} SET attempts = attempts + 1 WHERE id = $1`, [row.id]);
+          await client.query(`UPDATE ${this.table} SET attempts = attempts + 1 WHERE id = $1`, [
+            row.id,
+          ]);
           break; // keep order: stop at the first failure
         }
       }
       if (done.length) {
-        await client.query(`UPDATE ${this.table} SET published_at = now() WHERE id = ANY($1::uuid[])`, [
-          done,
-        ]);
+        await client.query(
+          `UPDATE ${this.table} SET published_at = now() WHERE id = ANY($1::uuid[])`,
+          [done],
+        );
       }
       await client.query('COMMIT');
     } catch (err) {

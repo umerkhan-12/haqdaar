@@ -33,7 +33,9 @@ export function normalizeSealBody(text: string): string {
 }
 
 function signature(body: string, expiry: string, secret: string): string {
-  const mac = createHmac('sha256', secret).update(`${normalizeSealBody(body)}|${expiry}`).digest();
+  const mac = createHmac('sha256', secret)
+    .update(`${normalizeSealBody(body)}|${expiry}`)
+    .digest();
   return base32(mac).slice(0, 10);
 }
 

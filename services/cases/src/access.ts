@@ -10,7 +10,9 @@ export function isStaff(user: AuthUser): boolean {
 /** The person a citizen/helper session acts for. A helper must select a family (PIN) first. */
 export function subjectPerson(user: AuthUser): string {
   if (!user.onBehalfOf) {
-    throw new ForbiddenException(user.role === 'helper' ? 'Select a family first' : 'No person linked');
+    throw new ForbiddenException(
+      user.role === 'helper' ? 'Select a family first' : 'No person linked',
+    );
   }
   return user.onBehalfOf;
 }

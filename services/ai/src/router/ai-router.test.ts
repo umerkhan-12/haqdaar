@@ -4,7 +4,12 @@ import { AiRouter } from './ai-router';
 import { MockProvider } from '../providers/mock.provider';
 import { ProviderError, type AiProvider, type LlmRequest } from '../providers/types';
 
-const req: LlmRequest = { task: 't', system: 's', messages: [{ role: 'user', content: 'hi' }], timeoutMs: 1000 };
+const req: LlmRequest = {
+  task: 't',
+  system: 's',
+  messages: [{ role: 'user', content: 'hi' }],
+  timeoutMs: 1000,
+};
 
 function fake(id: string, behaviour: 'ok' | 'fail' | 'unconfigured', calls: string[]): AiProvider {
   return {
@@ -21,7 +26,11 @@ function fake(id: string, behaviour: 'ok' | 'fail' | 'unconfigured', calls: stri
 
 test('dev profile uses groq first', async () => {
   const calls: string[] = [];
-  const r = new AiRouter('dev', [fake('groq', 'ok', calls), fake('gemini', 'ok', calls), new MockProvider()]);
+  const r = new AiRouter('dev', [
+    fake('groq', 'ok', calls),
+    fake('gemini', 'ok', calls),
+    new MockProvider(),
+  ]);
   const out = await r.complete(req);
   assert.equal(out.provider, 'groq');
   assert.equal(out.fallbackUsed, false);
@@ -40,7 +49,11 @@ test('demo profile uses the paid gemini key first, without touching code', async
 
 test('rate-limited provider falls back to the next one', async () => {
   const calls: string[] = [];
-  const r = new AiRouter('dev', [fake('groq', 'fail', calls), fake('gemini', 'ok', calls), new MockProvider()]);
+  const r = new AiRouter('dev', [
+    fake('groq', 'fail', calls),
+    fake('gemini', 'ok', calls),
+    new MockProvider(),
+  ]);
   const out = await r.complete(req);
   assert.equal(out.provider, 'gemini');
   assert.equal(out.fallbackUsed, true);
@@ -48,7 +61,11 @@ test('rate-limited provider falls back to the next one', async () => {
 
 test('unconfigured providers are skipped; all down ends at the mock (never throws)', async () => {
   const calls: string[] = [];
-  const r = new AiRouter('dev', [fake('groq', 'unconfigured', calls), fake('gemini', 'fail', calls), new MockProvider()]);
+  const r = new AiRouter('dev', [
+    fake('groq', 'unconfigured', calls),
+    fake('gemini', 'fail', calls),
+    new MockProvider(),
+  ]);
   const out = await r.complete(req);
   assert.equal(out.provider, 'mock');
   assert.equal(out.isMock, true);
@@ -66,7 +83,11 @@ test('Kill AI sends everything to the mock immediately', async () => {
 
 test('circuit opens after repeated failures and the provider is skipped', async () => {
   const calls: string[] = [];
-  const r = new AiRouter('dev', [fake('groq', 'fail', calls), fake('gemini', 'ok', calls), new MockProvider()]);
+  const r = new AiRouter('dev', [
+    fake('groq', 'fail', calls),
+    fake('gemini', 'ok', calls),
+    new MockProvider(),
+  ]);
   for (let i = 0; i < 3; i++) await r.complete(req);
   calls.length = 0;
   const out = await r.complete(req);

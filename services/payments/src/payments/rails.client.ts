@@ -26,7 +26,13 @@ export interface StatusResult {
 
 export interface Statement {
   date: string;
-  entries: { endToEndId: string; amount: number; creditorIban: string; status: string; settledAt: string }[];
+  entries: {
+    endToEndId: string;
+    amount: number;
+    creditorIban: string;
+    status: string;
+    settledAt: string;
+  }[];
 }
 
 export interface PayoutDetails {

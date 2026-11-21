@@ -9,23 +9,25 @@ import {
 export type ProfileName = 'dev' | 'demo' | 'offline';
 
 /** Provider order per profile. `mock` is always the last resort, so the system never crashes. */
-export const PROFILES: Record<ProfileName, { llm: string[]; stt: string[]; description: string }> = {
-  dev: {
-    llm: ['groq', 'gemini'],
-    stt: ['groq', 'gemini'],
-    description: 'Build mode: free Groq first, free Gemini as fallback',
-  },
-  demo: {
-    llm: ['gemini-demo', 'groq'],
-    stt: ['groq', 'gemini-demo'],
-    description: 'Judging day: paid Gemini first for text, Groq Whisper first for Urdu speech',
-  },
-  offline: {
-    llm: [],
-    stt: [],
-    description: 'No external AI: deterministic mock, every uncertain case goes to a human',
-  },
-};
+export const PROFILES: Record<ProfileName, { llm: string[]; stt: string[]; description: string }> =
+  {
+    dev: {
+      llm: ['groq', 'gemini'],
+      stt: ['gemini', 'groq'],
+      description:
+        'Build mode: free Groq first for text; Gemini listens to speech first (when it has credit), Groq Whisper as fallback',
+    },
+    demo: {
+      llm: ['gemini-demo', 'groq'],
+      stt: ['gemini-demo', 'groq'],
+      description: 'Judging day: paid Gemini first for text and Urdu speech, Groq as fallback',
+    },
+    offline: {
+      llm: [],
+      stt: [],
+      description: 'No external AI: deterministic mock, every uncertain case goes to a human',
+    },
+  };
 
 export interface Attempt {
   provider: string;
@@ -121,7 +123,10 @@ export class AiRouter {
     });
   }
 
-  transcribe(req: SttRequest, task = 'transcribe'): Promise<RoutedResult<{ text: string; model: string }>> {
+  transcribe(
+    req: SttRequest,
+    task = 'transcribe',
+  ): Promise<RoutedResult<{ text: string; model: string }>> {
     return this.route('stt', task, PROFILES[this.profile].stt, (p) => {
       if (!p.transcribe) throw new ProviderError(p.id, 'no STT support', undefined, true);
       return p.transcribe(req);
@@ -164,7 +169,12 @@ export class AiRouter {
         attempts.push({ provider: id, ok: true, ms: Date.now() - t });
         return this.done(kind, task, value, p, attempts, started);
       } catch (e) {
-        attempts.push({ provider: id, ok: false, ms: Date.now() - t, error: (e as Error).message.slice(0, 200) });
+        attempts.push({
+          provider: id,
+          ok: false,
+          ms: Date.now() - t,
+          error: (e as Error).message.slice(0, 200),
+        });
         // Non-retryable (our request is wrong): another vendor won't fix it, but the mock still answers safely.
         if (e instanceof ProviderError && !e.retryable) break;
       }
@@ -196,6 +206,13 @@ export class AiRouter {
       fallbackUsed: fallbackUsed || p.isMock,
       latencyMs,
     });
-    return { value, provider: p.id, isMock: p.isMock, fallbackUsed: fallbackUsed || p.isMock, latencyMs, attempts };
+    return {
+      value,
+      provider: p.id,
+      isMock: p.isMock,
+      fallbackUsed: fallbackUsed || p.isMock,
+      latencyMs,
+      attempts,
+    };
   }
 }

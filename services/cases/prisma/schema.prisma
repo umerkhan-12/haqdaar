@@ -82,6 +82,11 @@ model Case {
   payoutIban     String?    @map("payout_iban")
   payoutAlias    String?    @map("payout_alias")
   extraction     Json?
+  /// CNIC photo check as reported by the client (untrusted: it can only add caution, never confidence)
+  documentCheck  Json?      @map("document_check")
+  /// Set when an officer hands the case to a supervisor; cleared never (the timeline keeps the history)
+  escalatedAt    DateTime?  @map("escalated_at")
+  escalationReason String?  @map("escalation_reason")
   flags          String[]
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
@@ -138,6 +143,8 @@ model Decision {
   ruleVersionId String?  @map("rule_version_id") @db.Uuid
   lane          Lane
   confidence    Float
+  /// Auto-approve threshold in force when this decision was made (null on rows older than the column)
+  threshold     Float?
   eligible      Boolean?
   /// [{ id, passed }]
   clausesHit    Json     @map("clauses_hit")

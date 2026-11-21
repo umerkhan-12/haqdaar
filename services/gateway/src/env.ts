@@ -15,5 +15,7 @@ const raw = loadEnv(Env);
 export const env = {
   ...raw,
   JWT_PUBLIC_KEY: pem(raw.JWT_PUBLIC_KEY),
-  corsOrigins: raw.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean),
+  corsOrigins: raw.CORS_ORIGINS.split(',')
+    .map((o) => o.trim())
+    .filter(Boolean),
 };

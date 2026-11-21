@@ -79,7 +79,11 @@ export const CostSettings = z.object({
 });
 export type CostSettings = z.infer<typeof CostSettings>;
 
-export const DEFAULT_COSTS: CostSettings = { wrongApproval: 25_000, humanReview: 300, askMore: 150 };
+export const DEFAULT_COSTS: CostSettings = {
+  wrongApproval: 25_000,
+  humanReview: 300,
+  askMore: 150,
+};
 
 /** Auto-approve only if expected cost of approving < cost of a human review: (1-p)*W < R. */
 export function autoApproveThreshold(c: CostSettings): number {

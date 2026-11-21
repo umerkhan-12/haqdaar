@@ -1,23 +1,43 @@
-import { ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import {
   buildEvent,
   decryptField,
+  encryptField,
   EventBus,
   lookupHash,
   outboxRow,
   randomToken,
+  ServiceClient,
   sha256,
   signAccessToken,
   type AuthUser,
 } from '@haqdaar/nest-kit';
-import type { Role, TokenPair } from '@haqdaar/shared';
+import type { Role, SignupVerifyRequest, TokenPair } from '@haqdaar/shared';
 import { PrismaService } from '../prisma.service';
 import { env } from '../env';
+import {
+  checkCode,
+  CODE_TTL_MINUTES,
+  hashCode,
+  MAX_CODE_TRIES,
+  newCode,
+  SIGNUP_SENDER,
+  signupSms,
+} from './signup-code';
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
+/** New citizens join the Sahara relief program (the seeded default tenant). */
+export const DEFAULT_TENANT_ID = '00000000-0000-4000-8000-000000000001';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +46,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly bus: EventBus,
+    private readonly client: ServiceClient,
   ) {}
 
   async login(phone: string, password: string, userAgent?: string): Promise<TokenPair> {
@@ -57,7 +78,10 @@ export class AuthService {
     }
 
     const pair = await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null } });
+      await tx.user.update({
+        where: { id: user.id },
+        data: { failedLogins: 0, lockedUntil: null },
+      });
       const event = buildEvent(
         'identity.user.logged_in',
         { userId: user.id },
@@ -68,6 +92,100 @@ export class AuthService {
     });
     this.bus.kick();
     return pair;
+  }
+
+  /**
+   * Sign-up step 1: text a 6-digit code to the phone. The answer is always the same, so nobody
+   * can learn which numbers have an account; a registered number gets an SMS saying so instead.
+   * A new request replaces the old code (one live code per phone).
+   */
+  async signupStart(phone: string): Promise<{ sent: true }> {
+    const normalized = normalizePhone(phone);
+    const phoneHash = lookupHash(normalized, env.PII_HASH_KEY);
+    const existing = await this.prisma.user.findUnique({
+      where: { phoneHash },
+      select: { id: true },
+    });
+
+    let body = signupSms.alreadyRegistered();
+    if (!existing) {
+      const code = newCode();
+      const data = {
+        codeHash: hashCode(normalized, code, env.PII_HASH_KEY),
+        expiresAt: new Date(Date.now() + CODE_TTL_MINUTES * 60_000),
+        attempts: 0,
+        usedAt: null,
+      };
+      await this.prisma.signupCode.upsert({
+        where: { phoneHash },
+        update: data,
+        create: { phoneHash, ...data },
+      });
+      body = signupSms.code(code);
+    }
+    await this.client.call('rails-mock', '/mock/sms/send', {
+      method: 'POST',
+      body: { to: phone, body, from: SIGNUP_SENDER },
+      retries: 0,
+    });
+    return { sent: true };
+  }
+
+  /**
+   * Sign-up step 2: check the code, then create the citizen and log them in.
+   * The PIN is stored like a password (argon2id), so the normal login works with it.
+   * The new person id is only reserved here: cases creates the person record on the first claim.
+   */
+  async signupVerify(b: SignupVerifyRequest, userAgent?: string): Promise<TokenPair> {
+    const phone = normalizePhone(b.phone);
+    const phoneHash = lookupHash(phone, env.PII_HASH_KEY);
+
+    // Count the try first (atomic), so parallel guesses cannot get more than the limit.
+    await this.prisma.signupCode.updateMany({
+      where: { phoneHash, usedAt: null, attempts: { lte: MAX_CODE_TRIES } },
+      data: { attempts: { increment: 1 } },
+    });
+    const row = await this.prisma.signupCode.findUnique({ where: { phoneHash } });
+    const verdict = checkCode(row, hashCode(phone, b.code, env.PII_HASH_KEY));
+    if (verdict === 'locked')
+      throw new ForbiddenException('Too many wrong codes. Ask for a new code.');
+    if (verdict !== 'ok') throw new BadRequestException('Wrong or expired code');
+
+    const passwordHash = await argon2.hash(b.pin, { type: argon2.argon2id });
+    try {
+      const pair = await this.prisma.$transaction(async (tx) => {
+        // Single use: only one request can claim the code.
+        const claimed = await tx.signupCode.updateMany({
+          where: { phoneHash, usedAt: null },
+          data: { usedAt: new Date() },
+        });
+        if (claimed.count === 0) throw new BadRequestException('Wrong or expired code');
+        const user = await tx.user.create({
+          data: {
+            tenantId: DEFAULT_TENANT_ID,
+            role: 'citizen',
+            name: b.fullName,
+            phoneEnc: encryptField(phone, env.PII_ENC_KEY),
+            phoneHash,
+            passwordHash,
+            personId: randomUUID(),
+          },
+        });
+        const event = buildEvent(
+          'identity.user.registered',
+          { userId: user.id, personId: user.personId! },
+          { source: 'identity', tenantId: user.tenantId },
+        );
+        await tx.outboxEvent.create({ data: outboxRow(event) });
+        return this.issue(tx, user, randomUUID(), undefined, userAgent);
+      });
+      this.bus.kick();
+      return pair;
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2002')
+        throw new ConflictException('This phone number already has an account');
+      throw err;
+    }
   }
 
   /**
@@ -87,7 +205,10 @@ export class AuthService {
         where: { familyId: row.familyId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
-      this.logger.warn({ userId: row.userId, familyId: row.familyId }, 'Refresh token reuse detected');
+      this.logger.warn(
+        { userId: row.userId, familyId: row.familyId },
+        'Refresh token reuse detected',
+      );
       throw new UnauthorizedException('Session ended for your safety. Please log in again.');
     }
     if (row.expiresAt < new Date() || !row.user.active) {
@@ -124,7 +245,12 @@ export class AuthService {
    * carry `obo` = the family, so every service scopes data and consent to them.
    * 5 wrong PINs lock that family for this helper for 15 minutes.
    */
-  async actFor(helper: AuthUser, personId: string, pin: string, userAgent?: string): Promise<TokenPair> {
+  async actFor(
+    helper: AuthUser,
+    personId: string,
+    pin: string,
+    userAgent?: string,
+  ): Promise<TokenPair> {
     const link = await this.prisma.helperLink.findUnique({
       where: { helperId_personId: { helperId: helper.id, personId } },
     });
@@ -138,14 +264,18 @@ export class AuthService {
         where: { id: link.id },
         data: {
           failedPins: failed,
-          lockedUntil: failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
+          lockedUntil:
+            failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
         },
       });
       throw new UnauthorizedException('Wrong PIN');
     }
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: helper.id } });
     return this.prisma.$transaction(async (tx) => {
-      await tx.helperLink.update({ where: { id: link.id }, data: { failedPins: 0, lockedUntil: null } });
+      await tx.helperLink.update({
+        where: { id: link.id },
+        data: { failedPins: 0, lockedUntil: null },
+      });
       return this.issue(tx, user, randomUUID(), personId, userAgent);
     });
   }

@@ -29,7 +29,10 @@ export function ScamCheck() {
 
   return (
     <CitizenShell>
-      <Link href="/citizen" className="mb-4 inline-flex min-h-12 min-w-12 items-center px-2 text-brand underline">
+      <Link
+        href="/citizen"
+        className="mb-4 inline-flex min-h-12 min-w-12 items-center px-2 text-brand underline"
+      >
         {t('back')}
       </Link>
       <div className="mb-4 flex items-center gap-3">

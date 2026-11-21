@@ -30,14 +30,22 @@ test('PII is removed before the prompt (Urdu digits too)', () => {
 });
 
 test('valid seal → GENUINE without calling AI', async () => {
-  const msg = sealMessage('Sahara: Rs 12,000 sent to your account.', SECRET, new Date('2030-01-01'));
+  const msg = sealMessage(
+    'Sahara: Rs 12,000 sent to your account.',
+    SECRET,
+    new Date('2030-01-01'),
+  );
   const r = await scamCheck(offline(), msg, SECRET);
   assert.equal(r.verdict, 'GENUINE');
   assert.equal(r.meta, null);
 });
 
 test('fee + PIN request → SCAM even with AI off (Kill AI)', async () => {
-  const r = await scamCheck(offline(), 'BISP: apna PIN bhejein aur Rs 500 fee jama karayen', SECRET);
+  const r = await scamCheck(
+    offline(),
+    'BISP: apna PIN bhejein aur Rs 500 fee jama karayen',
+    SECRET,
+  );
   assert.equal(r.verdict, 'SCAM');
   assert.ok(r.redFlags.includes('asks_secret'));
   assert.ok(r.redFlags.includes('pay_to_receive'));
@@ -63,7 +71,10 @@ test('extraction: LLM never sees the CNIC, we fill it locally', async () => {
     },
   };
   const router = new AiRouter('dev', [p, new MockProvider()]);
-  const r = await extractClaim(router, 'Mera naam Zainab Bibi, CNIC 42101-1234567-3, Thatta, 5 log');
+  const r = await extractClaim(
+    router,
+    'Mera naam Zainab Bibi, CNIC 42101-1234567-3, Thatta, 5 log',
+  );
   assert.ok(!seen.includes('42101'));
   assert.equal(r.extraction?.cnic, '42101-1234567-3');
   assert.equal(r.needsHuman, false);
