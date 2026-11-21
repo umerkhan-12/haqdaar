@@ -1,0 +1,37 @@
+# One-box production: Postgres + the whole app + Caddy (automatic HTTPS).
+# Run by deploy/vps/deploy.sh; secrets live in .env on the server (generated there, never in git).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: haqdaar
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: haqdaar
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U haqdaar']
+      interval: 3s
+      retries: 20
+
+  app:
+    build: { context: ../.., dockerfile: Dockerfile.allinone }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://haqdaar:${DB_PASSWORD}@db:5432/haqdaar
+      CORS_ORIGINS: https://${DOMAIN}
+    depends_on:
+      db: { condition: service_healthy }
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ['80:80', '443:443']
+    command: caddy reverse-proxy --from ${DOMAIN} --to app:7860
+    volumes: [caddy:/data]
+    depends_on: [app]
+
+volumes:
+  pgdata:
+  caddy:
