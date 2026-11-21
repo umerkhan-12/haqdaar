@@ -40,6 +40,8 @@ jobs:
         run: pnpm db:generate
       - name: Build
         run: pnpm build
+      - name: Build web app
+        run: pnpm --filter @haqdaar/web build
       - name: Unit tests
         run: pnpm test
       - name: Golden-set evaluation (decision engine)
