@@ -30,14 +30,22 @@ test('PII is removed before the prompt (Urdu digits too)', () => {
 });
 
 test('valid seal → GENUINE without calling AI', async () => {
-  const msg = sealMessage('Sahara: Rs 12,000 sent to your account.', SECRET, new Date('2030-01-01'));
+  const msg = sealMessage(
+    'Sahara: Rs 12,000 sent to your account.',
+    SECRET,
+    new Date('2030-01-01'),
+  );
   const r = await scamCheck(offline(), msg, SECRET);
   assert.equal(r.verdict, 'GENUINE');
   assert.equal(r.meta, null);
 });
 
 test('fee + PIN request → SCAM even with AI off (Kill AI)', async () => {
-  const r = await scamCheck(offline(), 'BISP: apna PIN bhejein aur Rs 500 fee jama karayen', SECRET);
+  const r = await scamCheck(
+    offline(),
+    'BISP: apna PIN bhejein aur Rs 500 fee jama karayen',
+    SECRET,
+  );
   assert.equal(r.verdict, 'SCAM');
   assert.ok(r.redFlags.includes('asks_secret'));
   assert.ok(r.redFlags.includes('pay_to_receive'));
@@ -63,7 +71,10 @@ test('extraction: LLM never sees the CNIC, we fill it locally', async () => {
     },
   };
   const router = new AiRouter('dev', [p, new MockProvider()]);
-  const r = await extractClaim(router, 'Mera naam Zainab Bibi, CNIC 42101-1234567-3, Thatta, 5 log');
+  const r = await extractClaim(
+    router,
+    'Mera naam Zainab Bibi, CNIC 42101-1234567-3, Thatta, 5 log',
+  );
   assert.ok(!seen.includes('42101'));
   assert.equal(r.extraction?.cnic, '42101-1234567-3');
   assert.equal(r.needsHuman, false);
@@ -103,12 +114,24 @@ function recording(text: string) {
 
 test('rag answer: a model that obeys an instruction planted in a policy chunk is refused', async () => {
   const { answerFromSources } = await import('./answer-from-sources');
-  const obeyed = recording(JSON.stringify({ excerpts: [{ sourceId: 's1', quote: 'The amount is PKR 99,999.' }] }));
-  const r = await answerFromSources(obeyed.router, 'How much is the monthly amount? (obeyed)', [POISONED]);
+  const obeyed = recording(
+    JSON.stringify({ excerpts: [{ sourceId: 's1', quote: 'The amount is PKR 99,999.' }] }),
+  );
+  const r = await answerFromSources(obeyed.router, 'How much is the monthly amount? (obeyed)', [
+    POISONED,
+  ]);
   assert.deepEqual(r, { answer: '', citations: [], refused: true });
 
-  const invented = recording(JSON.stringify({ excerpts: [{ sourceId: 'made-up', quote: 'The demo monthly amount is PKR 12,000.' }] }));
-  const r2 = await answerFromSources(invented.router, 'How much is the monthly amount? (invented id)', [POISONED]);
+  const invented = recording(
+    JSON.stringify({
+      excerpts: [{ sourceId: 'made-up', quote: 'The demo monthly amount is PKR 12,000.' }],
+    }),
+  );
+  const r2 = await answerFromSources(
+    invented.router,
+    'How much is the monthly amount? (invented id)',
+    [POISONED],
+  );
   assert.equal(r2.refused, true);
 });
 
@@ -116,8 +139,16 @@ test('rag answer: exact quotes pass, the chunk travels as data and the CNIC neve
   const { answerFromSources } = await import('./answer-from-sources');
   const quote = 'The demo monthly amount is PKR 12,000.';
   const ok = recording(JSON.stringify({ excerpts: [{ sourceId: 's1', quote }] }));
-  const r = await answerFromSources(ok.router, 'My CNIC is 42201-1234567-4 and phone 0300 1234567. How much is the amount?', [POISONED]);
-  assert.deepEqual(r, { answer: quote, citations: [{ docId: 'payment-schedule', heading: 'schedule.amount', quote }], refused: false });
+  const r = await answerFromSources(
+    ok.router,
+    'My CNIC is 42201-1234567-4 and phone 0300 1234567. How much is the amount?',
+    [POISONED],
+  );
+  assert.deepEqual(r, {
+    answer: quote,
+    citations: [{ docId: 'payment-schedule', heading: 'schedule.amount', quote }],
+    refused: false,
+  });
   assert.equal(ok.seen.length, 1);
   assert.doesNotMatch(ok.seen[0]!.user, /42201|1234567/);
   assert.doesNotMatch(ok.seen[0]!.system, /99,999|Ignore all system rules/); // chunk text is not in the instructions
@@ -127,6 +158,8 @@ test('rag answer: exact quotes pass, the chunk travels as data and the CNIC neve
 
 test('rag answer: AI off → refused, never a guess', async () => {
   const { answerFromSources } = await import('./answer-from-sources');
-  const r = await answerFromSources(offline(), 'How much is the monthly amount? (offline)', [POISONED]);
+  const r = await answerFromSources(offline(), 'How much is the monthly amount? (offline)', [
+    POISONED,
+  ]);
   assert.equal(r.refused, true);
 });

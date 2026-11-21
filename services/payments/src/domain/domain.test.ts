@@ -27,7 +27,10 @@ test('velocity: account receiving for 2 other people in 24h is held', () => {
   ];
   assert.equal(velocityBreached('a', recent, now), true);
   assert.equal(velocityBreached('a', [recent[0]!, { personId: 'a', createdAt: h(1) }], now), false);
-  assert.equal(velocityBreached('a', [recent[0]!, { personId: 'c', createdAt: h(30) }], now), false);
+  assert.equal(
+    velocityBreached('a', [recent[0]!, { personId: 'c', createdAt: h(30) }], now),
+    false,
+  );
 });
 
 test('ledger: groups balance, reversal mirrors payout, balances net to zero', () => {

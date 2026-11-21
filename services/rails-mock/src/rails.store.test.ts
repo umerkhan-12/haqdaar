@@ -6,7 +6,10 @@ import { RailsStore, TIMEOUT_DELAY_MS, type TransferRequest } from './rails.stor
 const NOW = new Date('2026-11-21T10:00:00Z');
 const store = () => new RailsStore(buildSeed(), () => NOW);
 
-const transfer = (id: string, creditor: TransferRequest['creditor'] = { name: 'Zainab Bibi', alias: '03001110001' }): TransferRequest => ({
+const transfer = (
+  id: string,
+  creditor: TransferRequest['creditor'] = { name: 'Zainab Bibi', alias: '03001110001' },
+): TransferRequest => ({
   endToEndId: id,
   amount: 12_000,
   currency: 'PKR',
@@ -81,18 +84,27 @@ test('a fault targeted at one alias leaves other transfers alone', () => {
   s.setFaults({ raast: { mode: 'fail', remaining: 1, alias: '03001110007' } });
   assert.equal(s.transfer(transfer('E2E-0007')).result.status, 'ACSC');
   assert.equal(s.getFaults().raast.remaining, 1);
-  const r = s.transfer(transfer('E2E-0008', { name: 'Rashida Begum', iban: 'PK52SAHA0000007654321098' }));
+  const r = s.transfer(
+    transfer('E2E-0008', { name: 'Rashida Begum', iban: 'PK52SAHA0000007654321098' }),
+  );
   assert.equal(r.result.status, 'RJCT', 'paying by IBAN still hits the fault aimed at the alias');
   assert.equal(s.getFaults().raast.mode, 'none');
 });
 
 test('NADRA: name variants match, different names do not, deceased is reported', () => {
   const s = store();
-  const urdu = s.verifyNadra(DEMO_SCENARIOS.urduScriptRecord.cnic, DEMO_SCENARIOS.urduScriptRecord.saysName);
+  const urdu = s.verifyNadra(
+    DEMO_SCENARIOS.urduScriptRecord.cnic,
+    DEMO_SCENARIOS.urduScriptRecord.saysName,
+  );
   assert.equal(urdu.match, true);
   const wrong = s.verifyNadra('4220112345674', 'Muhammad Aslam');
   assert.equal(wrong.match, false);
   assert.equal(wrong.record?.fullName, 'Zainab Bibi');
   assert.equal(s.verifyNadra(DEMO_SCENARIOS.deceased).record?.deceased, true);
-  assert.deepEqual(s.verifyNadra('99999-9999999-9'), { match: false, nameScore: null, record: null });
+  assert.deepEqual(s.verifyNadra('99999-9999999-9'), {
+    match: false,
+    nameScore: null,
+    record: null,
+  });
 });

@@ -37,7 +37,11 @@ export function signInternalToken(from: string, to: string, secret: string): str
   });
 }
 
-export function verifyInternalToken(token: string, me: string, secret: string): { service: string } {
+export function verifyInternalToken(
+  token: string,
+  me: string,
+  secret: string,
+): { service: string } {
   const payload = jwt.verify(token, secret, {
     algorithms: ['HS256'],
     audience: `internal:${me}`,

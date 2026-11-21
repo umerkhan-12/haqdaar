@@ -48,7 +48,9 @@ export interface AsyncState<T> {
 
 /** Load data for a screen; `deps` change → reload. */
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
-  const [state, setState] = useState<{ data?: T; error?: unknown; loading: boolean }>({ loading: true });
+  const [state, setState] = useState<{ data?: T; error?: unknown; loading: boolean }>({
+    loading: true,
+  });
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((n) => n + 1), []);
 

@@ -75,7 +75,11 @@ export const EventSchemas = {
     fallbackUsed: z.boolean(),
   }),
   'ai.kill_switch.changed': z.object({ killed: z.boolean() }),
-  'judge.scenario.ran': z.object({ scenarioId: z.string(), ok: z.boolean(), durationMs: z.number() }),
+  'judge.scenario.ran': z.object({
+    scenarioId: z.string(),
+    ok: z.boolean(),
+    durationMs: z.number(),
+  }),
   'judge.demo.reset': z.object({ services: z.array(z.string()) }),
 } as const;
 

@@ -1,4 +1,10 @@
-import { HttpException, Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  HttpException,
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { serviceUrl, type ServiceName } from '@haqdaar/shared';
 import { signInternalToken } from '../auth/tokens';
 import { INTERNAL_HEADER } from '../auth/guards';

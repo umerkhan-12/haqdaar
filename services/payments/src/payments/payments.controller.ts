@@ -27,7 +27,11 @@ export class PaymentsController {
   @Get()
   list(@CurrentUser() user: AuthUser, @ZQuery(ListQuery) q: z.infer<typeof ListQuery>) {
     return this.prisma.payment.findMany({
-      where: { tenantId: user.tenantId, ...(q.state ? { state: q.state } : {}), ...(q.caseId ? { caseId: q.caseId } : {}) },
+      where: {
+        tenantId: user.tenantId,
+        ...(q.state ? { state: q.state } : {}),
+        ...(q.caseId ? { caseId: q.caseId } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: q.take,
     });

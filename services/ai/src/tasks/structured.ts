@@ -45,7 +45,9 @@ export class TtlCache<V> {
     if (this.map.size >= this.max) this.map.delete(this.map.keys().next().value as string);
     this.map.set(k, { v, exp: Date.now() + this.ttlMs });
   }
-  clear(): void { this.map.clear(); }
+  clear(): void {
+    this.map.clear();
+  }
 }
 
 const cache = new TtlCache<unknown>();
@@ -69,7 +71,11 @@ export async function structured<S extends ZodTypeAny>(
   const hit = router.isKilled ? undefined : cache.get(key);
   const base = { task: req.task, latencyMs: 0, fallbackUsed: false, repaired: false };
   if (hit !== undefined) {
-    return { ok: true, data: hit as z.infer<S>, meta: { ...base, provider: 'cache', cached: true, calls: [] } };
+    return {
+      ok: true,
+      data: hit as z.infer<S>,
+      meta: { ...base, provider: 'cache', cached: true, calls: [] },
+    };
   }
 
   const first = await router.complete({ ...req, json: true });
@@ -80,14 +86,16 @@ export async function structured<S extends ZodTypeAny>(
     latencyMs: first.latencyMs,
     fallbackUsed: first.fallbackUsed,
     cached: false,
-    calls: [{
-      provider: first.provider,
-      model: first.value.model,
-      latencyMs: first.latencyMs,
-      fallbackUsed: first.fallbackUsed,
-      inputTokens: first.value.inputTokens,
-      outputTokens: first.value.outputTokens,
-    }],
+    calls: [
+      {
+        provider: first.provider,
+        model: first.value.model,
+        latencyMs: first.latencyMs,
+        fallbackUsed: first.fallbackUsed,
+        inputTokens: first.value.inputTokens,
+        outputTokens: first.value.outputTokens,
+      },
+    ],
   };
   if (first.isMock) return { ok: false, reason: 'ai_off', meta };
 
@@ -137,7 +145,10 @@ function tryParse<S extends ZodTypeAny>(
     if (r.success) return { ok: true, data: r.data };
     return {
       ok: false,
-      error: r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 400),
+      error: r.error.issues
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ')
+        .slice(0, 400),
     };
   } catch (e) {
     return { ok: false, error: `not JSON (${(e as Error).message})` };

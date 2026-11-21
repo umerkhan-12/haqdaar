@@ -4,7 +4,17 @@ import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { CitizenShell } from '@/components/citizen-shell';
 import { IconCheck, IconLock, IconMic } from '@/components/icons';
-import { AudioButton, Button, ErrorState, Field, inputCls, laneTone, LinkButton, Skeleton, StatusCard } from '@/components/ui';
+import {
+  AudioButton,
+  Button,
+  ErrorState,
+  Field,
+  inputCls,
+  laneTone,
+  LinkButton,
+  Skeleton,
+  StatusCard,
+} from '@/components/ui';
 import { api, ApiError, type CaseDetail, type ClaimInput } from '@/lib/api';
 import { useSession } from '@/lib/hooks';
 import { useI18n, type MessageKey } from '@/lib/i18n';
@@ -21,7 +31,17 @@ interface Details {
   alias: string;
 }
 
-const DISTRICTS = ['Thatta', 'Sujawal', 'Badin', 'Tharparkar', 'Karachi West', 'Karachi East', 'Hyderabad', 'Sukkur', 'Larkana'];
+const DISTRICTS = [
+  'Thatta',
+  'Sujawal',
+  'Badin',
+  'Tharparkar',
+  'Karachi West',
+  'Karachi East',
+  'Hyderabad',
+  'Sukkur',
+  'Larkana',
+];
 const CONSENTS = [
   { purpose: 'identity_verification', label: 'consentIdentity' },
   { purpose: 'household_data', label: 'consentHousehold' },
@@ -37,11 +57,19 @@ export function ClaimFlow() {
   const { t, speak, lang } = useI18n();
   const session = useSession();
   const [step, setStep] = useState<Step>('speak');
-  const [details, setDetails] = useState<Details>({ fullName: '', cnic: '', district: '', householdSize: '', alias: '' });
+  const [details, setDetails] = useState<Details>({
+    fullName: '',
+    cnic: '',
+    district: '',
+    householdSize: '',
+    alias: '',
+  });
   const [aiUnsure, setAiUnsure] = useState(false);
   // Consent must be an explicit act: nothing is pre-ticked.
   const [consents, setConsents] = useState<string[]>([]);
-  const [result, setResult] = useState<{ kind: 'sent'; case: CaseDetail } | { kind: 'saved' } | null>(null);
+  const [result, setResult] = useState<
+    { kind: 'sent'; case: CaseDetail } | { kind: 'saved' } | null
+  >(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<'' | 'recording' | 'understanding' | 'sending'>('');
   const key = useRef(crypto.randomUUID());
@@ -136,11 +164,16 @@ export function ClaimFlow() {
   }
 
   const detailsValid =
-    details.fullName.trim().length >= 2 && /^\d{5}-\d{7}-\d$/.test(details.cnic) && /^03\d{9}$/.test(details.alias.replace(/\D/g, ''));
+    details.fullName.trim().length >= 2 &&
+    /^\d{5}-\d{7}-\d$/.test(details.cnic) &&
+    /^03\d{9}$/.test(details.alias.replace(/\D/g, ''));
 
   return (
     <CitizenShell>
-      <Link href="/citizen" className="mb-4 inline-flex min-h-12 min-w-12 items-center px-2 text-brand underline">
+      <Link
+        href="/citizen"
+        className="mb-4 inline-flex min-h-12 min-w-12 items-center px-2 text-brand underline"
+      >
         {t('back')}
       </Link>
 
@@ -168,7 +201,9 @@ export function ClaimFlow() {
               <IconMic className="h-20 w-20" />
             </button>
           )}
-          {busy === 'recording' && <p className="text-xl font-semibold text-red-700">{t('recording')}</p>}
+          {busy === 'recording' && (
+            <p className="text-xl font-semibold text-red-700">{t('recording')}</p>
+          )}
           <Button variant="ghost" onClick={goManual} className="w-full">
             {t('typeInstead')}
           </Button>
@@ -180,10 +215,22 @@ export function ClaimFlow() {
           <h1 className="text-2xl font-bold">{t('checkDetails')}</h1>
           {aiUnsure && <StatusCard tone="warn" title={t('aiUnsure')} />}
           <Field label={t('fullName')}>
-            <input className={inputCls} value={details.fullName} onChange={set('fullName')} autoComplete="name" />
+            <input
+              className={inputCls}
+              value={details.fullName}
+              onChange={set('fullName')}
+              autoComplete="name"
+            />
           </Field>
           <Field label={t('cnic')}>
-            <input className={inputCls} dir="ltr" inputMode="numeric" placeholder="42101-1234567-1" value={details.cnic} onChange={set('cnic')} />
+            <input
+              className={inputCls}
+              dir="ltr"
+              inputMode="numeric"
+              placeholder="42101-1234567-1"
+              value={details.cnic}
+              onChange={set('cnic')}
+            />
           </Field>
           <Field label={t('district')}>
             <select className={inputCls} value={details.district} onChange={set('district')}>
@@ -194,10 +241,23 @@ export function ClaimFlow() {
             </select>
           </Field>
           <Field label={t('household')}>
-            <input className={inputCls} dir="ltr" inputMode="numeric" value={details.householdSize} onChange={set('householdSize')} />
+            <input
+              className={inputCls}
+              dir="ltr"
+              inputMode="numeric"
+              value={details.householdSize}
+              onChange={set('householdSize')}
+            />
           </Field>
           <Field label={t('payoutPhone')}>
-            <input className={inputCls} dir="ltr" inputMode="tel" placeholder="03XXXXXXXXX" value={details.alias} onChange={set('alias')} />
+            <input
+              className={inputCls}
+              dir="ltr"
+              inputMode="tel"
+              placeholder="03XXXXXXXXX"
+              value={details.alias}
+              onChange={set('alias')}
+            />
           </Field>
           <Button className="w-full" disabled={!detailsValid} onClick={() => setStep('photo')}>
             {t('next')}
@@ -212,7 +272,10 @@ export function ClaimFlow() {
           <div className="flex items-center gap-3">
             <IconLock className="h-8 w-8 text-brand" />
             <h1 className="flex-1 text-2xl font-bold">{t('consentTitle')}</h1>
-            <AudioButton text={[...CONSENTS.map((c) => t(c.label)), t('consentNote')].join('. ')} className="text-brand" />
+            <AudioButton
+              text={[...CONSENTS.map((c) => t(c.label)), t('consentNote')].join('. ')}
+              className="text-brand"
+            />
           </div>
           {CONSENTS.map((c) => {
             const on = consents.includes(c.purpose);
@@ -222,12 +285,16 @@ export function ClaimFlow() {
                 type="button"
                 role="checkbox"
                 aria-checked={on}
-                onClick={() => setConsents((cs) => (on ? cs.filter((x) => x !== c.purpose) : [...cs, c.purpose]))}
+                onClick={() =>
+                  setConsents((cs) => (on ? cs.filter((x) => x !== c.purpose) : [...cs, c.purpose]))
+                }
                 className={`flex min-h-20 w-full items-center gap-4 rounded-2xl border-2 p-4 text-start text-lg ${
                   on ? 'border-brand bg-brand-soft' : 'border-slate-300 bg-white'
                 }`}
               >
-                <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg border-2 ${on ? 'border-brand bg-brand text-white' : 'border-slate-400'}`}>
+                <span
+                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg border-2 ${on ? 'border-brand bg-brand text-white' : 'border-slate-400'}`}
+                >
                   {on && <IconCheck className="h-6 w-6" />}
                 </span>
                 {t(c.label)}
@@ -251,9 +318,15 @@ export function ClaimFlow() {
               <StatusCard
                 tone={laneTone(result.case.lane)}
                 title={t(`lane${result.case.lane ?? 'HUMAN_REVIEW'}` as MessageKey)}
-                body={lang === 'ur' ? result.case.decision?.explanationUr : result.case.decision?.explanationEn}
+                body={
+                  lang === 'ur'
+                    ? result.case.decision?.explanationUr
+                    : result.case.decision?.explanationEn
+                }
               />
-              {result.case.lane !== 'AUTO_APPROVE' && <StatusCard tone="info" title={t('waitingOfficer')} />}
+              {result.case.lane !== 'AUTO_APPROVE' && (
+                <StatusCard tone="info" title={t('waitingOfficer')} />
+              )}
             </>
           )}
           <LinkButton href="/citizen/status">{t('status')}</LinkButton>

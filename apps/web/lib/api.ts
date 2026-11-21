@@ -51,7 +51,12 @@ async function refresh(): Promise<boolean> {
   return refreshing;
 }
 
-export async function request<T>(method: string, path: string, o: Options = {}, retried = false): Promise<T> {
+export async function request<T>(
+  method: string,
+  path: string,
+  o: Options = {},
+  retried = false,
+): Promise<T> {
   const headers: Record<string, string> = { ...o.headers };
   const token = o.token ?? (o.auth === false ? undefined : getSession()?.accessToken);
   if (token) headers.authorization = `Bearer ${token}`;
@@ -90,7 +95,8 @@ function safeJson(text: string): unknown {
   }
 }
 
-export const items = <T>(b: unknown): T[] => (Array.isArray(b) ? (b as T[]) : ((b as { items?: T[] })?.items ?? []));
+export const items = <T>(b: unknown): T[] =>
+  Array.isArray(b) ? (b as T[]) : ((b as { items?: T[] })?.items ?? []);
 
 // ---------- shapes ----------
 export type Lane = 'AUTO_APPROVE' | 'ASK_MORE' | 'HUMAN_REVIEW';
@@ -124,7 +130,9 @@ export interface Decision {
   lane: Lane;
   confidence: number;
   eligible: boolean;
-  clauses: { id: string; passed?: boolean; ok?: boolean; textUr?: string; textEn?: string }[] | Record<string, boolean>;
+  clauses:
+    | { id: string; passed?: boolean; ok?: boolean; textUr?: string; textEn?: string }[]
+    | Record<string, boolean>;
   hardFlags: string[];
   explanationUr: string;
   explanationEn: string;
@@ -255,26 +263,37 @@ export interface ScenarioResult extends Scenario {
 export const api = {
   login: (phone: string, password: string) =>
     request<Tokens>('POST', '/auth/login', { body: { phone, password }, auth: false }),
-  logout: (refreshToken: string) => request<void>('POST', '/auth/logout', { body: { refreshToken }, auth: false }),
+  logout: (refreshToken: string) =>
+    request<void>('POST', '/auth/logout', { body: { refreshToken }, auth: false }),
   families: (token?: string) =>
-    request<{ personId: string; label: string; locked: boolean }[]>('GET', '/auth/families', { token }),
+    request<{ personId: string; label: string; locked: boolean }[]>('GET', '/auth/families', {
+      token,
+    }),
   actFor: (personId: string, pin: string, token?: string) =>
     request<Tokens>('POST', '/auth/act-for', { body: { personId, pin }, token }),
 
   consents: () => request<{ id: string; purpose: string; status: string }[]>('GET', '/consents'),
-  grantConsent: (personId: string, purpose: string) => request('POST', '/consents', { body: { personId, purpose } }),
+  grantConsent: (personId: string, purpose: string) =>
+    request('POST', '/consents', { body: { personId, purpose } }),
   withdrawConsent: (id: string) => request('POST', `/consents/${id}/withdraw`),
 
   submitClaim: (claim: ClaimInput, idempotencyKey: string) =>
-    request<CaseDetail>('POST', '/cases', { body: claim, headers: { 'idempotency-key': idempotencyKey } }),
+    request<CaseDetail>('POST', '/cases', {
+      body: claim,
+      headers: { 'idempotency-key': idempotencyKey },
+    }),
   resubmit: (id: string) => request<CaseDetail>('POST', `/cases/${id}/resubmit`),
   cases: () => request<CaseSummary[]>('GET', '/cases'),
   case: (id: string) => request<CaseDetail>('GET', `/cases/${id}`),
   queue: () => request<CaseSummary[]>('GET', '/queue'),
-  approve: (id: string, note?: string) => request('POST', `/cases/${id}/approve`, { body: { note } }),
-  reject: (id: string, reason: string) => request('POST', `/cases/${id}/reject`, { body: { reason } }),
-  requestInfo: (id: string, message: string) => request('POST', `/cases/${id}/request-info`, { body: { message } }),
-  trace: (decisionId: string) => request<{ decision: unknown; ruleVersion: unknown }>('GET', `/decisions/${decisionId}/trace`),
+  approve: (id: string, note?: string) =>
+    request('POST', `/cases/${id}/approve`, { body: { note } }),
+  reject: (id: string, reason: string) =>
+    request('POST', `/cases/${id}/reject`, { body: { reason } }),
+  requestInfo: (id: string, message: string) =>
+    request('POST', `/cases/${id}/request-info`, { body: { message } }),
+  trace: (decisionId: string) =>
+    request<{ decision: unknown; ruleVersion: unknown }>('GET', `/decisions/${decisionId}/trace`),
 
   transcribe: (audio: Blob) => {
     const form = new FormData();
@@ -287,24 +306,34 @@ export const api = {
     if (cnic) form.append('cnic', cnic);
     return request<DocumentCheck>('POST', '/ai/document-check', { form });
   },
-  extract: (transcript: string) => request<Extraction>('POST', '/ai/extract-claim', { body: { transcript } }),
+  extract: (transcript: string) =>
+    request<Extraction>('POST', '/ai/extract-claim', { body: { transcript } }),
   scamCheck: (text: string) => request<ScamVerdict>('POST', '/ai/scam-check', { body: { text } }),
   aiStatus: () => request<AiStatus>('GET', '/ai/status'),
   setKill: (killed: boolean) => request<AiStatus>('POST', '/ai/kill-switch', { body: { killed } }),
-  setProfile: (profile: AiStatus['profile']) => request<AiStatus>('POST', '/ai/profile', { body: { profile } }),
+  setProfile: (profile: AiStatus['profile']) =>
+    request<AiStatus>('POST', '/ai/profile', { body: { profile } }),
 
   payments: (state?: string, caseId?: string) =>
-    request<Payment[]>('GET', `/payments?${new URLSearchParams({ ...(state ? { state } : {}), ...(caseId ? { caseId } : {}) })}`),
-  release: (id: string, note: string) => request<Payment>('POST', `/payments/${id}/release`, { body: { note } }),
+    request<Payment[]>(
+      'GET',
+      `/payments?${new URLSearchParams({ ...(state ? { state } : {}), ...(caseId ? { caseId } : {}) })}`,
+    ),
+  release: (id: string, note: string) =>
+    request<Payment>('POST', `/payments/${id}/release`, { body: { note } }),
   approvePayment: (id: string) => request<Payment>('POST', `/payments/${id}/approve`, { body: {} }),
   balances: () =>
-    request<{ balanced: boolean; entries: number; accounts: { account: string; balance: number }[] }>('GET', '/ledger/balances'),
+    request<{
+      balanced: boolean;
+      entries: number;
+      accounts: { account: string; balance: number }[];
+    }>('GET', '/ledger/balances'),
   reconcile: () =>
-    request<{ matched: number; mismatched: number; items: { endToEndId: string; status: string }[] }>(
-      'POST',
-      '/reconciliation/run',
-      { body: {} },
-    ),
+    request<{
+      matched: number;
+      mismatched: number;
+      items: { endToEndId: string; status: string }[];
+    }>('POST', '/reconciliation/run', { body: {} }),
 
   rules: () => request<RuleVersion[]>('GET', '/rules'),
   draftRule: (def: Pick<RuleVersion, 'clauses' | 'amount'> & { notes?: string }) =>
@@ -312,31 +341,47 @@ export const api = {
   simulate: (id: string) => request<Simulation>('POST', `/rules/versions/${id}/simulate`),
   publish: (id: string) => request<RuleVersion>('POST', `/rules/versions/${id}/publish`),
   costs: () =>
-    request<{ wrongApproval: number; humanReview: number; askMore: number; autoApproveThreshold: number }>(
-      'GET',
-      '/cost-settings',
-    ),
+    request<{
+      wrongApproval: number;
+      humanReview: number;
+      askMore: number;
+      autoApproveThreshold: number;
+    }>('GET', '/cost-settings'),
   setCosts: (c: { wrongApproval: number; humanReview: number; askMore: number }) =>
     request<{ autoApproveThreshold: number }>('PUT', '/cost-settings', { body: c }),
 
   apiKeys: () =>
-    request<{ id: string; name: string; prefix: string; scopes: string[]; lastUsedAt: string | null; revokedAt: string | null }[]>(
-      'GET',
-      '/api-keys',
-    ),
+    request<
+      {
+        id: string;
+        name: string;
+        prefix: string;
+        scopes: string[];
+        lastUsedAt: string | null;
+        revokedAt: string | null;
+      }[]
+    >('GET', '/api-keys'),
   createKey: (name: string, scopes: string[]) =>
     request<{ id: string; key: string }>('POST', '/api-keys', { body: { name, scopes } }),
   revokeKey: (id: string) => request<void>('DELETE', `/api-keys/${id}`),
 
-  audit: (q: string) => request<{ items: AuditEntry[]; nextCursor: number | null }>('GET', `/audit?${q}`),
+  audit: (q: string) =>
+    request<{ items: AuditEntry[]; nextCursor: number | null }>('GET', `/audit?${q}`),
   verifyChain: () =>
-    request<{ valid: boolean; checked: number; brokenAtSeq?: number; reason?: string }>('POST', '/audit/verify-chain', {
-      body: {},
-    }),
+    request<{ valid: boolean; checked: number; brokenAtSeq?: number; reason?: string }>(
+      'POST',
+      '/audit/verify-chain',
+      {
+        body: {},
+      },
+    ),
 
   scenarios: () => request<Scenario[]>('GET', '/judge/scenarios'),
   runScenario: (id: string) => request<ScenarioResult>('POST', `/judge/scenarios/${id}/run`),
   resetDemo: () => request<{ ok: boolean }>('POST', '/judge/reset'),
   inbox: (phone: string) =>
-    request<{ messageId: string; from: string; body: string; receivedAt: string }[]>('GET', `/mock/sms/inbox/${phone}`),
+    request<{ messageId: string; from: string; body: string; receivedAt: string }[]>(
+      'GET',
+      `/mock/sms/inbox/${phone}`,
+    ),
 };

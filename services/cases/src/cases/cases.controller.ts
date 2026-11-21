@@ -1,11 +1,27 @@
-import { Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { CurrentUser, Roles, ZBody, ZQuery, type AuthUser } from '@haqdaar/nest-kit';
 import { requireUser } from '../access';
 import { CasesService } from './cases.service';
-import { ApproveBody, AssignBody, CreateCase, ListQuery, RejectBody, RequestInfoBody } from './cases.schemas';
+import {
+  ApproveBody,
+  AssignBody,
+  CreateCase,
+  ListQuery,
+  RejectBody,
+  RequestInfoBody,
+} from './cases.schemas';
 
 @ApiTags('cases')
 @ApiBearerAuth()
@@ -28,7 +44,11 @@ export class CasesController {
   @Roles('citizen', 'helper')
   @Post('cases/:id/resubmit')
   @HttpCode(200)
-  resubmit(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: FastifyRequest) {
+  resubmit(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
     return this.cases.resubmit(requireUser(user), id, req.id);
   }
 

@@ -1,8 +1,23 @@
-import { BadRequestException, Controller, Get, HttpCode, PayloadTooLargeException, Post, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  HttpCode,
+  PayloadTooLargeException,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { MultipartFile } from '@fastify/multipart';
 import type { FastifyRequest } from 'fastify';
-import { CurrentPrincipal, InternalOnly, PartnerScope, Roles, ZBody, type Principal } from '@haqdaar/nest-kit';
+import {
+  CurrentPrincipal,
+  InternalOnly,
+  PartnerScope,
+  Roles,
+  ZBody,
+  type Principal,
+} from '@haqdaar/nest-kit';
 import { ScamCheckRequest } from '@haqdaar/shared';
 import { z } from 'zod';
 import { AiService } from './ai.service';
@@ -10,10 +25,23 @@ import { AiService } from './ai.service';
 const ProfileBody = z.object({ profile: z.enum(['dev', 'demo', 'offline']) });
 const KillBody = z.object({ killed: z.boolean() });
 const ExtractBody = z.object({ transcript: z.string().min(1).max(4000) });
-const EmbedBody = z.object({ text: z.string().min(1).max(4000), taskType: z.enum(['RETRIEVAL_QUERY', 'RETRIEVAL_DOCUMENT']).optional() });
+const EmbedBody = z.object({
+  text: z.string().min(1).max(4000),
+  taskType: z.enum(['RETRIEVAL_QUERY', 'RETRIEVAL_DOCUMENT']).optional(),
+});
 const AnswerSourcesBody = z.object({
   question: z.string().min(1).max(1200),
-  sources: z.array(z.object({ id: z.string().min(1).max(120), docId: z.string().min(1).max(120), heading: z.string().min(1).max(200), content: z.string().min(1).max(6000) })).min(1).max(4),
+  sources: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(120),
+        docId: z.string().min(1).max(120),
+        heading: z.string().min(1).max(200),
+        content: z.string().min(1).max(6000),
+      }),
+    )
+    .min(1)
+    .max(4),
 });
 
 const TypedCnic = z
@@ -24,11 +52,20 @@ const TypedCnic = z
 /** Upload body; over the multipart limit → 413 (multipart throws, which would otherwise be a 500). */
 const readLimited = (file: MultipartFile, what: string) =>
   file.toBuffer().catch((err: { code?: string }) => {
-    if (err.code === 'FST_REQ_FILE_TOO_LARGE') throw new PayloadTooLargeException(`${what} too large (max 5 MB)`);
+    if (err.code === 'FST_REQ_FILE_TOO_LARGE')
+      throw new PayloadTooLargeException(`${what} too large (max 5 MB)`);
     throw err;
   });
 
-const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/m4a'];
+const AUDIO_TYPES = [
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/m4a',
+];
 
 @ApiTags('ai')
 @ApiBearerAuth()
@@ -83,7 +120,8 @@ export class AiController {
     const file = await req.file();
     if (!file) throw new BadRequestException('Audio file is required (field "file")');
     const mime = file.mimetype.split(';')[0]!;
-    if (!AUDIO_TYPES.includes(mime)) throw new BadRequestException(`Unsupported audio type: ${mime}`);
+    if (!AUDIO_TYPES.includes(mime))
+      throw new BadRequestException(`Unsupported audio type: ${mime}`);
     return this.ai.transcribe(await readLimited(file, 'Audio'), mime);
   }
 

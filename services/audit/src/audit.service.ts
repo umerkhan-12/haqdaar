@@ -3,7 +3,14 @@ import { EventBus } from '@haqdaar/nest-kit';
 import { ALL_EVENT_TYPES, EventEnvelope } from '@haqdaar/shared';
 import { Prisma, type AuditLog } from '../generated/prisma';
 import { PrismaService } from './prisma.service';
-import { chainHash, entityIdOf, GENESIS_HASH, verifyRows, type ChainFields, type VerifyResult } from './chain';
+import {
+  chainHash,
+  entityIdOf,
+  GENESIS_HASH,
+  verifyRows,
+  type ChainFields,
+  type VerifyResult,
+} from './chain';
 
 /** Any constant works; it only has to be the same for every appender. */
 const CHAIN_LOCK = 7_420_101;
@@ -53,8 +60,12 @@ export class AuditService implements OnModuleInit {
 
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CHAIN_LOCK})`;
-      if (await tx.auditLog.findUnique({ where: { eventId: e.eventId }, select: { seq: true } })) return;
-      const last = await tx.auditLog.findFirst({ orderBy: { seq: 'desc' }, select: { hash: true } });
+      if (await tx.auditLog.findUnique({ where: { eventId: e.eventId }, select: { seq: true } }))
+        return;
+      const last = await tx.auditLog.findFirst({
+        orderBy: { seq: 'desc' },
+        select: { hash: true },
+      });
       const prevHash = last?.hash ?? GENESIS_HASH;
       await tx.auditLog.create({
         data: {
@@ -141,7 +152,10 @@ export class AuditService implements OnModuleInit {
         _count: { _all: true },
         orderBy: { type: 'asc' },
       }),
-      this.prisma.auditLog.findFirst({ orderBy: { seq: 'desc' }, select: { seq: true, recordedAt: true } }),
+      this.prisma.auditLog.findFirst({
+        orderBy: { seq: 'desc' },
+        select: { seq: true, recordedAt: true },
+      }),
     ]);
     return {
       total,

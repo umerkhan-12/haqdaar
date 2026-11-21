@@ -4,7 +4,15 @@ import Link from 'next/link';
 import { useEffect, useRef, type ComponentType, type ReactNode, type SVGProps } from 'react';
 import { ApiError, type ScamVerdict } from '@/lib/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
-import { IconAlert, IconCheck, IconClock, IconShield, IconSpeaker, IconWifiOff, IconX } from './icons';
+import {
+  IconAlert,
+  IconCheck,
+  IconClock,
+  IconShield,
+  IconSpeaker,
+  IconWifiOff,
+  IconX,
+} from './icons';
 
 export type Tone = 'ok' | 'bad' | 'warn' | 'info' | 'neutral';
 
@@ -25,7 +33,13 @@ const TONE_ICON: Record<Tone, ComponentType<SVGProps<SVGSVGElement>>> = {
 };
 
 export const laneTone = (lane: string | null): Tone =>
-  lane === 'AUTO_APPROVE' ? 'ok' : lane === 'ASK_MORE' ? 'warn' : lane === 'HUMAN_REVIEW' ? 'info' : 'neutral';
+  lane === 'AUTO_APPROVE'
+    ? 'ok'
+    : lane === 'ASK_MORE'
+      ? 'warn'
+      : lane === 'HUMAN_REVIEW'
+        ? 'info'
+        : 'neutral';
 
 // ---------- actions ----------
 
@@ -41,7 +55,10 @@ export function Button({
     danger: 'bg-red-700 text-white hover:bg-red-800 disabled:bg-slate-400',
   }[variant];
   return (
-    <button className={`min-h-12 rounded-xl px-5 text-lg font-semibold ${v} ${className}`} {...rest}>
+    <button
+      className={`min-h-12 rounded-xl px-5 text-lg font-semibold ${v} ${className}`}
+      {...rest}
+    >
       {children}
     </button>
   );
@@ -50,7 +67,10 @@ export function Button({
 /** Navigation that looks like the primary button (never a <button> nested inside a link). */
 export function LinkButton({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link href={href} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-brand px-5 text-lg font-semibold text-white hover:bg-brand-dark">
+    <Link
+      href={href}
+      className="flex min-h-12 w-full items-center justify-center rounded-xl bg-brand px-5 text-lg font-semibold text-white hover:bg-brand-dark"
+    >
       {children}
     </Link>
   );
@@ -99,10 +119,23 @@ export function AudioButton({ text, className = '' }: { text: string; className?
 // ---------- states ----------
 
 /** The single way to show a state: icon + words + audio, announced to screen readers. */
-export function StatusCard({ tone, title, body, urgent = false }: { tone: Tone; title: string; body?: string; urgent?: boolean }) {
+export function StatusCard({
+  tone,
+  title,
+  body,
+  urgent = false,
+}: {
+  tone: Tone;
+  title: string;
+  body?: string;
+  urgent?: boolean;
+}) {
   const Icon = TONE_ICON[tone];
   return (
-    <div role={urgent ? 'alert' : 'status'} className={`flex items-start gap-4 rounded-2xl border-2 p-4 ${TONE[tone]}`}>
+    <div
+      role={urgent ? 'alert' : 'status'}
+      className={`flex items-start gap-4 rounded-2xl border-2 p-4 ${TONE[tone]}`}
+    >
       <Icon className="mt-1 h-8 w-8 shrink-0" />
       <div className="flex-1">
         <p className="text-lg font-semibold">{title}</p>
@@ -157,7 +190,10 @@ export function OfflineBanner({ online, waiting }: { online: boolean; waiting: n
   const { t } = useI18n();
   if (online && waiting === 0) return null;
   return (
-    <div role="alert" className="flex items-center gap-3 border-b-2 border-amber-700 bg-amber-100 px-4 py-2 font-semibold text-amber-900">
+    <div
+      role="alert"
+      className="flex items-center gap-3 border-b-2 border-amber-700 bg-amber-100 px-4 py-2 font-semibold text-amber-900"
+    >
       {!online && <IconWifiOff className="h-6 w-6 shrink-0" />}
       <span className="flex-1">
         {!online && t('offline')} {waiting > 0 && `${waiting} ${t('outboxPending')}`}
@@ -168,7 +204,10 @@ export function OfflineBanner({ online, waiting }: { online: boolean; waiting: n
 
 // ---------- domain displays ----------
 
-const VERDICT: Record<ScamVerdict['verdict'], { tone: Tone; key: MessageKey; Icon: ComponentType<SVGProps<SVGSVGElement>> }> = {
+const VERDICT: Record<
+  ScamVerdict['verdict'],
+  { tone: Tone; key: MessageKey; Icon: ComponentType<SVGProps<SVGSVGElement>> }
+> = {
   GENUINE: { tone: 'ok', key: 'verdictGENUINE', Icon: IconShield },
   SCAM: { tone: 'bad', key: 'verdictSCAM', Icon: IconX },
   UNSURE: { tone: 'warn', key: 'verdictUNSURE', Icon: IconAlert },
@@ -194,7 +233,9 @@ export function VerdictCard({ v }: { v: ScamVerdict }) {
 export function StatusPill({ children, tone = 'neutral' }: { children: ReactNode; tone?: Tone }) {
   const Icon = TONE_ICON[tone];
   return (
-    <span className={`latin inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${TONE[tone]}`}>
+    <span
+      className={`latin inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${TONE[tone]}`}
+    >
       <Icon className="h-3.5 w-3.5" />
       {children}
     </span>
@@ -208,7 +249,11 @@ export function Timeline({ events }: { events: { label: string; at: string }[] }
         const last = i === events.length - 1;
         return (
           <li key={i} className="flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm">
-            {last ? <IconClock className="h-6 w-6 shrink-0 text-brand" /> : <IconCheck className="h-6 w-6 shrink-0 text-green-700" />}
+            {last ? (
+              <IconClock className="h-6 w-6 shrink-0 text-brand" />
+            ) : (
+              <IconCheck className="h-6 w-6 shrink-0 text-green-700" />
+            )}
             <span className="flex-1">{e.label}</span>
             <time className="latin text-sm text-muted" dir="ltr" dateTime={e.at}>
               {new Date(e.at).toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' })}
@@ -235,25 +280,56 @@ export const inputCls =
   'latin min-h-12 w-full rounded-xl border-2 border-slate-400 bg-white px-3 text-lg text-ink focus:border-brand';
 
 /** Numeric PIN entry without a keyboard: 64 px keys, masked dots, LTR digits in RTL pages. */
-export function PinPad({ length = 4, value, onChange, label }: { length?: number; value: string; onChange: (v: string) => void; label: string }) {
+export function PinPad({
+  length = 4,
+  value,
+  onChange,
+  label,
+}: {
+  length?: number;
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+}) {
   const press = (d: string) => value.length < length && onChange(value + d);
   return (
     <div className="space-y-4" dir="ltr">
-      <div role="status" aria-label={`${label}: ${value.length} / ${length}`} className="flex justify-center gap-3">
+      <div
+        role="status"
+        aria-label={`${label}: ${value.length} / ${length}`}
+        className="flex justify-center gap-3"
+      >
         {Array.from({ length }, (_, i) => (
-          <span key={i} className={`h-5 w-5 rounded-full border-2 border-brand ${i < value.length ? 'bg-brand' : ''}`} />
+          <span
+            key={i}
+            className={`h-5 w-5 rounded-full border-2 border-brand ${i < value.length ? 'bg-brand' : ''}`}
+          />
         ))}
       </div>
       <div className="mx-auto grid max-w-xs grid-cols-3 gap-3">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-          <button key={d} type="button" onClick={() => press(d)} className="latin h-16 rounded-2xl bg-white text-2xl font-semibold shadow-sm active:bg-brand-soft">
+          <button
+            key={d}
+            type="button"
+            onClick={() => press(d)}
+            className="latin h-16 rounded-2xl bg-white text-2xl font-semibold shadow-sm active:bg-brand-soft"
+          >
             {d}
           </button>
         ))}
-        <button type="button" onClick={() => onChange(value.slice(0, -1))} aria-label="Delete" className="h-16 rounded-2xl bg-white text-2xl shadow-sm">
+        <button
+          type="button"
+          onClick={() => onChange(value.slice(0, -1))}
+          aria-label="Delete"
+          className="h-16 rounded-2xl bg-white text-2xl shadow-sm"
+        >
           ⌫
         </button>
-        <button type="button" onClick={() => press('0')} className="latin h-16 rounded-2xl bg-white text-2xl font-semibold shadow-sm">
+        <button
+          type="button"
+          onClick={() => press('0')}
+          className="latin h-16 rounded-2xl bg-white text-2xl font-semibold shadow-sm"
+        >
           0
         </button>
         <span />
@@ -265,7 +341,11 @@ export function PinPad({ length = 4, value, onChange, label }: { length?: number
 // ---------- staff ----------
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>{children}</section>;
+  return (
+    <section className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
+      {children}
+    </section>
+  );
 }
 
 /** Semantic table for staff lists; columns render cells, rows can carry an action. */
@@ -282,7 +362,10 @@ export function DataTable<T>({
   empty: string;
   caption: string;
 }) {
-  if (!rows.length) return <p className="rounded-xl border border-dashed border-slate-300 p-4 text-muted">{empty}</p>;
+  if (!rows.length)
+    return (
+      <p className="rounded-xl border border-dashed border-slate-300 p-4 text-muted">{empty}</p>
+    );
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full text-left text-sm">
@@ -340,7 +423,12 @@ export function ConfirmDialog({
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} onClose={onClose} className="latin w-[min(32rem,92vw)] rounded-2xl p-0 backdrop:bg-black/40" aria-labelledby="dlg-title">
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      className="latin w-[min(32rem,92vw)] rounded-2xl p-0 backdrop:bg-black/40"
+      aria-labelledby="dlg-title"
+    >
       <div className="space-y-4 p-5">
         <h2 id="dlg-title" className="text-lg font-bold">
           {title}
@@ -350,7 +438,12 @@ export function ConfirmDialog({
           <Button variant="ghost" onClick={onClose} type="button">
             Cancel
           </Button>
-          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} disabled={busy} type="button">
+          <Button
+            variant={danger ? 'danger' : 'primary'}
+            onClick={onConfirm}
+            disabled={busy}
+            type="button"
+          >
             {confirmLabel}
           </Button>
         </div>
@@ -361,6 +454,9 @@ export function ConfirmDialog({
 
 /** Staff screens show the exact server message (officers need it) with its reference id. */
 export function staffError(e: unknown): string {
-  if (e instanceof ApiError) return e.offline ? 'No connection to the server.' : `${e.message}${e.requestId ? ` (ref ${e.requestId.slice(0, 8)})` : ''}`;
+  if (e instanceof ApiError)
+    return e.offline
+      ? 'No connection to the server.'
+      : `${e.message}${e.requestId ? ` (ref ${e.requestId.slice(0, 8)})` : ''}`;
   return 'Unexpected error';
 }

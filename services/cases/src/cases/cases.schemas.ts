@@ -9,13 +9,23 @@ export const CreateCase = z.object({
   householdSize: z.number().int().min(1).max(30).optional(),
   payout: z
     .object({
-      alias: z.string().regex(/^03\d{9}$/, 'Raast alias: mobile number 03XXXXXXXXX').optional(),
-      iban: z.string().regex(/^PK\d{2}[A-Z]{4}\d{16}$/, 'Pakistani IBAN (24 chars)').optional(),
+      alias: z
+        .string()
+        .regex(/^03\d{9}$/, 'Raast alias: mobile number 03XXXXXXXXX')
+        .optional(),
+      iban: z
+        .string()
+        .regex(/^PK\d{2}[A-Z]{4}\d{16}$/, 'Pakistani IBAN (24 chars)')
+        .optional(),
     })
     .refine((p) => !!p.alias !== !!p.iban, 'Give exactly one of payout.alias or payout.iban'),
   /** Output of the AI extraction when the claim came from voice. */
   extraction: z
-    .object({ confidence: z.number().min(0).max(1), householdSize: z.number().int().nullish(), isWidow: z.boolean().nullish() })
+    .object({
+      confidence: z.number().min(0).max(1),
+      householdSize: z.number().int().nullish(),
+      isWidow: z.boolean().nullish(),
+    })
     .passthrough()
     .optional(),
 });

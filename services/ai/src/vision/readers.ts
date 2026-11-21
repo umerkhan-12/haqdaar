@@ -9,7 +9,11 @@ import type { Raw } from './image';
 export const findCnic = (text: string): string | null => redactPii(text).cnics[0] ?? null;
 
 export function readQr(rgba: Raw): string | null {
-  const code = jsQR(new Uint8ClampedArray(rgba.data.buffer, rgba.data.byteOffset, rgba.data.length), rgba.width, rgba.height);
+  const code = jsQR(
+    new Uint8ClampedArray(rgba.data.buffer, rgba.data.byteOffset, rgba.data.length),
+    rgba.width,
+    rgba.height,
+  );
   return code?.data ?? null;
 }
 
@@ -24,7 +28,17 @@ export interface CardFields {
 }
 
 // Letters OCR typically confuses with digits, only inside a number-shaped token.
-const CONFUSED: Record<string, string> = { O: '0', o: '0', D: '0', I: '1', l: '1', '|': '1', S: '5', B: '8', Z: '2' };
+const CONFUSED: Record<string, string> = {
+  O: '0',
+  o: '0',
+  D: '0',
+  I: '1',
+  l: '1',
+  '|': '1',
+  S: '5',
+  B: '8',
+  Z: '2',
+};
 const NUMBERISH = /[\dOoDIl|SBZ]{5}\s?[-–—~]\s?[\dOoDIl|SBZ]{7}\s?[-–—~]\s?[\dOoDIl|SBZ]/g;
 const DATE = /\b(\d{2})[.\-/](\d{2})[.\-/](\d{4})\b/g;
 const PERSON_NAME = /^[A-Za-z][A-Za-z.'-]*(?: [A-Za-z][A-Za-z.'-]*)*/;
@@ -36,7 +50,9 @@ const PERSON_NAME = /^[A-Za-z][A-Za-z.'-]*(?: [A-Za-z][A-Za-z.'-]*)*/;
 export function parseCardText(lines: string[]): CardFields {
   const clean = lines.map((l) => l.trim()).filter(Boolean);
   const text = clean.join('\n');
-  const numberish = (text.match(NUMBERISH) ?? []).map((t) => t.replace(/[OoDIl|SBZ]/g, (c) => CONFUSED[c]!));
+  const numberish = (text.match(NUMBERISH) ?? []).map((t) =>
+    t.replace(/[OoDIl|SBZ]/g, (c) => CONFUSED[c]!),
+  );
   const cnic = findCnic(text) ?? numberish.map(findCnic).find(Boolean) ?? null;
 
   const after = (label: RegExp) => {

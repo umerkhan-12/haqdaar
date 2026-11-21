@@ -41,7 +41,11 @@ async function main() {
       district: p.district,
       payoutIban: p.payoutIban,
     };
-    await prisma.person.upsert({ where: { id: p.id }, update: data, create: { id: p.id, ...data } });
+    await prisma.person.upsert({
+      where: { id: p.id },
+      update: data,
+      create: { id: p.id, ...data },
+    });
   }
 
   const hasRule = await prisma.ruleVersion.findFirst({ where: { tenantId: RELIEF_TENANT } });

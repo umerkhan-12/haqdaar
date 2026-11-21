@@ -14,7 +14,8 @@ const nastaliq = Noto_Nastaliq_Urdu({
 
 export const metadata: Metadata = {
   title: 'Haqdaar — حقدار',
-  description: 'Claim your relief payment by voice, in Urdu, even offline. Prototype only — not an official service.',
+  description:
+    'Claim your relief payment by voice, in Urdu, even offline. Prototype only — not an official service.',
   manifest: '/manifest.webmanifest',
   icons: { icon: '/icons/icon.svg', apple: '/icons/icon-192.png' },
   appleWebApp: { capable: true, title: 'حقدار', statusBarStyle: 'default' },

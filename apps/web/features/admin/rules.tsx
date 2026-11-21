@@ -2,7 +2,15 @@
 
 import { useMemo, useState } from 'react';
 import { Shell } from '@/components/shell';
-import { Button, Card, ConfirmDialog, DataTable, Skeleton, StatusPill, staffError } from '@/components/ui';
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  DataTable,
+  Skeleton,
+  StatusPill,
+  staffError,
+} from '@/components/ui';
 import { api, type Lane, type RuleVersion, type Simulation } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
@@ -12,7 +20,8 @@ type Path = (string | number)[];
 function numbers(node: unknown, path: Path = []): { path: Path; value: number }[] {
   if (typeof node === 'number') return [{ path, value: node }];
   if (Array.isArray(node)) return node.flatMap((n, i) => numbers(n, [...path, i]));
-  if (node && typeof node === 'object') return Object.entries(node).flatMap(([k, v]) => numbers(v, [...path, k]));
+  if (node && typeof node === 'object')
+    return Object.entries(node).flatMap(([k, v]) => numbers(v, [...path, k]));
   return [];
 }
 
@@ -28,7 +37,11 @@ const LANES: Lane[] = ['AUTO_APPROVE', 'ASK_MORE', 'HUMAN_REVIEW'];
 
 function CostModel() {
   const { data, error, reload } = useAsync(() => api.costs(), []);
-  const [draft, setDraft] = useState<{ wrongApproval: number; humanReview: number; askMore: number } | null>(null);
+  const [draft, setDraft] = useState<{
+    wrongApproval: number;
+    humanReview: number;
+    askMore: number;
+  } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const c = draft ?? data;
   const live = c ? 1 - c.humanReview / c.wrongApproval : null;
@@ -87,7 +100,10 @@ function RuleEditor({ live, onPublished }: { live: RuleVersion; onPublished: () 
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const changed = useMemo(() => JSON.stringify(clauses) !== JSON.stringify(live.clauses) || amount !== live.amount, [clauses, amount, live]);
+  const changed = useMemo(
+    () => JSON.stringify(clauses) !== JSON.stringify(live.clauses) || amount !== live.amount,
+    [clauses, amount, live],
+  );
 
   async function simulate() {
     setBusy(true);
@@ -111,7 +127,12 @@ function RuleEditor({ live, onPublished }: { live: RuleVersion; onPublished: () 
         </div>
         <label className="mt-3 block text-sm">
           Monthly amount (PKR)
-          <input type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="mt-1 min-h-12 w-40 rounded-lg border-2 border-slate-400 px-2" />
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(Number(e.target.value))}
+            className="mt-1 min-h-12 w-40 rounded-lg border-2 border-slate-400 px-2"
+          />
         </label>
         <ul className="mt-3 space-y-3">
           {clauses.map((cl, ci) => (
@@ -129,7 +150,13 @@ function RuleEditor({ live, onPublished }: { live: RuleVersion; onPublished: () 
                       aria-label={`Threshold for: ${cl.textEn}`}
                       value={n.value}
                       onChange={(e) =>
-                        setClauses((cs) => cs.map((c, i) => (i === ci ? { ...c, logic: setAt(c.logic, n.path, Number(e.target.value)) } : c)))
+                        setClauses((cs) =>
+                          cs.map((c, i) =>
+                            i === ci
+                              ? { ...c, logic: setAt(c.logic, n.path, Number(e.target.value)) }
+                              : c,
+                          ),
+                        )
                       }
                       className="ml-2 min-h-12 w-28 rounded-lg border-2 border-slate-400 px-2"
                     />
@@ -166,7 +193,8 @@ function RuleEditor({ live, onPublished }: { live: RuleVersion; onPublished: () 
         <Card>
           <h2 className="text-lg font-bold">Digital Twin: draft v{sim.draft.version}</h2>
           <p className="text-sm text-muted" aria-live="polite">
-            Replayed {sim.result.casesReplayed} past decisions. {sim.result.changedCount} would change.
+            Replayed {sim.result.casesReplayed} past decisions. {sim.result.changedCount} would
+            change.
           </p>
           <DataTable
             caption="Lane counts before and after"
@@ -206,7 +234,9 @@ function RuleEditor({ live, onPublished }: { live: RuleVersion; onPublished: () 
           setBusy(true);
           try {
             await api.publish(sim.draft.id);
-            setMsg(`v${sim.draft.version} is live. Earlier decisions keep the version they were made with.`);
+            setMsg(
+              `v${sim.draft.version} is live. Earlier decisions keep the version they were made with.`,
+            );
             setSim(null);
             onPublished();
           } catch (e) {
@@ -217,7 +247,10 @@ function RuleEditor({ live, onPublished }: { live: RuleVersion; onPublished: () 
           }
         }}
       >
-        <p className="text-sm">New claims are decided with it immediately. {sim?.result.changedCount} recent decisions would have changed.</p>
+        <p className="text-sm">
+          New claims are decided with it immediately. {sim?.result.changedCount} recent decisions
+          would have changed.
+        </p>
       </ConfirmDialog>
     </div>
   );
@@ -230,7 +263,17 @@ export function AdminRules() {
     <Shell roles={['admin']} wide>
       <h1 className="mb-4 text-xl font-bold">Rules and costs</h1>
       <div className="grid gap-4 lg:grid-cols-2">
-        <div>{loading && !data ? <Skeleton lines={6} /> : error ? <p role="alert">{staffError(error)}</p> : live ? <RuleEditor key={live.id} live={live} onPublished={reload} /> : <p>No published rule.</p>}</div>
+        <div>
+          {loading && !data ? (
+            <Skeleton lines={6} />
+          ) : error ? (
+            <p role="alert">{staffError(error)}</p>
+          ) : live ? (
+            <RuleEditor key={live.id} live={live} onPublished={reload} />
+          ) : (
+            <p>No published rule.</p>
+          )}
+        </div>
         <CostModel />
       </div>
     </Shell>

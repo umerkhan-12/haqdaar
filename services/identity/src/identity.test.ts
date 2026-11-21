@@ -14,7 +14,8 @@ test('phone numbers normalise to one form (login lookup must not depend on forma
 
 test('login rate-limit key is per (IP, phone): one shop full of people is not locked out together', async () => {
   const guard = Object.create(LoginThrottlerGuard.prototype) as LoginThrottlerGuard;
-  const track = (req: object) => (guard as unknown as { getTracker(r: object): Promise<string> }).getTracker(req);
+  const track = (req: object) =>
+    (guard as unknown as { getTracker(r: object): Promise<string> }).getTracker(req);
   const a = await track({ ip: '1.2.3.4', body: { phone: '03001110001' } });
   const b = await track({ ip: '1.2.3.4', body: { phone: '03001110002' } });
   const c = await track({ ip: '1.2.3.4', body: { phone: '+92 300 1110001' } });
@@ -45,7 +46,10 @@ test('usage report: zero-filled days, per-service sums, AI calls, rows outside t
     aiCalls: 0,
     services: { cases: { requests: 5, errors: 1 }, identity: { requests: 2, errors: 0 } },
   });
-  assert.equal(monthStart(new Date('2026-11-21T10:00:00Z')).toISOString(), '2026-11-01T00:00:00.000Z');
+  assert.equal(
+    monthStart(new Date('2026-11-21T10:00:00Z')).toISOString(),
+    '2026-11-01T00:00:00.000Z',
+  );
 });
 
 test('quota: percent used to one decimal, exceeded flag', () => {
@@ -59,10 +63,25 @@ test('quota: percent used to one decimal, exceeded flag', () => {
 });
 
 test('launch a program: Pakistani mobile and a real password are required', () => {
-  const ok = { programName: 'Flood Relief Sindh', type: 'relief', adminName: 'Admin Noor', adminPassword: 'longenough1' };
+  const ok = {
+    programName: 'Flood Relief Sindh',
+    type: 'relief',
+    adminName: 'Admin Noor',
+    adminPassword: 'longenough1',
+  };
   assert.equal(LaunchProgramRequest.safeParse({ ...ok, adminPhone: '0345-1234567' }).success, true);
-  assert.equal(LaunchProgramRequest.safeParse({ ...ok, adminPhone: '+92 345 1234567' }).success, true);
+  assert.equal(
+    LaunchProgramRequest.safeParse({ ...ok, adminPhone: '+92 345 1234567' }).success,
+    true,
+  );
   assert.equal(LaunchProgramRequest.safeParse({ ...ok, adminPhone: '12345' }).success, false);
-  assert.equal(LaunchProgramRequest.safeParse({ ...ok, adminPhone: '03451234567', adminPassword: 'short' }).success, false);
-  assert.equal(LaunchProgramRequest.safeParse({ ...ok, adminPhone: '03451234567', type: 'bank' }).success, false);
+  assert.equal(
+    LaunchProgramRequest.safeParse({ ...ok, adminPhone: '03451234567', adminPassword: 'short' })
+      .success,
+    false,
+  );
+  assert.equal(
+    LaunchProgramRequest.safeParse({ ...ok, adminPhone: '03451234567', type: 'bank' }).success,
+    false,
+  );
 });

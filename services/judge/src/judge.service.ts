@@ -1,5 +1,11 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { buildEvent, EventBus, sealMessage, ServiceClient, type Principal } from '@haqdaar/nest-kit';
+import {
+  buildEvent,
+  EventBus,
+  sealMessage,
+  ServiceClient,
+  type Principal,
+} from '@haqdaar/nest-kit';
 import type { ServiceName } from '@haqdaar/shared';
 import { env } from './env';
 import { GatewayApi } from './gateway-api';
@@ -56,7 +62,10 @@ export class JudgeService {
       });
     } catch (e) {
       ok = false;
-      summary = e instanceof CheckFailed ? `Check failed — ${e.message}` : `Could not finish — ${(e as Error).message}`;
+      summary =
+        e instanceof CheckFailed
+          ? `Check failed — ${e.message}`
+          : `Could not finish — ${(e as Error).message}`;
       if (!(e instanceof CheckFailed)) this.logger.warn({ err: e, scenario: id }, 'Scenario error');
     } finally {
       this.busy = null;
@@ -64,7 +73,13 @@ export class JudgeService {
 
     const durationMs = Date.now() - started;
     await this.bus
-      .publish(buildEvent('judge.scenario.ran', { scenarioId: id, ok, durationMs }, { source: 'judge', principal: by }))
+      .publish(
+        buildEvent(
+          'judge.scenario.ran',
+          { scenarioId: id, ok, durationMs },
+          { source: 'judge', principal: by },
+        ),
+      )
       .catch((err) => this.logger.warn({ err }, 'Could not publish judge event'));
 
     const { challenge, title, proves } = scenario;
@@ -77,7 +92,10 @@ export class JudgeService {
     const results = await Promise.all(
       RESETTABLE.map(async (service) => {
         try {
-          const cleared = await this.client.call(service, '/internal/demo/reset', { method: 'POST', timeoutMs: 10_000 });
+          const cleared = await this.client.call(service, '/internal/demo/reset', {
+            method: 'POST',
+            timeoutMs: 10_000,
+          });
           return { service, ok: true, cleared };
         } catch (e) {
           return { service, ok: false, error: (e as Error).message };
@@ -86,7 +104,13 @@ export class JudgeService {
     );
     this.api.forget();
     await this.bus
-      .publish(buildEvent('judge.demo.reset', { services: RESETTABLE }, { source: 'judge', principal: by }))
+      .publish(
+        buildEvent(
+          'judge.demo.reset',
+          { services: RESETTABLE },
+          { source: 'judge', principal: by },
+        ),
+      )
       .catch(() => undefined);
     return { ok: results.every((r) => r.ok), services: results };
   }

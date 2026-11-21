@@ -4,11 +4,25 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Shell } from '@/components/shell';
 import { IconLock, IconUsers } from '@/components/icons';
-import { AudioButton, Button, EmptyState, ErrorState, PinPad, Skeleton, StatusCard } from '@/components/ui';
+import {
+  AudioButton,
+  Button,
+  EmptyState,
+  ErrorState,
+  PinPad,
+  Skeleton,
+  StatusCard,
+} from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 import { useI18n } from '@/lib/i18n';
-import { getHelperSession, getSession, saveHelperSession, saveSession, sessionFrom } from '@/lib/session';
+import {
+  getHelperSession,
+  getSession,
+  saveHelperSession,
+  saveSession,
+  sessionFrom,
+} from '@/lib/session';
 
 interface Family {
   personId: string;
@@ -93,8 +107,16 @@ export function HelperFamilies() {
         <div className="space-y-5">
           <h1 className="text-2xl font-bold">{chosen.label}</h1>
           <p className="text-lg">{t('enterPin')}</p>
-          {wrongPin ? <StatusCard tone="bad" title={t('wrongPin')} urgent /> : pinError ? <ErrorState error={pinError} /> : null}
-          {busy ? <Skeleton lines={1} /> : <PinPad value={pin} onChange={onPin} label={t('enterPin')} />}
+          {wrongPin ? (
+            <StatusCard tone="bad" title={t('wrongPin')} urgent />
+          ) : pinError ? (
+            <ErrorState error={pinError} />
+          ) : null}
+          {busy ? (
+            <Skeleton lines={1} />
+          ) : (
+            <PinPad value={pin} onChange={onPin} label={t('enterPin')} />
+          )}
           <Button variant="ghost" className="w-full" onClick={() => setChosen(null)}>
             {t('back')}
           </Button>

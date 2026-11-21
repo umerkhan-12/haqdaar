@@ -57,7 +57,10 @@ export class AuthService {
     }
 
     const pair = await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null } });
+      await tx.user.update({
+        where: { id: user.id },
+        data: { failedLogins: 0, lockedUntil: null },
+      });
       const event = buildEvent(
         'identity.user.logged_in',
         { userId: user.id },
@@ -87,7 +90,10 @@ export class AuthService {
         where: { familyId: row.familyId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
-      this.logger.warn({ userId: row.userId, familyId: row.familyId }, 'Refresh token reuse detected');
+      this.logger.warn(
+        { userId: row.userId, familyId: row.familyId },
+        'Refresh token reuse detected',
+      );
       throw new UnauthorizedException('Session ended for your safety. Please log in again.');
     }
     if (row.expiresAt < new Date() || !row.user.active) {
@@ -124,7 +130,12 @@ export class AuthService {
    * carry `obo` = the family, so every service scopes data and consent to them.
    * 5 wrong PINs lock that family for this helper for 15 minutes.
    */
-  async actFor(helper: AuthUser, personId: string, pin: string, userAgent?: string): Promise<TokenPair> {
+  async actFor(
+    helper: AuthUser,
+    personId: string,
+    pin: string,
+    userAgent?: string,
+  ): Promise<TokenPair> {
     const link = await this.prisma.helperLink.findUnique({
       where: { helperId_personId: { helperId: helper.id, personId } },
     });
@@ -138,14 +149,18 @@ export class AuthService {
         where: { id: link.id },
         data: {
           failedPins: failed,
-          lockedUntil: failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
+          lockedUntil:
+            failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
         },
       });
       throw new UnauthorizedException('Wrong PIN');
     }
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: helper.id } });
     return this.prisma.$transaction(async (tx) => {
-      await tx.helperLink.update({ where: { id: link.id }, data: { failedPins: 0, lockedUntil: null } });
+      await tx.helperLink.update({
+        where: { id: link.id },
+        data: { failedPins: 0, lockedUntil: null },
+      });
       return this.issue(tx, user, randomUUID(), personId, userAgent);
     });
   }

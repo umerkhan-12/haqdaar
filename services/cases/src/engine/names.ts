@@ -65,8 +65,28 @@ const VARIANTS: Record<string, string> = {
 
 /** Titles and honorific suffixes that do not identify a person. */
 const HONORIFICS = new Set([
-  'mr', 'mrs', 'ms', 'miss', 'dr', 'haji', 'hajji', 'syed', 'sayyid', 'mian', 'sheikh', 'shaikh',
-  'ch', 'chaudhry', 'chaudhary', 'mst', 'mussammat', 'musammat', 'bibi', 'begum', 'khatoon', 'mai',
+  'mr',
+  'mrs',
+  'ms',
+  'miss',
+  'dr',
+  'haji',
+  'hajji',
+  'syed',
+  'sayyid',
+  'mian',
+  'sheikh',
+  'shaikh',
+  'ch',
+  'chaudhry',
+  'chaudhary',
+  'mst',
+  'mussammat',
+  'musammat',
+  'bibi',
+  'begum',
+  'khatoon',
+  'mai',
 ]);
 
 export function normalizeName(input: string): string {
@@ -87,7 +107,10 @@ export function normalizeName(input: string): string {
 
 /** Fold common romanization differences: double letters, ee/oo/ou. */
 function fold(token: string): string {
-  return token.replace(/ee/g, 'i').replace(/oo|ou/g, 'u').replace(/(.)\1+/g, '$1');
+  return token
+    .replace(/ee/g, 'i')
+    .replace(/oo|ou/g, 'u')
+    .replace(/(.)\1+/g, '$1');
 }
 
 export function jaroWinkler(a: string, b: string): number {
@@ -116,7 +139,8 @@ export function jaroWinkler(a: string, b: string): number {
     if (a[i] !== b[k]) transpositions++;
     k++;
   }
-  const jaro = (matches / a.length + matches / b.length + (matches - transpositions / 2) / matches) / 3;
+  const jaro =
+    (matches / a.length + matches / b.length + (matches - transpositions / 2) / matches) / 3;
   let prefix = 0;
   while (prefix < Math.min(4, a.length, b.length) && a[prefix] === b[prefix]) prefix++;
   return jaro + prefix * 0.1 * (1 - jaro);

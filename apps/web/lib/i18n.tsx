@@ -13,7 +13,10 @@ const M = {
   back: ['واپس', 'Back'],
   retry: ['دوبارہ کوشش کریں', 'Try again'],
   loading: ['انتظار کریں…', 'Please wait…'],
-  offline: ['انٹرنیٹ نہیں ہے۔ آپ کا کام فون میں محفوظ ہے۔', 'No internet. Your work is saved on this phone.'],
+  offline: [
+    'انٹرنیٹ نہیں ہے۔ آپ کا کام فون میں محفوظ ہے۔',
+    'No internet. Your work is saved on this phone.',
+  ],
   error: ['کچھ مسئلہ ہوا۔ دوبارہ کوشش کریں۔', 'Something went wrong. Please try again.'],
   empty: ['ابھی یہاں کچھ نہیں ہے۔', 'Nothing here yet.'],
   forbidden: ['آپ کو اس کی اجازت نہیں ہے۔', 'You are not allowed to do this.'],
@@ -31,11 +34,17 @@ const M = {
   scam: ['کیا یہ پیغام اصلی ہے؟', 'Is this message real?'],
 
   recordHold: ['بٹن دبا کر رکھیں اور بولیں', 'Hold the button and speak'],
-  recordHint: ['اپنا نام، شناختی کارڈ نمبر، ضلع اور گھر کے افراد بتائیں', 'Say your name, CNIC number, district and household size'],
+  recordHint: [
+    'اپنا نام، شناختی کارڈ نمبر، ضلع اور گھر کے افراد بتائیں',
+    'Say your name, CNIC number, district and household size',
+  ],
   recording: ['سن رہے ہیں…', 'Listening…'],
   understanding: ['سمجھ رہے ہیں…', 'Understanding…'],
   typeInstead: ['لکھ کر بتائیں', 'Type instead'],
-  aiUnsure: ['ہمیں پوری بات سمجھ نہیں آئی۔ براہ کرم تفصیل دیکھ لیں۔', 'We could not understand everything. Please check the details.'],
+  aiUnsure: [
+    'ہمیں پوری بات سمجھ نہیں آئی۔ براہ کرم تفصیل دیکھ لیں۔',
+    'We could not understand everything. Please check the details.',
+  ],
   checkDetails: ['اپنی تفصیل دیکھیں', 'Check your details'],
   fullName: ['پورا نام', 'Full name'],
   cnic: ['شناختی کارڈ نمبر', 'CNIC number'],
@@ -44,21 +53,42 @@ const M = {
   payoutPhone: ['رقم اس نمبر پر (راست)', 'Send money to this number (Raast)'],
   next: ['آگے', 'Next'],
   photoTitle: ['شناختی کارڈ کی تصویر', 'Photo of your CNIC'],
-  photoHint: ['کارڈ کو روشنی میں سیدھا رکھ کر سامنے والی طرف کی تصویر لیں', 'Hold the card flat in good light and photograph the front'],
+  photoHint: [
+    'کارڈ کو روشنی میں سیدھا رکھ کر سامنے والی طرف کی تصویر لیں',
+    'Hold the card flat in good light and photograph the front',
+  ],
   takePhoto: ['تصویر لیں', 'Take photo'],
   retakePhoto: ['دوبارہ تصویر لیں', 'Take the photo again'],
   skipPhoto: ['تصویر کے بغیر آگے بڑھیں', 'Continue without a photo'],
   photoChecking: ['تصویر جانچ رہے ہیں…', 'Checking the photo…'],
   photoOk: ['تصویر ٹھیک ہے', 'The photo is fine'],
-  photoRetake: ['تصویر صاف نہیں۔ براہ کرم دوبارہ لیں۔', 'The photo is not clear. Please take it again.'],
-  photoOfficer: ['ایک افسر آپ کا کارڈ دیکھے گا۔ آپ کی درخواست جاری رہے گی۔', 'An officer will look at your card. Your claim continues.'],
+  photoRetake: [
+    'تصویر صاف نہیں۔ براہ کرم دوبارہ لیں۔',
+    'The photo is not clear. Please take it again.',
+  ],
+  photoOfficer: [
+    'ایک افسر آپ کا کارڈ دیکھے گا۔ آپ کی درخواست جاری رہے گی۔',
+    'An officer will look at your card. Your claim continues.',
+  ],
   consentTitle: ['اجازت', 'Your permission'],
-  consentIdentity: ['نادرا سے میری شناخت کی تصدیق کی اجازت دیتی/دیتا ہوں', 'I allow checking my identity with NADRA'],
-  consentHousehold: ['میرے گھر کی آمدنی کی معلومات دیکھنے کی اجازت دیتی/دیتا ہوں', "I allow checking my household's income records"],
-  consentNote: ['آپ یہ اجازت کسی بھی وقت واپس لے سکتے ہیں۔', 'You can take this permission back at any time.'],
+  consentIdentity: [
+    'نادرا سے میری شناخت کی تصدیق کی اجازت دیتی/دیتا ہوں',
+    'I allow checking my identity with NADRA',
+  ],
+  consentHousehold: [
+    'میرے گھر کی آمدنی کی معلومات دیکھنے کی اجازت دیتی/دیتا ہوں',
+    "I allow checking my household's income records",
+  ],
+  consentNote: [
+    'آپ یہ اجازت کسی بھی وقت واپس لے سکتے ہیں۔',
+    'You can take this permission back at any time.',
+  ],
   send: ['درخواست بھیجیں', 'Send my claim'],
   sending: ['بھیج رہے ہیں…', 'Sending…'],
-  savedOffline: ['درخواست فون میں محفوظ ہے۔ انٹرنیٹ آتے ہی خود بھیج دی جائے گی۔', 'Saved on your phone. It will be sent automatically when the internet is back.'],
+  savedOffline: [
+    'درخواست فون میں محفوظ ہے۔ انٹرنیٹ آتے ہی خود بھیج دی جائے گی۔',
+    'Saved on your phone. It will be sent automatically when the internet is back.',
+  ],
   outboxPending: ['درخواستیں بھیجی جانی ہیں', 'claims waiting to be sent'],
 
   laneAUTO_APPROVE: ['منظور ہو گئی', 'Approved'],
@@ -67,13 +97,22 @@ const M = {
   statusPAID: ['رقم آپ کے اکاؤنٹ میں بھیج دی گئی', 'Money sent to your account'],
   statusAPPROVED: ['منظور — رقم بھیجی جا رہی ہے', 'Approved — money is on its way'],
   statusIN_REVIEW: ['ایک افسر آپ کی درخواست دیکھ رہا ہے', 'An officer is checking your claim'],
-  statusNEEDS_INFO: ['ہمیں آپ سے مزید معلومات یا اجازت چاہیے', 'We need more information or your permission'],
+  statusNEEDS_INFO: [
+    'ہمیں آپ سے مزید معلومات یا اجازت چاہیے',
+    'We need more information or your permission',
+  ],
   statusREJECTED: ['افسر نے درخواست منظور نہیں کی', 'An officer did not approve the claim'],
   statusSUBMITTED: ['درخواست موصول ہو گئی', 'Claim received'],
-  waitingOfficer: ['انتظار کریں — فیصلہ ایک انسان کرے گا، مشین نہیں۔', 'Please wait — a person will decide, not a machine.'],
+  waitingOfficer: [
+    'انتظار کریں — فیصلہ ایک انسان کرے گا، مشین نہیں۔',
+    'Please wait — a person will decide, not a machine.',
+  ],
   noClaims: ['ابھی آپ کی کوئی درخواست نہیں۔', 'You have no claims yet.'],
   receiptTitle: ['حق رسید', 'Haq Receipt'],
-  receiptLine: ['یہ پوری رقم آپ کی ہے۔ کوئی اس میں سے پیسے مانگے تو شکایت کریں۔', 'All of this money is yours. If anyone asks for a share, report it.'],
+  receiptLine: [
+    'یہ پوری رقم آپ کی ہے۔ کوئی اس میں سے پیسے مانگے تو شکایت کریں۔',
+    'All of this money is yours. If anyone asks for a share, report it.',
+  ],
   rupees: ['روپے', 'rupees'],
   resubmit: ['اجازت دے کر دوبارہ بھیجیں', 'Give permission and resend'],
   ev_submitted: ['درخواست موصول ہوئی', 'Claim received'],
@@ -115,7 +154,9 @@ export function speakText(text: string, lang: Lang): void {
   synth.cancel();
   const u = new SpeechSynthesisUtterance(text);
   const want = lang === 'ur' ? ['ur-PK', 'ur-IN', 'hi-IN'] : ['en-GB', 'en-US'];
-  const voice = synth.getVoices().find((v) => want.some((w) => v.lang.toLowerCase() === w.toLowerCase()));
+  const voice = synth
+    .getVoices()
+    .find((v) => want.some((w) => v.lang.toLowerCase() === w.toLowerCase()));
   u.lang = voice?.lang ?? want[0]!;
   if (voice) u.voice = voice;
   u.rate = 0.9;

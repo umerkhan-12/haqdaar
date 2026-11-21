@@ -15,13 +15,22 @@ async function withinLimit(file: File): Promise<Blob> {
   if (file.size <= MAX_BYTES) return file;
   const bitmap = await createImageBitmap(file);
   const scale = Math.sqrt((MAX_BYTES * 0.8) / file.size);
-  const canvas = new OffscreenCanvas(Math.round(bitmap.width * scale), Math.round(bitmap.height * scale));
+  const canvas = new OffscreenCanvas(
+    Math.round(bitmap.width * scale),
+    Math.round(bitmap.height * scale),
+  );
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.92 });
 }
 
 /** CNIC photo step. It can ask for a retake or hand the card to an officer, but never blocks the claim. */
-export function CnicPhoto({ cnic, onDone }: { cnic: string; onDone: (result: DocumentCheck | null) => void }) {
+export function CnicPhoto({
+  cnic,
+  onDone,
+}: {
+  cnic: string;
+  onDone: (result: DocumentCheck | null) => void;
+}) {
   const { t, lang } = useI18n();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -73,9 +82,15 @@ export function CnicPhoto({ cnic, onDone }: { cnic: string; onDone: (result: Doc
           </>
         )}
         {error ? <ErrorState error={error} /> : null}
-        {result?.retakeRequired && <StatusCard tone="warn" title={t('photoRetake')} body={reason ?? undefined} />}
-        {result && !result.retakeRequired && result.needsHuman && <StatusCard tone="info" title={t('photoOfficer')} body={reason ?? undefined} />}
-        {result && !result.retakeRequired && !result.needsHuman && <StatusCard tone="ok" title={t('photoOk')} body={reason ?? undefined} />}
+        {result?.retakeRequired && (
+          <StatusCard tone="warn" title={t('photoRetake')} body={reason ?? undefined} />
+        )}
+        {result && !result.retakeRequired && result.needsHuman && (
+          <StatusCard tone="info" title={t('photoOfficer')} body={reason ?? undefined} />
+        )}
+        {result && !result.retakeRequired && !result.needsHuman && (
+          <StatusCard tone="ok" title={t('photoOk')} body={reason ?? undefined} />
+        )}
       </div>
 
       {!result || result.retakeRequired ? (

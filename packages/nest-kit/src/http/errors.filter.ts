@@ -48,7 +48,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         typeof res === 'string'
           ? res
           : Array.isArray((res as { message?: unknown }).message)
-            ? ((res as { message: string[] }).message.join('; '))
+            ? (res as { message: string[] }).message.join('; ')
             : String((res as { message?: unknown }).message ?? e.message);
       const details = typeof res === 'object' ? (res as { details?: unknown }).details : undefined;
       return { statusCode: status, error: HttpStatus[status] ?? 'Error', message, details };

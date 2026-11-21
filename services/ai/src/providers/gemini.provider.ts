@@ -1,4 +1,13 @@
-import { readError, type AiProvider, type EmbeddingRequest, type EmbeddingResponse, type LlmRequest, type LlmResponse, type SttRequest, type SttResponse } from './types';
+import {
+  readError,
+  type AiProvider,
+  type EmbeddingRequest,
+  type EmbeddingResponse,
+  type LlmRequest,
+  type LlmResponse,
+  type SttRequest,
+  type SttResponse,
+} from './types';
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -22,7 +31,10 @@ export class GeminiProvider implements AiProvider {
   async complete(req: LlmRequest): Promise<LlmResponse> {
     return this.generate(
       req.system,
-      req.messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+      req.messages.map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      })),
       req.json ?? false,
       req.temperature ?? 0.1,
       req.maxTokens ?? 800,
@@ -37,7 +49,12 @@ export class GeminiProvider implements AiProvider {
         {
           role: 'user',
           parts: [
-            { inline_data: { mime_type: req.mimeType.split(';')[0], data: req.audio.toString('base64') } },
+            {
+              inline_data: {
+                mime_type: req.mimeType.split(';')[0],
+                data: req.audio.toString('base64'),
+              },
+            },
             { text: `Transcribe this ${req.language === 'ur' ? 'Urdu' : req.language} audio.` },
           ],
         },
@@ -54,7 +71,11 @@ export class GeminiProvider implements AiProvider {
     const res = await fetch(`${BASE}/${req.model}:embedContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': this.apiKey!, 'content-type': 'application/json' },
-      body: JSON.stringify({ model: `models/${req.model}`, content: { parts: [{ text: req.text }] }, taskType: req.taskType }),
+      body: JSON.stringify({
+        model: `models/${req.model}`,
+        content: { parts: [{ text: req.text }] },
+        taskType: req.taskType,
+      }),
       signal: AbortSignal.timeout(req.timeoutMs),
     });
     if (!res.ok) await readError(this.id, res);

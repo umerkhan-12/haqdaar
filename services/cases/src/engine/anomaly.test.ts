@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULT_ANOMALY_THRESHOLDS, detectAnomalies, detectAnomaliesForCase, flagsVisibleTo, type AnomalyObservation } from './anomaly';
+import {
+  DEFAULT_ANOMALY_THRESHOLDS,
+  detectAnomalies,
+  detectAnomaliesForCase,
+  flagsVisibleTo,
+  type AnomalyObservation,
+} from './anomaly';
 
 const now = new Date('2026-11-21T12:00:00.000Z');
 const tenant = '00000000-0000-4000-8000-000000000001';
@@ -65,7 +71,13 @@ test('helper velocity counts distinct people, with a strict greater-than boundar
 test('a helper who files many claims for the same few families is not flagged', () => {
   // Judge Mode and a busy shop: one helper, seven families, dozens of claims in an hour.
   const busy = Array.from({ length: 60 }, (_, i) =>
-    row(i + 1, { helperId: 'helper-1', payoutKey: null, cnicHash: `family-${i % 7}`, personId: `family-${i % 7}`, district: `d-${i % 7}` }),
+    row(i + 1, {
+      helperId: 'helper-1',
+      payoutKey: null,
+      cnicHash: `family-${i % 7}`,
+      personId: `family-${i % 7}`,
+      district: `d-${i % 7}`,
+    }),
   );
   assert.deepEqual(detectAnomalies(tenant, busy, now), []);
 });
@@ -192,8 +204,20 @@ test('tenant isolation and terminal statuses prevent cross-tenant or settled evi
 
 test('the two Zainabs: same name and district, different CNIC and different details, are not flagged', () => {
   const zainabs = [
-    row(1, { nameNormalized: 'zainab bibi', district: 'Thatta', payoutKey: 'alias-1', householdSize: 5, helperId: null }),
-    row(2, { nameNormalized: 'zainab bibi', district: 'Thatta', payoutKey: 'alias-2', householdSize: 4, helperId: null }),
+    row(1, {
+      nameNormalized: 'zainab bibi',
+      district: 'Thatta',
+      payoutKey: 'alias-1',
+      householdSize: 5,
+      helperId: null,
+    }),
+    row(2, {
+      nameNormalized: 'zainab bibi',
+      district: 'Thatta',
+      payoutKey: 'alias-2',
+      householdSize: 4,
+      helperId: null,
+    }),
   ];
   assert.deepEqual(detectAnomalies(tenant, zainabs, now), []);
   assert.deepEqual(detectAnomaliesForCase(tenant, 'case-1', zainabs, now), []);
@@ -206,9 +230,19 @@ test('the two Zainabs: same name and district, different CNIC and different deta
 
 test('a clean claim among unrelated claims gets no anomaly flag', () => {
   const others = Array.from({ length: 40 }, (_, i) =>
-    row(i + 10, { district: `district-${i}`, householdSize: (i % 9) + 1, helperId: i % 2 ? 'helper-1' : null, cnicHash: `p-${i % 6}` }),
+    row(i + 10, {
+      district: `district-${i}`,
+      householdSize: (i % 9) + 1,
+      helperId: i % 2 ? 'helper-1' : null,
+      cnicHash: `p-${i % 6}`,
+    }),
   );
-  const clean = row(1, { nameNormalized: 'nasreen bibi', district: 'Karachi West', householdSize: 8, helperId: 'helper-1' });
+  const clean = row(1, {
+    nameNormalized: 'nasreen bibi',
+    district: 'Karachi West',
+    householdSize: 8,
+    helperId: 'helper-1',
+  });
   assert.deepEqual(detectAnomaliesForCase(tenant, clean.caseId, [clean, ...others], now), []);
 });
 
@@ -216,17 +250,26 @@ test('the claim that completes a ring is flagged with every ring claim as eviden
   const ring = [1, 2, 3].map((n) => row(n, { payoutKey: 'mule', district: `ring-${n}` }));
   // Rows fetched for another key of case-3 (same name + district) plus an unrelated ring it is not part of.
   const sameName = row(4, { nameNormalized: ring[2]!.nameNormalized, district: ring[2]!.district });
-  const otherRing = [5, 6, 7].map((n) => row(n, { payoutKey: 'other-mule', district: `other-${n}` }));
+  const otherRing = [5, 6, 7].map((n) =>
+    row(n, { payoutKey: 'other-mule', district: `other-${n}` }),
+  );
   const fetched = [...ring, sameName, ...otherRing, ring[0]!]; // the lookups overlap: duplicates are harmless
   const found = detectAnomaliesForCase(tenant, 'case-3', fetched, now);
-  assert.deepEqual(found.map((x) => x.type), ['shared_payout']);
+  assert.deepEqual(
+    found.map((x) => x.type),
+    ['shared_payout'],
+  );
   assert.deepEqual(found[0]!.evidenceCaseIds, ['case-1', 'case-2', 'case-3']);
   // The first two ring claims, on their own, were under the threshold: same outcome as before.
   assert.deepEqual(detectAnomaliesForCase(tenant, 'case-2', ring.slice(0, 2), now), []);
 });
 
 test('anomaly flags are shown to staff and removed for citizens and helpers', () => {
-  const flags = ['duplicate_claim_this_month', 'anomaly:shared_payout', 'anomaly:identity_collision'];
+  const flags = [
+    'duplicate_claim_this_month',
+    'anomaly:shared_payout',
+    'anomaly:identity_collision',
+  ];
   assert.deepEqual(flagsVisibleTo(flags, true), flags);
   assert.deepEqual(flagsVisibleTo(flags, false), ['duplicate_claim_this_month']);
   assert.deepEqual(flagsVisibleTo(['anomaly:helper_velocity'], false), []);

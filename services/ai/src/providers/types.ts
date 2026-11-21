@@ -77,5 +77,10 @@ export class ProviderError extends Error {
 export async function readError(provider: string, res: Response): Promise<never> {
   const body = await res.text().catch(() => '');
   const retryable = res.status === 429 || res.status >= 500;
-  throw new ProviderError(provider, `HTTP ${res.status}: ${body.slice(0, 300)}`, res.status, retryable);
+  throw new ProviderError(
+    provider,
+    `HTTP ${res.status}: ${body.slice(0, 300)}`,
+    res.status,
+    retryable,
+  );
 }

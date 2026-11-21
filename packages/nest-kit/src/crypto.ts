@@ -1,4 +1,11 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from 'node:crypto';
 
 /**
  * Field-level encryption for PII (CNIC, phone): AES-256-GCM.
@@ -17,9 +24,15 @@ export function encryptField(plain: string, keyHex: string): string {
 export function decryptField(payload: string, keyHex: string): string {
   const [v, iv, tag, data] = payload.split('.');
   if (v !== 'v1' || !iv || !tag || !data) throw new Error('Unsupported ciphertext');
-  const decipher = createDecipheriv('aes-256-gcm', Buffer.from(keyHex, 'hex'), Buffer.from(iv, 'base64'));
+  const decipher = createDecipheriv(
+    'aes-256-gcm',
+    Buffer.from(keyHex, 'hex'),
+    Buffer.from(iv, 'base64'),
+  );
   decipher.setAuthTag(Buffer.from(tag, 'base64'));
-  return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8');
+  return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString(
+    'utf8',
+  );
 }
 
 /** Deterministic keyed hash for lookups on encrypted fields (find person by CNIC). */

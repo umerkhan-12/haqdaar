@@ -38,14 +38,14 @@ public/         manifest, service worker, icons
 
 Measured on the production build (gzipped first-load JS, all `<script>` tags of the page):
 
-| Route | JS gzip | HTML gzip |
-|---|---|---|
-| `/login` | 191.3 KB | 3.3 KB |
-| `/citizen` | 193.7 KB | 2.7 KB |
-| `/citizen/claim` | 195.8 KB | 2.7 KB |
-| `/citizen/status` | 194.6 KB | 2.7 KB |
-| `/officer` | 195.3 KB | 2.7 KB |
-| `/judge` | 194.8 KB | 2.7 KB |
-| `/offline` (almost no app code) | 185.5 KB | 2.8 KB |
+| Route                           | JS gzip  | HTML gzip |
+| ------------------------------- | -------- | --------- |
+| `/login`                        | 191.3 KB | 3.3 KB    |
+| `/citizen`                      | 193.7 KB | 2.7 KB    |
+| `/citizen/claim`                | 195.8 KB | 2.7 KB    |
+| `/citizen/status`               | 194.6 KB | 2.7 KB    |
+| `/officer`                      | 195.3 KB | 2.7 KB    |
+| `/judge`                        | 194.8 KB | 2.7 KB    |
+| `/offline` (almost no app code) | 185.5 KB | 2.8 KB    |
 
 ≈ 170 KB of that is React DOM + the Next.js runtime; Haqdaar code is ≈ 15 KB shared + ≈ 11 KB on the claim route. After the first visit the service worker serves all JS from cache (see DESIGN.md §5).

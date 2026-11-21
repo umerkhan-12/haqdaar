@@ -11,7 +11,10 @@ import {
 export type ProfileName = 'dev' | 'demo' | 'offline';
 
 /** Provider order per profile. LLM/STT fall back to mock; embeddings fail closed. */
-export const PROFILES: Record<ProfileName, { llm: string[]; stt: string[]; embed: string[]; description: string }> = {
+export const PROFILES: Record<
+  ProfileName,
+  { llm: string[]; stt: string[]; embed: string[]; description: string }
+> = {
   dev: {
     llm: ['groq', 'gemini'],
     stt: ['groq', 'gemini'],
@@ -132,7 +135,10 @@ export class AiRouter {
     });
   }
 
-  transcribe(req: SttRequest, task = 'transcribe'): Promise<RoutedResult<{ text: string; model: string }>> {
+  transcribe(
+    req: SttRequest,
+    task = 'transcribe',
+  ): Promise<RoutedResult<{ text: string; model: string }>> {
     return this.route('stt', task, this.order('stt'), (p) => {
       if (!p.transcribe) throw new ProviderError(p.id, 'no STT support', undefined, true);
       return p.transcribe(req);
@@ -186,13 +192,19 @@ export class AiRouter {
         attempts.push({ provider: id, ok: true, ms: Date.now() - t });
         return this.done(kind, task, value, p, attempts, started);
       } catch (e) {
-        attempts.push({ provider: id, ok: false, ms: Date.now() - t, error: (e as Error).message.slice(0, 200) });
+        attempts.push({
+          provider: id,
+          ok: false,
+          ms: Date.now() - t,
+          error: (e as Error).message.slice(0, 200),
+        });
         // Non-retryable (our request is wrong): another vendor won't fix it, but the mock still answers safely.
         if (e instanceof ProviderError && !e.retryable) break;
       }
     }
 
-    if (kind === 'embed') throw new ProviderError('ai-router', 'No embedding provider is available');
+    if (kind === 'embed')
+      throw new ProviderError('ai-router', 'No embedding provider is available');
     const value = await call(this.mock);
     attempts.push({ provider: this.mock.id, ok: true, ms: 0 });
     return this.done(kind, task, value, this.mock, attempts, started);
@@ -222,6 +234,13 @@ export class AiRouter {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
     });
-    return { value, provider: p.id, isMock: p.isMock, fallbackUsed: fallbackUsed || p.isMock, latencyMs, attempts };
+    return {
+      value,
+      provider: p.id,
+      isMock: p.isMock,
+      fallbackUsed: fallbackUsed || p.isMock,
+      latencyMs,
+      attempts,
+    };
   }
 }

@@ -16,8 +16,14 @@ export class StatusController {
       BACKENDS.map(async (name) => {
         const started = Date.now();
         try {
-          const res = await fetch(`${serviceUrl(name)}/health`, { signal: AbortSignal.timeout(2500) });
-          const body = (await res.json()) as { status?: string; details?: { checks?: unknown }; checks?: unknown };
+          const res = await fetch(`${serviceUrl(name)}/health`, {
+            signal: AbortSignal.timeout(2500),
+          });
+          const body = (await res.json()) as {
+            status?: string;
+            details?: { checks?: unknown };
+            checks?: unknown;
+          };
           return {
             name,
             ok: res.ok,
@@ -26,7 +32,13 @@ export class StatusController {
             checks: body.checks ?? body.details?.checks,
           };
         } catch (e) {
-          return { name, ok: false, status: 'down', ms: Date.now() - started, error: (e as Error).message };
+          return {
+            name,
+            ok: false,
+            status: 'down',
+            ms: Date.now() - started,
+            error: (e as Error).message,
+          };
         }
       }),
     );

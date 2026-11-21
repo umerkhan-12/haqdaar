@@ -30,9 +30,11 @@ export function cosine(a: number[], b: number[]): number {
 }
 
 export function terms(input: string): string[] {
-  return input
-    .normalize('NFKC')
-    .toLocaleLowerCase()
-    .replace(/[٠-٩۰-۹]/g, (d) => String('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'.indexOf(d) % 10))
-    .match(/[\p{L}\p{N}]{2,}/gu) ?? [];
+  return (
+    input
+      .normalize('NFKC')
+      .toLocaleLowerCase()
+      .replace(/[٠-٩۰-۹]/g, (d) => String('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'.indexOf(d) % 10))
+      .match(/[\p{L}\p{N}]{2,}/gu) ?? []
+  );
 }

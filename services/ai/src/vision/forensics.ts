@@ -51,7 +51,8 @@ export async function errorLevel(original: Buffer): Promise<ElaResult> {
       const p = y * w + x;
       const k = Math.floor(y / BLOCK) * bw + Math.floor(x / BLOCK);
       err[k] += Math.abs(a[p]! - b[p]!);
-      if (x + 1 < w && y + 1 < h) grad[k] += Math.abs(a[p]! - a[p + 1]!) + Math.abs(a[p]! - a[p + w]!);
+      if (x + 1 < w && y + 1 < h)
+        grad[k] += Math.abs(a[p]! - a[p + 1]!) + Math.abs(a[p]! - a[p + w]!);
     }
   }
 
@@ -85,7 +86,8 @@ export async function errorLevel(original: Buffer): Promise<ElaResult> {
           const nx = cx + dx;
           const ny = cy + dy;
           const n = ny * bw + nx;
-          if (nx < 0 || ny < 0 || nx >= bw || ny >= bh || seen[n] || ratio[n]! < threshold) continue;
+          if (nx < 0 || ny < 0 || nx >= bw || ny >= bh || seen[n] || ratio[n]! < threshold)
+            continue;
           seen[n] = 1;
           stack.push(n);
         }

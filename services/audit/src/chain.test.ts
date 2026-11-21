@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canonicalJson, chainHash, entityIdOf, GENESIS_HASH, verifyRows, type ChainFields, type ChainRow } from './chain';
+import {
+  canonicalJson,
+  chainHash,
+  entityIdOf,
+  GENESIS_HASH,
+  verifyRows,
+  type ChainFields,
+  type ChainRow,
+} from './chain';
 
 function buildChain(n: number): ChainRow[] {
   const rows: ChainRow[] = [];
@@ -24,7 +32,10 @@ function buildChain(n: number): ChainRow[] {
 }
 
 test('canonical JSON ignores key order (jsonb may reorder keys)', () => {
-  assert.equal(canonicalJson({ b: 1, a: { d: [1, { y: 2, x: 1 }], c: null } }), canonicalJson({ a: { c: null, d: [1, { x: 1, y: 2 }] }, b: 1 }));
+  assert.equal(
+    canonicalJson({ b: 1, a: { d: [1, { y: 2, x: 1 }], c: null } }),
+    canonicalJson({ a: { c: null, d: [1, { x: 1, y: 2 }] }, b: 1 }),
+  );
 });
 
 test('an untouched chain verifies', () => {

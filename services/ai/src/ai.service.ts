@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { buildEvent, EventBus, HealthRegistry, type Principal } from '@haqdaar/nest-kit';
 import { env } from './env';
 import { AiRouter, PROFILES, type CallRecord, type ProfileName } from './router/ai-router';
@@ -26,7 +33,13 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AiService.name);
   readonly router: AiRouter;
   private readonly ocr = new OcrEngine(env.TESSDATA_DIR);
-  private readonly stats: Stats = { calls: 0, failures: 0, fallbacks: 0, mockAnswers: 0, byProvider: {} };
+  private readonly stats: Stats = {
+    calls: 0,
+    failures: 0,
+    fallbacks: 0,
+    mockAnswers: 0,
+    byProvider: {},
+  };
 
   constructor(
     private readonly bus: EventBus,
@@ -89,7 +102,12 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   }
 
   async transcribe(audio: Buffer, mimeType: string, language = 'ur') {
-    const r = await this.router.transcribe({ audio, mimeType, language, timeoutMs: env.AI_TIMEOUT_MS });
+    const r = await this.router.transcribe({
+      audio,
+      mimeType,
+      language,
+      timeoutMs: env.AI_TIMEOUT_MS,
+    });
     return {
       text: r.value.text,
       provider: r.provider,
@@ -101,7 +119,10 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async embed(text: string, taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_QUERY') {
+  async embed(
+    text: string,
+    taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_QUERY',
+  ) {
     if (this.router.isKilled || this.router.activeProfile === 'offline') {
       throw new ServiceUnavailableException('AI embeddings are unavailable in the current mode');
     }
@@ -113,10 +134,17 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       timeoutMs: env.AI_TIMEOUT_MS,
     });
     if (result.isMock) throw new ServiceUnavailableException('AI embeddings are unavailable');
-    return { embedding: result.value.embedding, model: result.value.model, provider: result.provider };
+    return {
+      embedding: result.value.embedding,
+      model: result.value.model,
+      provider: result.provider,
+    };
   }
 
-  async answerFromSources(question: string, sources: { id: string; docId: string; heading: string; content: string }[]) {
+  async answerFromSources(
+    question: string,
+    sources: { id: string; docId: string; heading: string; content: string }[],
+  ) {
     const { answerFromSources } = await import('./tasks/answer-from-sources');
     return answerFromSources(this.router, question, sources);
   }

@@ -12,13 +12,19 @@ const GROUP_TITLE: Record<string, string> = { PAY: 'Bank-grade payouts' };
 function Result({ r }: { r: ScenarioResult }) {
   return (
     <div className="mt-3 space-y-2" aria-live="polite">
-      <p className={`rounded-xl border-2 p-3 font-semibold ${r.ok ? 'border-green-700 bg-green-50 text-green-900' : 'border-red-700 bg-red-50 text-red-900'}`}>
-        {r.ok ? '✓' : '✗'} {r.summary} <span className="font-normal opacity-80">({(r.durationMs / 1000).toFixed(1)} s)</span>
+      <p
+        className={`rounded-xl border-2 p-3 font-semibold ${r.ok ? 'border-green-700 bg-green-50 text-green-900' : 'border-red-700 bg-red-50 text-red-900'}`}
+      >
+        {r.ok ? '✓' : '✗'} {r.summary}{' '}
+        <span className="font-normal opacity-80">({(r.durationMs / 1000).toFixed(1)} s)</span>
       </p>
       <ol className="space-y-1 text-sm">
         {r.steps.map((s, i) => (
           <li key={i} className="flex gap-2 rounded-lg bg-slate-50 p-2">
-            <span aria-label={s.ok ? 'passed' : 'failed'} className={s.ok ? 'text-green-800' : 'text-red-800'}>
+            <span
+              aria-label={s.ok ? 'passed' : 'failed'}
+              className={s.ok ? 'text-green-800' : 'text-red-800'}
+            >
               {s.ok ? '✓' : '✗'}
             </span>
             <span className="flex-1">
@@ -62,14 +68,20 @@ export function JudgeMode() {
     <Shell roles={['admin']} wide>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="mr-auto text-2xl font-bold">Judge Mode</h1>
-        <Link href="/phone" className="min-h-12 rounded-xl border-2 border-brand px-4 py-2.5 font-semibold text-brand-dark">
+        <Link
+          href="/phone"
+          className="min-h-12 rounded-xl border-2 border-brand px-4 py-2.5 font-semibold text-brand-dark"
+        >
           Mock phone
         </Link>
         <Button variant="ghost" onClick={() => setConfirmReset(true)} disabled={!!running}>
           Reset demo…
         </Button>
       </div>
-      <p className="mb-4 text-muted">Each button drives the real system through the public API, like a phone would, and shows every step. Try to break it.</p>
+      <p className="mb-4 text-muted">
+        Each button drives the real system through the public API, like a phone would, and shows
+        every step. Try to break it.
+      </p>
       {msg && (
         <p role="status" className="mb-3 rounded-xl bg-slate-100 p-3">
           {msg}
@@ -96,7 +108,12 @@ export function JudgeMode() {
                           <h3 className="font-semibold">{s.title}</h3>
                           <p className="text-sm text-muted">{s.proves}</p>
                         </div>
-                        <Button onClick={() => run(s)} disabled={!!running} aria-busy={running === s.id} aria-label={`Run: ${s.title}`}>
+                        <Button
+                          onClick={() => run(s)}
+                          disabled={!!running}
+                          aria-busy={running === s.id}
+                          aria-label={`Run: ${s.title}`}
+                        >
                           {running === s.id ? 'Running…' : 'Run'}
                         </Button>
                       </div>
@@ -109,7 +126,9 @@ export function JudgeMode() {
                       {r && typeof r !== 'string' && <Result r={r} />}
                       {r && typeof r !== 'string' && (
                         <p className="mt-2">
-                          <StatusPill tone={r.ok ? 'ok' : 'bad'}>{r.ok ? 'passed' : 'failed'}</StatusPill>
+                          <StatusPill tone={r.ok ? 'ok' : 'bad'}>
+                            {r.ok ? 'passed' : 'failed'}
+                          </StatusPill>
                         </p>
                       )}
                     </Card>
@@ -130,13 +149,19 @@ export function JudgeMode() {
           try {
             const r = await api.resetDemo();
             setResults({});
-            setMsg(r.ok ? 'Fresh demo: claims, payouts and consents cleared. The audit log is never touched.' : 'Reset finished with problems — check service status.');
+            setMsg(
+              r.ok
+                ? 'Fresh demo: claims, payouts and consents cleared. The audit log is never touched.'
+                : 'Reset finished with problems — check service status.',
+            );
           } catch (e) {
             setMsg(staffError(e));
           }
         }}
       >
-        <p className="text-sm">Clears claims, payouts and consents. People, rules and the audit log stay.</p>
+        <p className="text-sm">
+          Clears claims, payouts and consents. People, rules and the audit log stay.
+        </p>
       </ConfirmDialog>
     </Shell>
   );

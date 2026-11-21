@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { EventSchemas, type EventEnvelope, type EventPayload, type EventType } from '@haqdaar/shared';
+import {
+  EventSchemas,
+  type EventEnvelope,
+  type EventPayload,
+  type EventType,
+} from '@haqdaar/shared';
 import type { Principal } from '../auth/decorators';
 
 export interface EventContext {

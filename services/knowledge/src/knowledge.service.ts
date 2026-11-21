@@ -2,19 +2,36 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ServiceClient } from '@haqdaar/nest-kit';
 import { PrismaService } from './prisma.service';
 import { cosine } from './retrieval/embeddings';
-import { extractiveAnswer, rankByHashedEmbedding, rankByWords, redactPii, refusal, validCitations } from './retrieval/answer';
+import {
+  extractiveAnswer,
+  rankByHashedEmbedding,
+  rankByWords,
+  redactPii,
+  refusal,
+  validCitations,
+} from './retrieval/answer';
 import { env } from './env';
 
 const LIVE_THRESHOLD = env.KNOWLEDGE_RELEVANCE_THRESHOLD;
 const OFFLINE_THRESHOLD = env.KNOWLEDGE_OFFLINE_THRESHOLD;
 
 type AiStatus = { profile: 'dev' | 'demo' | 'offline'; killed: boolean };
-type Chunk = { id: string; docId: string; heading: string; content: string; embedding: number[]; dimension: number };
+type Chunk = {
+  id: string;
+  docId: string;
+  heading: string;
+  content: string;
+  embedding: number[];
+  dimension: number;
+};
 
 @Injectable()
 export class KnowledgeService {
   private readonly logger = new Logger(KnowledgeService.name);
-  constructor(private readonly prisma: PrismaService, private readonly upstream: ServiceClient) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly upstream: ServiceClient,
+  ) {}
 
   async ask(question: string) {
     const redactedQuestion = redactPii(question);
@@ -27,48 +44,82 @@ export class KnowledgeService {
     try {
       status = await this.upstream.call<AiStatus>('ai', '/ai/status', { timeoutMs: 2500 });
     } catch (error) {
-      this.logger.warn({ error: String(error) }, 'AI status unavailable, answering from local retrieval');
+      this.logger.warn(
+        { error: String(error) },
+        'AI status unavailable, answering from local retrieval',
+      );
     }
-    const chunks = await this.prisma.knowledgeChunk.findMany({ orderBy: [{ docId: 'asc' }, { ordinal: 'asc' }] }) as Chunk[];
+    const chunks = (await this.prisma.knowledgeChunk.findMany({
+      orderBy: [{ docId: 'asc' }, { ordinal: 'asc' }],
+    })) as Chunk[];
     if (!chunks.length) return this.refused();
 
     let offline = !status || status.killed || status.profile === 'offline';
     let ranked: { chunk: Chunk; score: number }[] = [];
     if (!offline) {
-      const live = index.mode === 'gemini' ? await this.rankByLiveEmbedding(redactedQuestion, index, chunks) : null;
+      const live =
+        index.mode === 'gemini'
+          ? await this.rankByLiveEmbedding(redactedQuestion, index, chunks)
+          : null;
       if (live) ranked = live;
       else offline = true;
     }
     if (offline) {
       // Offline index uses the same deterministic hash vectors created by ingestion. Against a
       // live index, use local lexical matching.
-      ranked = status?.profile === 'offline' && index.mode === 'offline'
-        ? rankByHashedEmbedding(redactedQuestion, chunks, index.dimension, OFFLINE_THRESHOLD)
-        : rankByWords(redactedQuestion, chunks, OFFLINE_THRESHOLD);
+      ranked =
+        status?.profile === 'offline' && index.mode === 'offline'
+          ? rankByHashedEmbedding(redactedQuestion, chunks, index.dimension, OFFLINE_THRESHOLD)
+          : rankByWords(redactedQuestion, chunks, OFFLINE_THRESHOLD);
     }
     if (!ranked.length) return this.refused();
 
-    const sources = ranked.map(({ chunk }) => ({ id: chunk.id, docId: chunk.docId, heading: chunk.heading, content: chunk.content }));
+    const sources = ranked.map(({ chunk }) => ({
+      id: chunk.id,
+      docId: chunk.docId,
+      heading: chunk.heading,
+      content: chunk.content,
+    }));
     if (offline) return extractiveAnswer(redactedQuestion, sources, OFFLINE_THRESHOLD);
     try {
-      const answer = await this.upstream.call<{ answer: string; citations: { docId: string; heading: string; quote: string }[]; refused: boolean }>(
-        'ai', '/ai/answer-from-sources', { method: 'POST', body: { question: redactedQuestion, sources }, timeoutMs: 18_000 },
-      );
+      const answer = await this.upstream.call<{
+        answer: string;
+        citations: { docId: string; heading: string; quote: string }[];
+        refused: boolean;
+      }>('ai', '/ai/answer-from-sources', {
+        method: 'POST',
+        body: { question: redactedQuestion, sources },
+        timeoutMs: 18_000,
+      });
       if (answer.refused || !validCitations(answer, sources)) return this.refused();
       return answer;
     } catch (error) {
-      this.logger.warn({ error: String(error) }, 'Could not produce a source-grounded policy answer');
+      this.logger.warn(
+        { error: String(error) },
+        'Could not produce a source-grounded policy answer',
+      );
       return this.refused();
     }
   }
 
   /** Null when live embeddings are unavailable or do not match the index; the caller then answers locally. */
-  private async rankByLiveEmbedding(question: string, index: { model: string; dimension: number }, chunks: Chunk[]) {
+  private async rankByLiveEmbedding(
+    question: string,
+    index: { model: string; dimension: number },
+    chunks: Chunk[],
+  ) {
     try {
-      const embedded = await this.upstream.call<{ embedding: number[]; model: string }>('ai', '/ai/embed', {
-        method: 'POST', body: { text: question, taskType: 'RETRIEVAL_QUERY' }, timeoutMs: 22_000,
-      });
-      if (embedded.model !== index.model || embedded.embedding.length !== index.dimension) return null;
+      const embedded = await this.upstream.call<{ embedding: number[]; model: string }>(
+        'ai',
+        '/ai/embed',
+        {
+          method: 'POST',
+          body: { text: question, taskType: 'RETRIEVAL_QUERY' },
+          timeoutMs: 22_000,
+        },
+      );
+      if (embedded.model !== index.model || embedded.embedding.length !== index.dimension)
+        return null;
       return chunks
         .filter((chunk) => chunk.dimension === index.dimension)
         .map((chunk) => ({ chunk, score: cosine(embedded.embedding, chunk.embedding) }))
@@ -76,10 +127,15 @@ export class KnowledgeService {
         .filter((item) => item.score >= LIVE_THRESHOLD)
         .slice(0, 4);
     } catch (error) {
-      this.logger.warn({ error: String(error) }, 'Live policy embeddings unavailable, answering from local retrieval');
+      this.logger.warn(
+        { error: String(error) },
+        'Live policy embeddings unavailable, answering from local retrieval',
+      );
       return null;
     }
   }
 
-  private refused() { return refusal(); }
+  private refused() {
+    return refusal();
+  }
 }

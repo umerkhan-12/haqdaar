@@ -6,13 +6,15 @@ import { KnowledgeController } from './knowledge.controller';
 import { KnowledgeService } from './knowledge.service';
 
 @Module({
-  imports: [KitModule.forRoot({
-    service: 'knowledge',
-    jwtPublicKey: env.JWT_PUBLIC_KEY,
-    internalSecret: env.INTERNAL_SECRET,
-    logLevel: env.LOG_LEVEL,
-    prettyLogs: env.LOG_PRETTY === '1',
-  })],
+  imports: [
+    KitModule.forRoot({
+      service: 'knowledge',
+      jwtPublicKey: env.JWT_PUBLIC_KEY,
+      internalSecret: env.INTERNAL_SECRET,
+      logLevel: env.LOG_LEVEL,
+      prettyLogs: env.LOG_PRETTY === '1',
+    }),
+  ],
   controllers: [KnowledgeController],
   providers: [PrismaService, KnowledgeService],
 })

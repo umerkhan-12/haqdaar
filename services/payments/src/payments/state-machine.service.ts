@@ -35,13 +35,22 @@ export class PaymentStateMachine {
     private readonly bus: EventBus,
   ) {}
 
-  async transition(payment: Payment, to: PaymentState, o: TransitionOptions = {}): Promise<Payment> {
+  async transition(
+    payment: Payment,
+    to: PaymentState,
+    o: TransitionOptions = {},
+  ): Promise<Payment> {
     const updated = await this.prisma.$transaction((tx) => this.transitionIn(tx, payment, to, o));
     this.bus.kick();
     return updated;
   }
 
-  async transitionIn(tx: Tx, payment: Payment, to: PaymentState, o: TransitionOptions): Promise<Payment> {
+  async transitionIn(
+    tx: Tx,
+    payment: Payment,
+    to: PaymentState,
+    o: TransitionOptions,
+  ): Promise<Payment> {
     const from = payment.state as PaymentState;
     const illegal = transitionError(from, to);
     if (illegal) throw new ConflictException(illegal);
@@ -72,7 +81,14 @@ export class PaymentStateMachine {
 
     const event = buildEvent(
       'payments.payment.state_changed',
-      { paymentId: payment.id, caseId: payment.caseId, from, to, amount: payment.amount, reason: o.reason ?? null },
+      {
+        paymentId: payment.id,
+        caseId: payment.caseId,
+        from,
+        to,
+        amount: payment.amount,
+        reason: o.reason ?? null,
+      },
       { source: 'payments', tenantId: payment.tenantId, principal: by },
     );
     await tx.outboxEvent.create({ data: outboxRow(event) });
@@ -81,7 +97,9 @@ export class PaymentStateMachine {
   }
 
   async get(id: string, tenantId?: string): Promise<Payment> {
-    const p = await this.prisma.payment.findFirst({ where: { id, ...(tenantId ? { tenantId } : {}) } });
+    const p = await this.prisma.payment.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
+    });
     if (!p) throw new NotFoundException('Payment not found');
     return p;
   }

@@ -13,14 +13,30 @@ export class CheckFailed extends Error {}
 export class Run {
   readonly steps: Step[] = [];
 
-  async step<T>(label: string, fn: () => Promise<T>, detail?: (v: T) => string, data?: (v: T) => unknown): Promise<T> {
+  async step<T>(
+    label: string,
+    fn: () => Promise<T>,
+    detail?: (v: T) => string,
+    data?: (v: T) => unknown,
+  ): Promise<T> {
     const t = performance.now();
     try {
       const v = await fn();
-      this.steps.push({ label, ok: true, ms: Math.round(performance.now() - t), detail: detail?.(v), data: data?.(v) });
+      this.steps.push({
+        label,
+        ok: true,
+        ms: Math.round(performance.now() - t),
+        detail: detail?.(v),
+        data: data?.(v),
+      });
       return v;
     } catch (e) {
-      this.steps.push({ label, ok: false, ms: Math.round(performance.now() - t), detail: (e as Error).message });
+      this.steps.push({
+        label,
+        ok: false,
+        ms: Math.round(performance.now() - t),
+        detail: (e as Error).message,
+      });
       throw e;
     }
   }
@@ -36,7 +52,11 @@ export class Run {
   }
 }
 
-export async function waitFor<T>(fn: () => Promise<T | undefined | null | false>, what: string, timeoutMs = 20_000): Promise<T> {
+export async function waitFor<T>(
+  fn: () => Promise<T | undefined | null | false>,
+  what: string,
+  timeoutMs = 20_000,
+): Promise<T> {
   const until = Date.now() + timeoutMs;
   for (;;) {
     const v = await fn();

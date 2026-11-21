@@ -1,11 +1,11 @@
 # Deploying Haqdaar (free tiers)
 
-| Part | Where | Cost |
-|---|---|---|
+| Part                                                                                            | Where                                              | Cost |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------- | ---- |
 | 9 NestJS services (gateway, identity, cases, ai, payments, audit, rails-mock, judge, knowledge) | Render free web services, Docker, region Singapore | Free |
-| PostgreSQL (one schema per service + `pgboss`) | Supabase free project, region Singapore | Free |
-| Web app (`apps/web`) | Vercel Hobby | Free |
-| Keep-alive pings | UptimeRobot free | Free |
+| PostgreSQL (one schema per service + `pgboss`)                                                  | Supabase free project, region Singapore            | Free |
+| Web app (`apps/web`)                                                                            | Vercel Hobby                                       | Free |
+| Keep-alive pings                                                                                | UptimeRobot free                                   | Free |
 
 All images come from one `Dockerfile`: `docker build --build-arg SERVICE=<name> .`
 
@@ -20,6 +20,7 @@ All images come from one `Dockerfile`: `docker build --build-arg SERVICE=<name> 
 - Free web services **can send but cannot receive private-network traffic.** So our services call each other over their **public** `https://haqdaar-<name>.onrender.com` URLs. That is safe by design: internal calls carry a 60-second internal token scoped to the target service, and every service verifies user JWTs itself.
 
 **Budget maths:** 9 services always awake = 9 × 24 = 216 hours/day → 750 hours last about **3.5 days**. So:
+
 - deploy on **Sat 21 Nov** (not earlier), keep everything awake through judging on **Mon 23 Nov** (≈ 2.5 days ≈ 480 hours), and
 - if you need to save hours, let `rails-mock`, `audit` and `judge` sleep until rehearsals (they wake on the first request).
 
@@ -47,14 +48,14 @@ All images come from one `Dockerfile`: `docker build --build-arg SERVICE=<name> 
    `postgresql://postgres.<ref>:<PASSWORD>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`
 4. Build the service database URLs (same base, different `schema`; keep connections small on the free tier):
 
-   | Variable | Value |
-   |---|---|
-   | `IDENTITY_DATABASE_URL` | `<session-url>?schema=identity&connection_limit=5` |
-   | `CASES_DATABASE_URL` | `<session-url>?schema=cases&connection_limit=5` |
-   | `PAYMENTS_DATABASE_URL` | `<session-url>?schema=payments&connection_limit=5` |
-   | `AUDIT_DATABASE_URL` | `<session-url>?schema=audit&connection_limit=5` |
+   | Variable                 | Value                                               |
+   | ------------------------ | --------------------------------------------------- |
+   | `IDENTITY_DATABASE_URL`  | `<session-url>?schema=identity&connection_limit=5`  |
+   | `CASES_DATABASE_URL`     | `<session-url>?schema=cases&connection_limit=5`     |
+   | `PAYMENTS_DATABASE_URL`  | `<session-url>?schema=payments&connection_limit=5`  |
+   | `AUDIT_DATABASE_URL`     | `<session-url>?schema=audit&connection_limit=5`     |
    | `KNOWLEDGE_DATABASE_URL` | `<session-url>?schema=knowledge&connection_limit=5` |
-   | `BUS_DATABASE_URL` | `<session-url>` (no `schema`) |
+   | `BUS_DATABASE_URL`       | `<session-url>` (no `schema`)                       |
 
 5. Create tables and seed **from a laptop** (put the database URLs in your local `.env` temporarily):
    ```bash
@@ -76,14 +77,14 @@ pnpm keys --force    # in a scratch copy, or just read your existing .env
 
 Use **production values that are different from your laptop's**. Never paste them in chat or commit them.
 
-| Secret | Goes to |
-|---|---|
-| `JWT_PRIVATE_KEY` | **identity only** (only identity can mint tokens) |
-| `JWT_PUBLIC_KEY`, `INTERNAL_SECRET` | env group `haqdaar-secrets` (all services) |
-| `PII_ENC_KEY`, `PII_HASH_KEY` | identity **and** cases (must be identical in both, and identical to what was used for `pnpm db:seed`) |
-| `SEAL_SECRET` | ai, payments, judge (identical) |
-| `WEBHOOK_SIGNING_SECRET` | payments |
-| `GROQ_API_KEY`, `GEMINI_API_KEY`, `GEMINI_DEMO_API_KEY` | ai |
+| Secret                                                  | Goes to                                                                                               |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `JWT_PRIVATE_KEY`                                       | **identity only** (only identity can mint tokens)                                                     |
+| `JWT_PUBLIC_KEY`, `INTERNAL_SECRET`                     | env group `haqdaar-secrets` (all services)                                                            |
+| `PII_ENC_KEY`, `PII_HASH_KEY`                           | identity **and** cases (must be identical in both, and identical to what was used for `pnpm db:seed`) |
+| `SEAL_SECRET`                                           | ai, payments, judge (identical)                                                                       |
+| `WEBHOOK_SIGNING_SECRET`                                | payments                                                                                              |
+| `GROQ_API_KEY`, `GEMINI_API_KEY`, `GEMINI_DEMO_API_KEY` | ai                                                                                                    |
 
 Multi-line PEM keys: paste them as one line with literal `\n` (exactly as `pnpm keys` writes them) — the services convert them back.
 
@@ -124,6 +125,7 @@ Multi-line PEM keys: paste them as one line with literal `\n` (exactly as `pnpm 
 ## 6. Keep it awake (UptimeRobot)
 
 Create HTTP monitors every **10 minutes** (free tier minimum is 5) on:
+
 - `https://haqdaar-gateway.onrender.com/status` — this one request also wakes every backend, because the status page calls each service's `/health`.
 
 Turn the monitor **on** from Sunday noon until judging ends, **off** otherwise, to protect the 750-hour budget.

@@ -32,7 +32,12 @@ export function MockPhone() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-xl font-bold">Mock phone</h1>
         {PHONES.map((p) => (
-          <Button key={p.phone} variant={p.phone === phone ? 'primary' : 'ghost'} onClick={() => setPhone(p.phone)} className="text-sm">
+          <Button
+            key={p.phone}
+            variant={p.phone === phone ? 'primary' : 'ghost'}
+            onClick={() => setPhone(p.phone)}
+            className="text-sm"
+          >
             {p.who}
           </Button>
         ))}
@@ -48,7 +53,9 @@ export function MockPhone() {
           ) : error ? (
             <p role="alert">{staffError(error)}</p>
           ) : !data?.length ? (
-            <p className="p-6 text-center text-muted">No messages yet. Run a payout in Judge Mode.</p>
+            <p className="p-6 text-center text-muted">
+              No messages yet. Run a payout in Judge Mode.
+            </p>
           ) : (
             data.map((m) => {
               const v = verdicts[m.messageId];
@@ -59,11 +66,18 @@ export function MockPhone() {
                       {m.from} · {new Date(m.receivedAt).toLocaleTimeString('en-PK')}
                     </p>
                     <p className="mt-1 whitespace-pre-line text-sm">{m.body}</p>
-                    <button className="mt-2 min-h-12 text-sm font-semibold text-brand underline" onClick={() => check(m.messageId, m.body)}>
+                    <button
+                      className="mt-2 min-h-12 text-sm font-semibold text-brand underline"
+                      onClick={() => check(m.messageId, m.body)}
+                    >
                       Is this real?
                     </button>
                   </div>
-                  {typeof v === 'string' ? <p role="alert">{v}</p> : v ? <VerdictCard v={v} /> : null}
+                  {typeof v === 'string' ? (
+                    <p role="alert">{v}</p>
+                  ) : v ? (
+                    <VerdictCard v={v} />
+                  ) : null}
                 </div>
               );
             })

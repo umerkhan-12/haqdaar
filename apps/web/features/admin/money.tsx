@@ -22,7 +22,11 @@ export function AdminMoney() {
         <Card>
           <div className="mb-2 flex items-center gap-2">
             <h2 className="text-lg font-bold">Balances</h2>
-            {data && <StatusPill tone={data.balanced ? 'ok' : 'bad'}>{data.balanced ? 'debits = credits' : 'UNBALANCED'}</StatusPill>}
+            {data && (
+              <StatusPill tone={data.balanced ? 'ok' : 'bad'}>
+                {data.balanced ? 'debits = credits' : 'UNBALANCED'}
+              </StatusPill>
+            )}
             <button onClick={reload} className="ml-auto min-h-12 px-2 text-sm text-brand underline">
               Refresh
             </button>
@@ -38,15 +42,24 @@ export function AdminMoney() {
               rowKey={(a) => a.account}
               empty="No ledger entries yet."
               columns={[
-                { header: 'Account', cell: (a) => <span className="font-mono text-xs">{a.account}</span> },
-                { header: 'Balance (PKR)', cell: (a) => a.balance.toLocaleString('en-PK'), className: 'text-right' },
+                {
+                  header: 'Account',
+                  cell: (a) => <span className="font-mono text-xs">{a.account}</span>,
+                },
+                {
+                  header: 'Balance (PKR)',
+                  cell: (a) => a.balance.toLocaleString('en-PK'),
+                  className: 'text-right',
+                },
               ]}
             />
           )}
         </Card>
         <Card>
           <h2 className="text-lg font-bold">Reconciliation</h2>
-          <p className="text-sm text-muted">Matches every settled payout with the bank statement by end-to-end id.</p>
+          <p className="text-sm text-muted">
+            Matches every settled payout with the bank statement by end-to-end id.
+          </p>
           <Button
             className="mt-3"
             disabled={busy}
@@ -78,8 +91,14 @@ export function AdminMoney() {
                 rowKey={(i) => `${i.endToEndId}-${i.status}`}
                 empty="Every payout matches the statement."
                 columns={[
-                  { header: 'End-to-end id', cell: (i) => <span className="font-mono text-xs">{i.endToEndId}</span> },
-                  { header: 'Problem', cell: (i) => <StatusPill tone="bad">{i.status}</StatusPill> },
+                  {
+                    header: 'End-to-end id',
+                    cell: (i) => <span className="font-mono text-xs">{i.endToEndId}</span>,
+                  },
+                  {
+                    header: 'Problem',
+                    cell: (i) => <StatusPill tone="bad">{i.status}</StatusPill>,
+                  },
                 ]}
               />
             </div>

@@ -48,7 +48,14 @@ const PROCESSABLE: CaseStatus[] = ['SUBMITTED', 'NEEDS_INFO'];
 const CONSENTS: ConsentPurpose[] = ['identity_verification', 'household_data'];
 const DUPLICATE_NAME_MIN = 0.92;
 const ANOMALY_OPEN_STATUSES = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW'] as const;
-const ANOMALY_COUNTED_STATUSES = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW', 'APPROVED', 'PAID'] as const;
+const ANOMALY_COUNTED_STATUSES = [
+  'SUBMITTED',
+  'PROCESSING',
+  'NEEDS_INFO',
+  'IN_REVIEW',
+  'APPROVED',
+  'PAID',
+] as const;
 const ANOMALY_BATCH_SIZE = 250;
 /** Submit path: most recent rows read per group. Far above every threshold, and it bounds the work. */
 const ANOMALY_GROUP_LIMIT = 200;
@@ -97,7 +104,12 @@ export class CasesService {
   // ---------- citizen / helper ----------
 
   /** Same idempotency key → same case. The CNIC must belong to the person this session acts for. */
-  async create(user: AuthUser, body: CreateCaseBody, clientKey: string | undefined, requestId?: string) {
+  async create(
+    user: AuthUser,
+    body: CreateCaseBody,
+    clientKey: string | undefined,
+    requestId?: string,
+  ) {
     if (!clientKey || clientKey.length < 8 || clientKey.length > 100) {
       throw new BadRequestException('Header idempotency-key (8-100 chars) is required');
     }
@@ -133,8 +145,22 @@ export class CasesService {
           },
         });
         const ctx = { source: 'cases', principal: user, correlationId: requestId };
-        await this.emit(tx, buildEvent('cases.case.submitted', { caseId: c.id, personId: person.id, type: c.type }, ctx));
-        await this.emit(tx, buildEvent('cases.case.status_changed', { caseId: c.id, from: null, to: 'SUBMITTED' }, ctx));
+        await this.emit(
+          tx,
+          buildEvent(
+            'cases.case.submitted',
+            { caseId: c.id, personId: person.id, type: c.type },
+            ctx,
+          ),
+        );
+        await this.emit(
+          tx,
+          buildEvent(
+            'cases.case.status_changed',
+            { caseId: c.id, from: null, to: 'SUBMITTED' },
+            ctx,
+          ),
+        );
         return c;
       });
     } catch (e) {
@@ -156,9 +182,18 @@ export class CasesService {
     return this.view(user, c.id);
   }
 
-  private async resolvePerson(tx: Tx, tenantId: string, personId: string, cnicHash: string, body: CreateCaseBody) {
-    const byCnic = await tx.person.findUnique({ where: { tenantId_cnicHash: { tenantId, cnicHash } } });
-    if (byCnic && byCnic.id !== personId) throw new ForbiddenException('This CNIC belongs to another person');
+  private async resolvePerson(
+    tx: Tx,
+    tenantId: string,
+    personId: string,
+    cnicHash: string,
+    body: CreateCaseBody,
+  ) {
+    const byCnic = await tx.person.findUnique({
+      where: { tenantId_cnicHash: { tenantId, cnicHash } },
+    });
+    if (byCnic && byCnic.id !== personId)
+      throw new ForbiddenException('This CNIC belongs to another person');
     const byId = byCnic ?? (await tx.person.findUnique({ where: { id: personId } }));
     if (byId && byId.cnicHash !== cnicHash) {
       throw new ForbiddenException('CNIC does not match the registered identity');
@@ -172,7 +207,13 @@ export class CasesService {
     };
     if (byId) return tx.person.update({ where: { id: byId.id }, data });
     return tx.person.create({
-      data: { id: personId, tenantId, cnicHash, cnicEnc: encryptField(body.cnic, env.PII_ENC_KEY), ...data },
+      data: {
+        id: personId,
+        tenantId,
+        cnicHash,
+        cnicEnc: encryptField(body.cnic, env.PII_ENC_KEY),
+        ...data,
+      },
     });
   }
 
@@ -183,7 +224,10 @@ export class CasesService {
    * Any upstream failure degrades to human review; it never crashes the claim or guesses.
    */
   private async process(caseId: string, actor: AuthUser, requestId?: string) {
-    const c = await this.prisma.case.findUniqueOrThrow({ where: { id: caseId }, include: { person: true } });
+    const c = await this.prisma.case.findUniqueOrThrow({
+      where: { id: caseId },
+      include: { person: true },
+    });
     const rule = await this.rules.published(c.tenantId);
     const costs = await this.rules.costs(c.tenantId);
     const inputs = await this.gather(c, c.person, requestId);
@@ -192,10 +236,19 @@ export class CasesService {
     // so whichever claim of a ring arrives last always sees the others.
     const signals = await this.anomaliesForCase(c, new Date());
     inputs.externalFlags.push(...signals.map((signal) => this.anomalyHardFlag(signal.type)));
-    const outcome = decide(inputs, { clauses: rule.clauses, amount: rule.amount, costs, amountCap: env.AUTO_APPROVE_AMOUNT_CAP_PKR });
+    const outcome = decide(inputs, {
+      clauses: rule.clauses,
+      amount: rule.amount,
+      costs,
+      amountCap: env.AUTO_APPROVE_AMOUNT_CAP_PKR,
+    });
 
     const to: CaseStatus =
-      outcome.lane === 'AUTO_APPROVE' ? 'APPROVED' : outcome.lane === 'ASK_MORE' ? 'NEEDS_INFO' : 'IN_REVIEW';
+      outcome.lane === 'AUTO_APPROVE'
+        ? 'APPROVED'
+        : outcome.lane === 'ASK_MORE'
+          ? 'NEEDS_INFO'
+          : 'IN_REVIEW';
     const ctx = { source: 'cases', principal: actor, correlationId: requestId };
 
     await this.prisma.$transaction(async (tx) => {
@@ -238,12 +291,23 @@ export class CasesService {
           caseId: c.id,
           type: 'decision',
           actor: 'system',
-          data: { decisionId: decision.id, lane: outcome.lane, ruleVersion: rule.version, confidence: outcome.confidence },
+          data: {
+            decisionId: decision.id,
+            lane: outcome.lane,
+            ruleVersion: rule.version,
+            confidence: outcome.confidence,
+          },
         },
       });
-      await this.emit(tx, buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, ctx));
+      await this.emit(
+        tx,
+        buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, ctx),
+      );
       if (to === 'APPROVED') {
-        await this.emit(tx, this.decidedEvent(c.id, c.personId, 'AUTO_APPROVE', outcome.confidence, rule, ctx));
+        await this.emit(
+          tx,
+          this.decidedEvent(c.id, c.personId, 'AUTO_APPROVE', outcome.confidence, rule, ctx),
+        );
       }
     });
     this.bus.kick();
@@ -279,13 +343,28 @@ export class CasesService {
       c.payoutKey ? group({ payoutKey: c.payoutKey }, ANOMALY_WINDOWS.sharedPayoutMs) : [],
       c.helperId ? group({ helperId: c.helperId }, ANOMALY_WINDOWS.helperVelocityMs) : [],
       c.districtSnapshot && c.householdSize !== null
-        ? group({ districtSnapshot: c.districtSnapshot, householdSize: c.householdSize }, ANOMALY_WINDOWS.householdPatternMs)
+        ? group(
+            { districtSnapshot: c.districtSnapshot, householdSize: c.householdSize },
+            ANOMALY_WINDOWS.householdPatternMs,
+          )
         : [],
       c.nameNormalizedSnapshot && c.districtSnapshot
-        ? group({ nameNormalizedSnapshot: c.nameNormalizedSnapshot, districtSnapshot: c.districtSnapshot }, ANOMALY_WINDOWS.identityCollisionMs)
+        ? group(
+            {
+              nameNormalizedSnapshot: c.nameNormalizedSnapshot,
+              districtSnapshot: c.districtSnapshot,
+            },
+            ANOMALY_WINDOWS.identityCollisionMs,
+          )
         : [],
     ]);
-    return detectAnomaliesForCase(c.tenantId, c.id, groups.flat().map(toObservation), now, this.anomalyThresholds());
+    return detectAnomaliesForCase(
+      c.tenantId,
+      c.id,
+      groups.flat().map(toObservation),
+      now,
+      this.anomalyThresholds(),
+    );
   }
 
   private anomalyThresholds() {
@@ -300,28 +379,31 @@ export class CasesService {
   /** Authenticated, tenant-scoped, repeatable scan. It only adds evidence to open claims. */
   async scanAnomalies(user: AuthUser) {
     const now = new Date();
-    return this.prisma.$transaction(async (tx) => {
-      await this.lockTenantAnomalyScan(tx, user.tenantId);
-      const observations = await this.anomalyObservations(tx, user.tenantId, now);
-      const candidates = await this.anomalyCandidateGroups(tx, user.tenantId, now);
-      const signals = this.detectTenantAnomalies(user.tenantId, observations, now, candidates);
-      const result = await this.persistOpenFindings(tx, user.tenantId, signals);
-      return {
-        tenantId: user.tenantId,
-        scannedCases: observations.length,
-        signalsDetected: signals.length,
-        findingsCreated: result.created,
-        findingsUpdated: result.updated,
-        findings: signals.map((signal) => ({
-          type: signal.type,
-          evidenceCaseIds: signal.evidenceCaseIds,
-          observedCount: signal.observedCount,
-          threshold: signal.threshold,
-          windowStart: signal.windowStart,
-          windowEnd: signal.windowEnd,
-        })),
-      };
-    }, { maxWait: 10_000, timeout: 30_000 });
+    return this.prisma.$transaction(
+      async (tx) => {
+        await this.lockTenantAnomalyScan(tx, user.tenantId);
+        const observations = await this.anomalyObservations(tx, user.tenantId, now);
+        const candidates = await this.anomalyCandidateGroups(tx, user.tenantId, now);
+        const signals = this.detectTenantAnomalies(user.tenantId, observations, now, candidates);
+        const result = await this.persistOpenFindings(tx, user.tenantId, signals);
+        return {
+          tenantId: user.tenantId,
+          scannedCases: observations.length,
+          signalsDetected: signals.length,
+          findingsCreated: result.created,
+          findingsUpdated: result.updated,
+          findings: signals.map((signal) => ({
+            type: signal.type,
+            evidenceCaseIds: signal.evidenceCaseIds,
+            observedCount: signal.observedCount,
+            threshold: signal.threshold,
+            windowStart: signal.windowStart,
+            windowEnd: signal.windowEnd,
+          })),
+        };
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    );
   }
 
   private async lockTenantAnomalyScan(tx: Tx, tenantId: string) {
@@ -329,7 +411,11 @@ export class CasesService {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId}))`;
   }
 
-  private async anomalyObservations(tx: Tx, tenantId: string, now: Date): Promise<AnomalyObservation[]> {
+  private async anomalyObservations(
+    tx: Tx,
+    tenantId: string,
+    now: Date,
+  ): Promise<AnomalyObservation[]> {
     const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60_000);
     const rows: AnomalyObservation[] = [];
     let afterId: string | undefined;
@@ -364,7 +450,11 @@ export class CasesService {
   }
 
   /** Candidate clusters are SQL GROUP BY aggregates; the pure engine verifies them and builds evidence. */
-  private async anomalyCandidateGroups(tx: Tx, tenantId: string, now: Date): Promise<AnomalyCandidateGroups> {
+  private async anomalyCandidateGroups(
+    tx: Tx,
+    tenantId: string,
+    now: Date,
+  ): Promise<AnomalyCandidateGroups> {
     const base = {
       tenantId,
       type: 'relief_claim' as const,
@@ -407,7 +497,8 @@ export class CasesService {
     });
     const helperCounts = new Map<string, number>();
     for (const item of helperPeople) {
-      if (item.helperId) helperCounts.set(item.helperId, (helperCounts.get(item.helperId) ?? 0) + 1);
+      if (item.helperId)
+        helperCounts.set(item.helperId, (helperCounts.get(item.helperId) ?? 0) + 1);
     }
     for (const [helperId, people] of helperCounts) {
       if (people > env.ANOMALY_HELPER_CLAIMS_PER_HOUR) candidates.helper_velocity.add(helperId);
@@ -431,11 +522,19 @@ export class CasesService {
       householdCounts.set(key, people);
     }
     for (const [key, people] of householdCounts) {
-      if (people.size >= env.ANOMALY_HOUSEHOLD_PATTERN_PEOPLE) candidates.household_pattern.add(key);
+      if (people.size >= env.ANOMALY_HOUSEHOLD_PATTERN_PEOPLE)
+        candidates.household_pattern.add(key);
     }
 
     const identityDetails = await tx.case.groupBy({
-      by: ['nameNormalizedSnapshot', 'districtSnapshot', 'personId', 'payoutKey', 'helperId', 'householdSize'],
+      by: [
+        'nameNormalizedSnapshot',
+        'districtSnapshot',
+        'personId',
+        'payoutKey',
+        'helperId',
+        'householdSize',
+      ],
       where: {
         ...base,
         nameNormalizedSnapshot: { not: null },
@@ -443,12 +542,19 @@ export class CasesService {
         createdAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60_000), lte: now },
       },
     });
-    const identityGroups = new Map<string, Map<string, { payout: Set<string>; helper: Set<string>; household: Set<number> }>>();
+    const identityGroups = new Map<
+      string,
+      Map<string, { payout: Set<string>; helper: Set<string>; household: Set<number> }>
+    >();
     for (const item of identityDetails) {
       if (!item.nameNormalizedSnapshot || !item.districtSnapshot) continue;
       const key = `${normalizeGroupValue(item.nameNormalizedSnapshot)}\u0000${normalizeGroupValue(item.districtSnapshot)}`;
       const people = identityGroups.get(key) ?? new Map();
-      const details = people.get(item.personId) ?? { payout: new Set<string>(), helper: new Set<string>(), household: new Set<number>() };
+      const details = people.get(item.personId) ?? {
+        payout: new Set<string>(),
+        helper: new Set<string>(),
+        household: new Set<number>(),
+      };
       if (item.payoutKey) details.payout.add(item.payoutKey);
       if (item.helperId) details.helper.add(item.helperId);
       if (item.householdSize !== null) details.household.add(item.householdSize);
@@ -462,9 +568,10 @@ export class CasesService {
         for (let j = i + 1; j < identities.length && !corroborated; j++) {
           const left = identities[i]!;
           const right = identities[j]!;
-          const details = Number(intersects(left.payout, right.payout))
-            + Number(intersects(left.helper, right.helper))
-            + Number(intersects(left.household, right.household));
+          const details =
+            Number(intersects(left.payout, right.payout)) +
+            Number(intersects(left.helper, right.helper)) +
+            Number(intersects(left.household, right.household));
           corroborated = details >= env.ANOMALY_IDENTITY_CORROBORATION_DETAILS;
         }
       }
@@ -480,7 +587,8 @@ export class CasesService {
   private async persistOpenFindings(tx: Tx, tenantId: string, signals: AnomalySignal[]) {
     const byCase = new Map<string, AnomalySignal[]>();
     for (const signal of signals) {
-      for (const caseId of signal.evidenceCaseIds) byCase.set(caseId, [...(byCase.get(caseId) ?? []), signal]);
+      for (const caseId of signal.evidenceCaseIds)
+        byCase.set(caseId, [...(byCase.get(caseId) ?? []), signal]);
     }
     const open = { in: [...ANOMALY_OPEN_STATUSES] };
     const targets = await tx.case.findMany({
@@ -514,9 +622,15 @@ export class CasesService {
           observedCount: signal.observedCount,
           threshold: signal.threshold,
         };
-        const inserted = await tx.anomalyFinding.createMany({ data: [{ ...data, caseId }], skipDuplicates: true });
+        const inserted = await tx.anomalyFinding.createMany({
+          data: [{ ...data, caseId }],
+          skipDuplicates: true,
+        });
         if (inserted.count === 0) {
-          await tx.anomalyFinding.update({ where: { caseId_signalKey: { caseId, signalKey } }, data });
+          await tx.anomalyFinding.update({
+            where: { caseId_signalKey: { caseId, signalKey } },
+            data,
+          });
           updated++;
           continue;
         }
@@ -546,14 +660,24 @@ export class CasesService {
   }
 
   private payoutKey(iban: string | undefined, alias: string | undefined): string | null {
-    if (alias) return createHmac('sha256', env.PII_HASH_KEY).update(`alias:${alias.replace(/\D/g, '')}`).digest('hex');
-    if (iban) return createHmac('sha256', env.PII_HASH_KEY).update(`iban:${iban.replace(/[^a-z0-9]/gi, '').toUpperCase()}`).digest('hex');
+    if (alias)
+      return createHmac('sha256', env.PII_HASH_KEY)
+        .update(`alias:${alias.replace(/\D/g, '')}`)
+        .digest('hex');
+    if (iban)
+      return createHmac('sha256', env.PII_HASH_KEY)
+        .update(`iban:${iban.replace(/[^a-z0-9]/gi, '').toUpperCase()}`)
+        .digest('hex');
     return null;
   }
 
   private async gather(c: Case, person: Person, requestId?: string): Promise<DecisionInputs> {
     const cnic = decryptField(person.cnicEnc, env.PII_ENC_KEY);
-    const extraction = c.extraction as { confidence?: number; isWidow?: boolean; householdSize?: number } | null;
+    const extraction = c.extraction as {
+      confidence?: number;
+      isWidow?: boolean;
+      householdSize?: number;
+    } | null;
     const facts: Facts = {
       claim: {
         fullName: person.fullName,
@@ -568,7 +692,8 @@ export class CasesService {
       nadraMatch: false,
       nameScore: 0,
       householdVerified: false,
-      extractionConfidence: typeof extraction?.confidence === 'number' ? extraction.confidence : null,
+      extractionConfidence:
+        typeof extraction?.confidence === 'number' ? extraction.confidence : null,
       possibleDuplicate: await this.possibleDuplicatePerson(person),
     };
     const externalFlags: HardFlag[] = [];
@@ -577,11 +702,18 @@ export class CasesService {
     // Consent first: without it we do not even ask NADRA.
     let missing: string[];
     try {
-      const allowed = await Promise.all(CONSENTS.map((p) => this.upstream.consentAllowed(person.id, p, requestId)));
+      const allowed = await Promise.all(
+        CONSENTS.map((p) => this.upstream.consentAllowed(person.id, p, requestId)),
+      );
       missing = CONSENTS.filter((_, i) => !allowed[i]).map((p) => `consent:${p}`);
     } catch (err) {
       this.logger.warn({ err: String(err), caseId: c.id }, 'Consent check unavailable');
-      return { facts, evidence, externalFlags: [...externalFlags, 'verification_unavailable'], missing: [] };
+      return {
+        facts,
+        evidence,
+        externalFlags: [...externalFlags, 'verification_unavailable'],
+        missing: [],
+      };
     }
     if (missing.length) return { facts, evidence, externalFlags, missing };
 
@@ -594,7 +726,12 @@ export class CasesService {
       ]);
     } catch (err) {
       this.logger.warn({ err: String(err), caseId: c.id }, 'Verification services unavailable');
-      return { facts, evidence, externalFlags: [...externalFlags, 'verification_unavailable'], missing };
+      return {
+        facts,
+        evidence,
+        externalFlags: [...externalFlags, 'verification_unavailable'],
+        missing,
+      };
     }
 
     const r = nadra.record;
@@ -617,12 +754,18 @@ export class CasesService {
     } else {
       externalFlags.push('household_not_found');
     }
-    Object.assign(evidence, { nadraMatch: facts.nadra.match, nameScore, householdVerified: !!household });
+    Object.assign(evidence, {
+      nadraMatch: facts.nadra.match,
+      nameScore,
+      householdVerified: !!household,
+    });
     return { facts, evidence, externalFlags, missing };
   }
 
   private async hasOtherClaimThisMonth(c: Case): Promise<boolean> {
-    const monthStart = new Date(Date.UTC(c.createdAt.getUTCFullYear(), c.createdAt.getUTCMonth(), 1));
+    const monthStart = new Date(
+      Date.UTC(c.createdAt.getUTCFullYear(), c.createdAt.getUTCMonth(), 1),
+    );
     const n = await this.prisma.case.count({
       where: {
         personId: c.personId,
@@ -653,7 +796,8 @@ export class CasesService {
 
   async approve(user: AuthUser, id: string, note: string | undefined, requestId?: string) {
     const c = await this.staffCase(user, id);
-    if (c.createdBy === user.id) throw new ForbiddenException('You cannot approve a case you created');
+    if (c.createdBy === user.id)
+      throw new ForbiddenException('You cannot approve a case you created');
     const rule = c.ruleVersionId
       ? await this.prisma.ruleVersion.findUniqueOrThrow({ where: { id: c.ruleVersionId } })
       : await this.rules.published(c.tenantId);
@@ -667,7 +811,17 @@ export class CasesService {
       ur: `افسر نے آپ کی درخواست منظور کر دی۔${note ? ` ${note}` : ''}`,
       en: `Approved by an officer.${note ? ` Note: ${note}` : ''}`,
       extra: (tx) =>
-        this.emit(tx, this.decidedEvent(c.id, c.personId, 'HUMAN_REVIEW', last?.confidence ?? 0, { id: rule.id, amount }, ctx)),
+        this.emit(
+          tx,
+          this.decidedEvent(
+            c.id,
+            c.personId,
+            'HUMAN_REVIEW',
+            last?.confidence ?? 0,
+            { id: rule.id, amount },
+            ctx,
+          ),
+        ),
       ctx,
     });
     return this.view(user, c.id);
@@ -697,7 +851,9 @@ export class CasesService {
     const to = officerId ?? user.id;
     await this.prisma.$transaction([
       this.prisma.case.update({ where: { id: c.id }, data: { assignedTo: to } }),
-      this.prisma.caseEvent.create({ data: { caseId: c.id, type: 'assigned', actor: user.id, data: { to } } }),
+      this.prisma.caseEvent.create({
+        data: { caseId: c.id, type: 'assigned', actor: user.id, data: { to } },
+      }),
     ]);
     return this.view(user, c.id);
   }
@@ -716,7 +872,10 @@ export class CasesService {
     },
   ) {
     await this.prisma.$transaction(async (tx) => {
-      const moved = await tx.case.updateMany({ where: { id: c.id, status: { in: REVIEWABLE } }, data: { status: to } });
+      const moved = await tx.case.updateMany({
+        where: { id: c.id, status: { in: REVIEWABLE } },
+        data: { status: to },
+      });
       if (moved.count === 0) throw new ConflictException(`Case is ${c.status}`);
       const decision = await tx.decision.create({
         data: {
@@ -734,22 +893,44 @@ export class CasesService {
         },
       });
       await tx.caseEvent.create({
-        data: { caseId: c.id, type: to === 'APPROVED' ? 'approved' : 'rejected', actor: user.id, data: { decisionId: decision.id } },
+        data: {
+          caseId: c.id,
+          type: to === 'APPROVED' ? 'approved' : 'rejected',
+          actor: user.id,
+          data: { decisionId: decision.id },
+        },
       });
-      await this.emit(tx, buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, d.ctx));
+      await this.emit(
+        tx,
+        buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, d.ctx),
+      );
       await d.extra?.(tx);
     });
     this.bus.kick();
   }
 
-  private async transition(c: Case, user: AuthUser, to: CaseStatus, type: string, data: object, requestId?: string) {
+  private async transition(
+    c: Case,
+    user: AuthUser,
+    to: CaseStatus,
+    type: string,
+    data: object,
+    requestId?: string,
+  ) {
     await this.prisma.$transaction(async (tx) => {
-      const moved = await tx.case.updateMany({ where: { id: c.id, status: { in: REVIEWABLE } }, data: { status: to } });
+      const moved = await tx.case.updateMany({
+        where: { id: c.id, status: { in: REVIEWABLE } },
+        data: { status: to },
+      });
       if (moved.count === 0) throw new ConflictException(`Case is ${c.status}`);
       await tx.caseEvent.create({ data: { caseId: c.id, type, actor: user.id, data } });
       await this.emit(
         tx,
-        buildEvent('cases.case.status_changed', { caseId: c.id, from: c.status, to }, { source: 'cases', principal: user, correlationId: requestId }),
+        buildEvent(
+          'cases.case.status_changed',
+          { caseId: c.id, from: c.status, to },
+          { source: 'cases', principal: user, correlationId: requestId },
+        ),
       );
     });
     this.bus.kick();
@@ -760,7 +941,11 @@ export class CasesService {
   async list(user: AuthUser, status?: CaseStatus) {
     const where: Prisma.CaseWhereInput = { tenantId: user.tenantId, ...(status ? { status } : {}) };
     if (!isStaff(user)) where.personId = subjectPerson(user);
-    const rows = await this.prisma.case.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100 });
+    const rows = await this.prisma.case.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
     return rows.map((c) => this.summary(c, isStaff(user)));
   }
 
@@ -781,7 +966,12 @@ export class CasesService {
         district: c.districtSnapshot ?? c.person.district,
         anomalies: c.anomalies.map((finding) => this.anomalyView(finding)),
         priority: priority(
-          { confidence: c.confidence, hardFlagCount: c.flags.length, amount: c.amount, createdAt: c.createdAt },
+          {
+            confidence: c.confidence,
+            hardFlagCount: c.flags.length,
+            amount: c.amount,
+            createdAt: c.createdAt,
+          },
           now,
         ),
         waitingMinutes: Math.round((now.getTime() - c.createdAt.getTime()) / 60_000),
@@ -797,7 +987,10 @@ export class CasesService {
       this.prisma.caseEvent.findMany({ where: { caseId: c.id }, orderBy: { at: 'asc' } }),
       this.lastDecision(c.id),
       isStaff(user)
-        ? this.prisma.anomalyFinding.findMany({ where: { tenantId: user.tenantId, caseId: c.id }, orderBy: { createdAt: 'desc' } })
+        ? this.prisma.anomalyFinding.findMany({
+            where: { tenantId: user.tenantId, caseId: c.id },
+            orderBy: { createdAt: 'desc' },
+          })
         : Promise.resolve([]),
     ]);
     return {
@@ -810,7 +1003,9 @@ export class CasesService {
       },
       payout: { ibanMasked: maskTail(c.payoutIban), aliasMasked: maskTail(c.payoutAlias) },
       decision: decision && this.decisionView(decision, isStaff(user)),
-      ...(isStaff(user) ? { anomalies: anomalies.map((finding) => this.anomalyView(finding)) } : {}),
+      ...(isStaff(user)
+        ? { anomalies: anomalies.map((finding) => this.anomalyView(finding)) }
+        : {}),
       timeline: events
         .filter((event) => event.type !== 'anomaly.detected' || isStaff(user))
         .map((e) => ({ type: e.type, actor: e.actor, data: e.data, at: e.at })),
@@ -883,7 +1078,9 @@ export class CasesService {
   }
 
   private async ownCase(user: AuthUser, id: string) {
-    const c = await this.prisma.case.findFirst({ where: { id, tenantId: user.tenantId, personId: subjectPerson(user) } });
+    const c = await this.prisma.case.findFirst({
+      where: { id, tenantId: user.tenantId, personId: subjectPerson(user) },
+    });
     if (!c) throw new NotFoundException('Case not found');
     return c;
   }

@@ -1,7 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Card, ConfirmDialog, Skeleton, StatusPill, Timeline, laneTone, staffError } from '@/components/ui';
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  Skeleton,
+  StatusPill,
+  Timeline,
+  laneTone,
+  staffError,
+} from '@/components/ui';
 import { api, type CaseDetail } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
@@ -10,7 +19,8 @@ type Action = 'reject' | 'info' | null;
 function clauseList(d: CaseDetail['decision']) {
   if (!d) return [];
   const c = d.clauses;
-  if (Array.isArray(c)) return c.map((x) => ({ id: x.id, ok: x.passed ?? x.ok ?? false, text: x.textEn ?? x.id }));
+  if (Array.isArray(c))
+    return c.map((x) => ({ id: x.id, ok: x.passed ?? x.ok ?? false, text: x.textEn ?? x.id }));
   return Object.entries(c).map(([id, ok]) => ({ id, ok, text: id }));
 }
 
@@ -40,7 +50,12 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
   }
 
   if (loading && !c) return <Skeleton lines={5} />;
-  if (error) return <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">{staffError(error)}</p>;
+  if (error)
+    return (
+      <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">
+        {staffError(error)}
+      </p>
+    );
   if (!c) return null;
 
   const decided = ['APPROVED', 'REJECTED', 'PAID', 'CLOSED'].includes(c.status);
@@ -92,7 +107,12 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
 
       {!decided && (
         <div className="flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={() => run(() => api.approve(c.id, 'Approved by officer'), 'Approved. Payout will start.')}>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              run(() => api.approve(c.id, 'Approved by officer'), 'Approved. Payout will start.')
+            }
+          >
             Approve
           </Button>
           <Button variant="danger" disabled={busy} onClick={() => setAction('reject')}>
@@ -111,7 +131,12 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
 
       <Card>
         <h3 className="mb-2 font-semibold">Timeline</h3>
-        <Timeline events={c.timeline.map((e) => ({ label: `${e.type.replace(/_/g, ' ')} · ${e.actor.slice(0, 8)}`, at: e.at }))} />
+        <Timeline
+          events={c.timeline.map((e) => ({
+            label: `${e.type.replace(/_/g, ' ')} · ${e.actor.slice(0, 8)}`,
+            at: e.at,
+          }))}
+        />
       </Card>
 
       <ConfirmDialog
@@ -123,13 +148,23 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
         onClose={() => setAction(null)}
         onConfirm={() =>
           action === 'reject'
-            ? run(() => api.reject(c.id, text.trim()), 'Rejected. The citizen will hear the reason.')
+            ? run(
+                () => api.reject(c.id, text.trim()),
+                'Rejected. The citizen will hear the reason.',
+              )
             : run(() => api.requestInfo(c.id, text.trim()), 'Request sent.')
         }
       >
         <label className="block space-y-1">
-          <span className="text-sm font-medium">{action === 'reject' ? 'Reason (required, the citizen hears it)' : 'What is needed'}</span>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} className="w-full rounded-xl border-2 border-slate-400 p-2" />
+          <span className="text-sm font-medium">
+            {action === 'reject' ? 'Reason (required, the citizen hears it)' : 'What is needed'}
+          </span>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={3}
+            className="w-full rounded-xl border-2 border-slate-400 p-2"
+          />
         </label>
       </ConfirmDialog>
     </div>

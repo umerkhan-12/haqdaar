@@ -1,6 +1,13 @@
 import { createHash } from 'node:crypto';
 
-export type ChunkInput = { id: string; docId: string; heading: string; content: string; contentHash: string; ordinal: number };
+export type ChunkInput = {
+  id: string;
+  docId: string;
+  heading: string;
+  content: string;
+  contentHash: string;
+  ordinal: number;
+};
 
 /** Split a policy document by `##` heading, about 400 estimated tokens per chunk with 50 of overlap. */
 export function chunkDocument(docId: string, markdown: string): ChunkInput[] {
@@ -27,7 +34,10 @@ export function chunkDocument(docId: string, markdown: string): ChunkInput[] {
     while (start < words.length) {
       let end = start;
       let tokenCount = 0;
-      while (end < words.length && (tokenCount + approxTokens(words[end]!) <= size || end === start)) {
+      while (
+        end < words.length &&
+        (tokenCount + approxTokens(words[end]!) <= size || end === start)
+      ) {
         tokenCount += approxTokens(words[end]!);
         end++;
       }
@@ -56,7 +66,13 @@ export function chunkDocument(docId: string, markdown: string): ChunkInput[] {
 }
 
 /** Rough subword estimate: one token per four Unicode code points, at least one per word. */
-function approxTokens(word: string) { return Math.max(1, Math.ceil(Array.from(word).length / 4)); }
+function approxTokens(word: string) {
+  return Math.max(1, Math.ceil(Array.from(word).length / 4));
+}
 
-export function normalize(value: string) { return value.normalize('NFKC').replace(/\s+/g, ' ').trim(); }
-export function sha(value: string) { return createHash('sha256').update(value).digest('hex'); }
+export function normalize(value: string) {
+  return value.normalize('NFKC').replace(/\s+/g, ' ').trim();
+}
+export function sha(value: string) {
+  return createHash('sha256').update(value).digest('hex');
+}

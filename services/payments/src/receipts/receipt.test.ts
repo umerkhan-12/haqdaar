@@ -13,5 +13,8 @@ test('receipt is sealed and tampering with the amount breaks the seal', () => {
   const secret = 's'.repeat(40);
   const msg = sealMessage(receiptText(12000, 'RAAST-1'), secret, new Date('2030-01-01'));
   assert.equal((verifySeal(msg, secret) as { valid: boolean }).valid, true);
-  assert.equal((verifySeal(msg.replace('12,000', '1,200'), secret) as { valid: boolean }).valid, false);
+  assert.equal(
+    (verifySeal(msg.replace('12,000', '1,200'), secret) as { valid: boolean }).valid,
+    false,
+  );
 });

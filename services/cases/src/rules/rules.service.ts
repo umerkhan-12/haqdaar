@@ -1,4 +1,10 @@
-import { ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { autoApproveThreshold, DEFAULT_COSTS, type CostSettings, type Lane } from '@haqdaar/shared';
 import { buildEvent, EventBus, outboxRow, type AuthUser } from '@haqdaar/nest-kit';
@@ -32,7 +38,12 @@ export class RulesService {
   async published(tenantId: string): Promise<ActiveRule> {
     const r = await this.prisma.ruleVersion.findFirst({ where: { tenantId, status: 'PUBLISHED' } });
     if (!r) throw new ServiceUnavailableException('No published rule for this program');
-    return { id: r.id, version: r.version, clauses: z.array(Clause).parse(r.clauses), amount: r.amount };
+    return {
+      id: r.id,
+      version: r.version,
+      clauses: z.array(Clause).parse(r.clauses),
+      amount: r.amount,
+    };
   }
 
   async createDraft(user: AuthUser, def: RuleDefinition) {
@@ -74,7 +85,11 @@ export class RulesService {
       });
       const event = buildEvent(
         'cases.rule.published',
-        { ruleVersionId: result.id, version: result.version, previousVersionId: previous?.id ?? null },
+        {
+          ruleVersionId: result.id,
+          version: result.version,
+          previousVersionId: previous?.id ?? null,
+        },
         { source: 'cases', principal: user },
       );
       await tx.outboxEvent.create({ data: outboxRow(event) });
@@ -90,7 +105,9 @@ export class RulesService {
    * and show what would change, before anyone publishes it.
    */
   async simulate(user: AuthUser, id: string) {
-    const draft = await this.prisma.ruleVersion.findFirst({ where: { id, tenantId: user.tenantId } });
+    const draft = await this.prisma.ruleVersion.findFirst({
+      where: { id, tenantId: user.tenantId },
+    });
     if (!draft) throw new NotFoundException('Rule version not found');
     const clauses = z.array(Clause).parse(draft.clauses);
     const costs = await this.costs(user.tenantId);
@@ -130,7 +147,9 @@ export class RulesService {
 
   async costs(tenantId: string): Promise<CostSettings> {
     const c = await this.prisma.costSettings.findUnique({ where: { tenantId } });
-    return c ? { wrongApproval: c.wrongApproval, humanReview: c.humanReview, askMore: c.askMore } : DEFAULT_COSTS;
+    return c
+      ? { wrongApproval: c.wrongApproval, humanReview: c.humanReview, askMore: c.askMore }
+      : DEFAULT_COSTS;
   }
 
   async costView(tenantId: string) {

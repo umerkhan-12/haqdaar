@@ -8,18 +8,36 @@ import { Clause, evaluateRules, SAHARA_V1, type Facts } from './rules';
 
 const zainabFacts: Facts = {
   claim: { fullName: 'Zainab Bibi', district: 'Thatta', householdSize: 5, isWidow: true },
-  nadra: { match: true, nameScore: 1, deceased: false, maritalStatus: 'widowed', gender: 'F', district: 'Thatta' },
+  nadra: {
+    match: true,
+    nameScore: 1,
+    deceased: false,
+    maritalStatus: 'widowed',
+    gender: 'F',
+    district: 'Thatta',
+  },
   household: { householdSize: 5, monthlyIncomePkr: 18_000, district: 'Thatta', pmtScore: 18 },
 };
 
 const strong: DecisionInputs = {
   facts: zainabFacts,
-  evidence: { nadraMatch: true, nameScore: 1, householdVerified: true, extractionConfidence: null, possibleDuplicate: false },
+  evidence: {
+    nadraMatch: true,
+    nameScore: 1,
+    householdVerified: true,
+    extractionConfidence: null,
+    possibleDuplicate: false,
+  },
   externalFlags: [],
   missing: [],
 };
 
-const ctx: DecisionContext = { clauses: SAHARA_V1.clauses, amount: 12_000, costs: DEFAULT_COSTS, amountCap: 15_000 };
+const ctx: DecisionContext = {
+  clauses: SAHARA_V1.clauses,
+  amount: 12_000,
+  costs: DEFAULT_COSTS,
+  amountCap: 15_000,
+};
 
 // ---------- names (challenge 03) ----------
 
@@ -50,10 +68,16 @@ test('Sahara v1: Zainab is eligible on every clause', () => {
 });
 
 test('Sahara v1: high income fails only the income clause', () => {
-  const facts = { ...zainabFacts, household: { ...zainabFacts.household!, monthlyIncomePkr: 55_000 } };
+  const facts = {
+    ...zainabFacts,
+    household: { ...zainabFacts.household!, monthlyIncomePkr: 55_000 },
+  };
   const r = evaluateRules(SAHARA_V1.clauses, facts);
   assert.equal(r.eligible, false);
-  assert.deepEqual(r.results.filter((x) => !x.passed).map((x) => x.id), ['low_income']);
+  assert.deepEqual(
+    r.results.filter((x) => !x.passed).map((x) => x.id),
+    ['low_income'],
+  );
 });
 
 test('rule clauses with unknown operators are rejected', () => {
@@ -74,7 +98,10 @@ test('cost model threshold is 0.988 and strong evidence clears it', () => {
 });
 
 test('ineligible is never auto-rejected: it goes to a human with the failed clause explained', () => {
-  const facts = { ...zainabFacts, household: { ...zainabFacts.household!, monthlyIncomePkr: 55_000 } };
+  const facts = {
+    ...zainabFacts,
+    household: { ...zainabFacts.household!, monthlyIncomePkr: 55_000 },
+  };
   const d = decide({ ...strong, facts }, ctx);
   assert.equal(d.lane, 'HUMAN_REVIEW');
   assert.equal(d.eligible, false);
@@ -114,7 +141,10 @@ test('anomaly flags force human review, but the explanation the citizen reads st
     // Word for word what an ordinary "not sure" claim is told: nothing to tell the two apart.
     assert.equal(d.explanationEn, unsure.explanationEn);
     assert.equal(d.explanationUr, unsure.explanationUr);
-    assert.equal(d.explanationEn, 'An officer will review this claim: we are not fully sure, so an officer will check.');
+    assert.equal(
+      d.explanationEn,
+      'An officer will review this claim: we are not fully sure, so an officer will check.',
+    );
   }
   const all = decide({ ...strong, externalFlags: [...ANOMALY_FLAGS] }, ctx);
   assert.equal(all.explanationEn, unsure.explanationEn);
@@ -122,12 +152,18 @@ test('anomaly flags force human review, but the explanation the citizen reads st
 
 test('an anomaly flag next to an ordinary reason adds nothing to the explanation', () => {
   const plain = decide({ ...strong, externalFlags: ['duplicate_claim_this_month'] }, ctx);
-  const both = decide({ ...strong, externalFlags: ['anomaly:shared_payout', 'duplicate_claim_this_month'] }, ctx);
+  const both = decide(
+    { ...strong, externalFlags: ['anomaly:shared_payout', 'duplicate_claim_this_month'] },
+    ctx,
+  );
   assert.equal(both.explanationEn, plain.explanationEn);
   assert.equal(both.explanationUr, plain.explanationUr);
   assert.deepEqual(both.hardFlags, ['anomaly:shared_payout', 'duplicate_claim_this_month']);
 
-  const facts = { ...zainabFacts, household: { ...zainabFacts.household!, monthlyIncomePkr: 55_000 } };
+  const facts = {
+    ...zainabFacts,
+    household: { ...zainabFacts.household!, monthlyIncomePkr: 55_000 },
+  };
   const ineligible = decide({ ...strong, facts }, ctx);
   const flagged = decide({ ...strong, facts, externalFlags: ['anomaly:helper_velocity'] }, ctx);
   assert.equal(flagged.explanationEn, ineligible.explanationEn);
@@ -172,7 +208,11 @@ test('amount above the cap needs an officer even when certain', () => {
 
 test('verification services down → human review, never a crash or a guess', () => {
   const d = decide(
-    { ...strong, facts: { ...zainabFacts, nadra: null, household: null }, externalFlags: ['verification_unavailable'] },
+    {
+      ...strong,
+      facts: { ...zainabFacts, nadra: null, household: null },
+      externalFlags: ['verification_unavailable'],
+    },
     ctx,
   );
   assert.equal(d.lane, 'HUMAN_REVIEW');
@@ -208,5 +248,7 @@ test('queue priority rises with risk, amount and waiting time', () => {
   const fresh = { confidence: 0.9, hardFlagCount: 0, amount: 12_000, createdAt: now };
   assert.ok(priority({ ...fresh, confidence: 0.4 }, now) > priority(fresh, now));
   assert.ok(priority({ ...fresh, hardFlagCount: 1 }, now) > priority(fresh, now));
-  assert.ok(priority({ ...fresh, createdAt: new Date('2026-11-20T12:00:00Z') }, now) > priority(fresh, now));
+  assert.ok(
+    priority({ ...fresh, createdAt: new Date('2026-11-20T12:00:00Z') }, now) > priority(fresh, now),
+  );
 });

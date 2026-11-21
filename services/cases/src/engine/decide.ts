@@ -60,7 +60,14 @@ export const NAME_MATCH_MIN = 0.8;
  * Raw evidence score (logit) with hand-set weights: it orders cases, but its scale is not a probability.
  * `confidenceScore` maps it to a calibrated probability with Platt scaling fitted on the labelled set.
  */
-const W = { bias: -4, nadraMatch: 3, nameScore: 4, householdVerified: 2, extraction: 1, duplicate: -3 };
+const W = {
+  bias: -4,
+  nadraMatch: 3,
+  nameScore: 4,
+  householdVerified: 2,
+  extraction: 1,
+  duplicate: -3,
+};
 const DEFAULT_EXTRACTION_CONFIDENCE = 0.8;
 
 export function rawEvidenceLogit(e: Evidence): number {
@@ -75,7 +82,10 @@ export function rawEvidenceLogit(e: Evidence): number {
 }
 
 /** Confidence that approving is correct, from evidence. */
-export function confidenceScore(e: Evidence, platt: PlattParams | null = ACTIVE_CALIBRATION): number {
+export function confidenceScore(
+  e: Evidence,
+  platt: PlattParams | null = ACTIVE_CALIBRATION,
+): number {
   const z = rawEvidenceLogit(e);
   return platt ? sigmoid(platt.a * z + platt.b) : sigmoid(z);
 }
@@ -94,7 +104,9 @@ export function deriveHardFlags(facts: Facts, evidence: Evidence): HardFlag[] {
  */
 export function decide(input: DecisionInputs, ctx: DecisionContext): DecisionOutcome {
   const threshold = autoApproveThreshold(ctx.costs);
-  const hardFlags = [...new Set([...input.externalFlags, ...deriveHardFlags(input.facts, input.evidence)])];
+  const hardFlags = [
+    ...new Set([...input.externalFlags, ...deriveHardFlags(input.facts, input.evidence)]),
+  ];
   const base = { threshold, hardFlags };
 
   if (input.missing.length) {
@@ -127,7 +139,14 @@ export function decide(input: DecisionInputs, ctx: DecisionContext): DecisionOut
   }
 
   if (confidence >= threshold && ctx.amount <= ctx.amountCap) {
-    return { ...base, lane: 'AUTO_APPROVE', confidence, eligible, clauses: results, ...explainApproved(results, ctx.clauses) };
+    return {
+      ...base,
+      lane: 'AUTO_APPROVE',
+      confidence,
+      eligible,
+      clauses: results,
+      ...explainApproved(results, ctx.clauses),
+    };
   }
 
   const reason = ctx.amount > ctx.amountCap ? 'amount_cap' : 'low_confidence';
@@ -148,7 +167,10 @@ const MISSING_TEXT: Record<string, [string, string]> = {
     'شناخت کی تصدیق کے لیے آپ کی اجازت',
     'your permission to verify your identity',
   ],
-  'consent:household_data': ['گھریلو معلومات دیکھنے کے لیے آپ کی اجازت', 'your permission to check household data'],
+  'consent:household_data': [
+    'گھریلو معلومات دیکھنے کے لیے آپ کی اجازت',
+    'your permission to check household data',
+  ],
   fullName: ['آپ کا پورا نام', 'your full name'],
   cnic: ['آپ کا شناختی کارڈ نمبر', 'your CNIC number'],
 };
@@ -158,25 +180,43 @@ const MISSING_TEXT: Record<string, [string, string]> = {
  * that fired would tell a fraudster what to change. Officers see those flags and their evidence.
  */
 const FLAG_TEXT: Record<Exclude<HardFlag, AnomalyFlag>, [string, string]> = {
-  deceased: ['شناختی ریکارڈ میں یہ شخص وفات شدہ درج ہے', 'the identity record lists this person as deceased'],
-  identity_not_found: ['شناختی کارڈ نمبر ریکارڈ میں نہیں ملا', 'the CNIC was not found in the identity record'],
-  name_mismatch: ['نام شناختی ریکارڈ سے پوری طرح نہیں ملتا', 'the name does not fully match the identity record'],
+  deceased: [
+    'شناختی ریکارڈ میں یہ شخص وفات شدہ درج ہے',
+    'the identity record lists this person as deceased',
+  ],
+  identity_not_found: [
+    'شناختی کارڈ نمبر ریکارڈ میں نہیں ملا',
+    'the CNIC was not found in the identity record',
+  ],
+  name_mismatch: [
+    'نام شناختی ریکارڈ سے پوری طرح نہیں ملتا',
+    'the name does not fully match the identity record',
+  ],
   duplicate_claim_this_month: [
     'اس مہینے اس شناختی کارڈ پر پہلے ہی درخواست موجود ہے',
     'a claim for this CNIC already exists this month',
   ],
   household_not_found: ['گھریلو ریکارڈ نہیں ملا', 'no household record was found'],
-  verification_unavailable: ['تصدیقی نظام ابھی دستیاب نہیں', 'verification systems are unavailable right now'],
+  verification_unavailable: [
+    'تصدیقی نظام ابھی دستیاب نہیں',
+    'verification systems are unavailable right now',
+  ],
 };
 
 const REASON_TEXT = {
-  low_confidence: ['ہمیں پوری طرح یقین نہیں، اس لیے ایک افسر تصدیق کرے گا', 'we are not fully sure, so an officer will check'],
+  low_confidence: [
+    'ہمیں پوری طرح یقین نہیں، اس لیے ایک افسر تصدیق کرے گا',
+    'we are not fully sure, so an officer will check',
+  ],
   amount_cap: ['اس رقم کے لیے افسر کی منظوری ضروری ہے', 'this amount needs an officer’s approval'],
 } as const;
 
 function clauseTexts(results: ClauseResult[], clauses: Clause[], passed: boolean) {
   const byId = new Map(clauses.map((c) => [c.id, c]));
-  const picked = results.filter((r) => r.passed === passed).map((r) => byId.get(r.id)!).filter(Boolean);
+  const picked = results
+    .filter((r) => r.passed === passed)
+    .map((r) => byId.get(r.id)!)
+    .filter(Boolean);
   return { ur: picked.map((c) => c.textUr), en: picked.map((c) => c.textEn) };
 }
 

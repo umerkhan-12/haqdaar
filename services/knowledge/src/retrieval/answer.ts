@@ -2,7 +2,8 @@ import { cosine, hashedEmbedding, terms } from './embeddings';
 
 /** Pure retrieval and answer helpers: no database, no network, no environment. */
 
-export const REFUSAL = 'I can answer questions covered by the program policy documents. I could not find a supported answer. میں صرف پروگرام کی پالیسی دستاویزات کے مطابق جواب دے سکتا ہوں، لیکن متعلقہ جواب نہیں ملا۔';
+export const REFUSAL =
+  'I can answer questions covered by the program policy documents. I could not find a supported answer. میں صرف پروگرام کی پالیسی دستاویزات کے مطابق جواب دے سکتا ہوں، لیکن متعلقہ جواب نہیں ملا۔';
 
 export type Source = { id: string; docId: string; heading: string; content: string };
 export type Citation = { docId: string; heading: string; quote: string };
@@ -21,16 +22,29 @@ export function rankByHashedEmbedding<T extends { embedding: number[] }>(
   threshold: number,
 ): Ranked<T>[] {
   const query = hashedEmbedding(question, dimension);
-  return top(chunks.map((chunk) => ({ chunk, score: cosine(query, chunk.embedding) })), threshold);
+  return top(
+    chunks.map((chunk) => ({ chunk, score: cosine(query, chunk.embedding) })),
+    threshold,
+  );
 }
 
 /** Kill AI against a live index: plain word overlap, no model call. */
-export function rankByWords<T extends { content: string }>(question: string, chunks: T[], threshold: number): Ranked<T>[] {
-  return top(chunks.map((chunk) => ({ chunk, score: lexicalScore(question, chunk.content) })), threshold);
+export function rankByWords<T extends { content: string }>(
+  question: string,
+  chunks: T[],
+  threshold: number,
+): Ranked<T>[] {
+  return top(
+    chunks.map((chunk) => ({ chunk, score: lexicalScore(question, chunk.content) })),
+    threshold,
+  );
 }
 
 function top<T>(ranked: Ranked<T>[], threshold: number): Ranked<T>[] {
-  return ranked.sort((a, b) => b.score - a.score).filter((item) => item.score >= threshold).slice(0, 4);
+  return ranked
+    .sort((a, b) => b.score - a.score)
+    .filter((item) => item.score >= threshold)
+    .slice(0, 4);
 }
 
 /** The model's answer is accepted only if it is exactly its quotes, and every quote is in a retrieved source. */
@@ -39,10 +53,17 @@ export function validCitations(
   sources: { docId: string; heading: string; content: string }[],
 ) {
   if (!answer.answer.trim() || !answer.citations.length) return false;
-  return answer.answer === answer.citations.map((citation) => citation.quote).join(' ') &&
-    answer.citations.every((citation) =>
-    sources.some((source) => source.docId === citation.docId && source.heading === citation.heading && source.content.includes(citation.quote)) &&
-    answer.answer.includes(citation.quote),
+  return (
+    answer.answer === answer.citations.map((citation) => citation.quote).join(' ') &&
+    answer.citations.every(
+      (citation) =>
+        sources.some(
+          (source) =>
+            source.docId === citation.docId &&
+            source.heading === citation.heading &&
+            source.content.includes(citation.quote),
+        ) && answer.answer.includes(citation.quote),
+    )
   );
 }
 
@@ -61,21 +82,57 @@ export function lexicalScore(question: string, content: string) {
   return overlaps / query.size;
 }
 
-const STOP = new Set(['what', 'when', 'where', 'who', 'how', 'the', 'for', 'and', 'are', 'is', 'can', 'will', 'میں', 'کیا', 'کے', 'کی', 'ہے', 'ہیں']);
+const STOP = new Set([
+  'what',
+  'when',
+  'where',
+  'who',
+  'how',
+  'the',
+  'for',
+  'and',
+  'are',
+  'is',
+  'can',
+  'will',
+  'میں',
+  'کیا',
+  'کے',
+  'کی',
+  'ہے',
+  'ہیں',
+]);
 
 /** No model: the answer is the best-matching sentences of the retrieved chunks, word for word. */
 export function extractiveAnswer(question: string, sources: Source[], threshold: number): Answer {
   const query = new Set(terms(question).filter((term) => !STOP.has(term)));
   const selections = sources
-    .flatMap((source) => sentenceCandidates(source.content).map((quote) => ({ source, quote, score: lexicalScore(question, quote) })))
+    .flatMap((source) =>
+      sentenceCandidates(source.content).map((quote) => ({
+        source,
+        quote,
+        score: lexicalScore(question, quote),
+      })),
+    )
     .filter((item) => item.score >= threshold)
     .sort((a, b) => b.score - a.score)
     .slice(0, 2);
   if (!selections.length || !query.size) return refusal();
-  const citations = selections.map(({ source, quote }) => ({ docId: source.docId, heading: source.heading, quote }));
-  return { answer: citations.map((citation) => citation.quote).join(' '), citations, refused: false };
+  const citations = selections.map(({ source, quote }) => ({
+    docId: source.docId,
+    heading: source.heading,
+    quote,
+  }));
+  return {
+    answer: citations.map((citation) => citation.quote).join(' '),
+    citations,
+    refused: false,
+  };
 }
 
 function sentenceCandidates(content: string) {
-  return content.split(/(?<=[.!؟۔])\s+/u).map((sentence) => sentence.trim()).filter((sentence) => sentence.length >= 20 && sentence.length <= 700);
+  return content
+    .split(/(?<=[.!؟۔])\s+/u)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length >= 20 && sentence.length <= 700);
 }

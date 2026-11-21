@@ -44,7 +44,9 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-6">
-      <p className="mb-4 rounded-lg bg-amber-100 px-3 py-1 text-center text-xs font-semibold text-amber-900">{t('prototype')}</p>
+      <p className="mb-4 rounded-lg bg-amber-100 px-3 py-1 text-center text-xs font-semibold text-amber-900">
+        {t('prototype')}
+      </p>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-4xl font-bold text-brand">{t('appName')}</h1>
         <button onClick={toggle} className="min-h-12 rounded-lg px-3 text-sm text-brand underline">
@@ -77,14 +79,23 @@ export default function LoginPage() {
             required
           />
         </Field>
-        {wrong ? <StatusCard tone="bad" title={t('wrongLogin')} /> : error ? <ErrorState error={error} /> : null}
+        {wrong ? (
+          <StatusCard tone="bad" title={t('wrongLogin')} />
+        ) : error ? (
+          <ErrorState error={error} />
+        ) : null}
         <Button type="submit" disabled={busy} className="w-full">
           {busy ? t('loading') : t('signIn')}
         </Button>
       </form>
 
-      <section className="latin mt-6 rounded-2xl border border-dashed border-slate-300 p-4" dir="ltr">
-        <h2 className="mb-2 text-sm font-semibold text-muted">{t('demoAccounts')} · password demo1234</h2>
+      <section
+        className="latin mt-6 rounded-2xl border border-dashed border-slate-300 p-4"
+        dir="ltr"
+      >
+        <h2 className="mb-2 text-sm font-semibold text-muted">
+          {t('demoAccounts')} · password demo1234
+        </h2>
         <div className="grid gap-2">
           {DEMO.map((d) => (
             <button

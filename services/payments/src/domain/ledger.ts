@@ -32,7 +32,8 @@ export function assertBalanced(lines: LedgerLine[]): LedgerLine[] {
   if (lines.length < 2) throw new Error('A ledger entry group needs at least two lines');
   let net = 0;
   for (const l of lines) {
-    if (!Number.isInteger(l.amount) || l.amount <= 0) throw new Error(`Invalid amount: ${l.amount}`);
+    if (!Number.isInteger(l.amount) || l.amount <= 0)
+      throw new Error(`Invalid amount: ${l.amount}`);
     net += l.direction === 'DEBIT' ? l.amount : -l.amount;
   }
   if (net !== 0) throw new Error(`Unbalanced entry group (net ${net})`);

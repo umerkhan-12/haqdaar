@@ -15,7 +15,9 @@ function isKnownLogic(logic: unknown): boolean {
 /** One eligibility condition. Texts state the condition, so they read well as "met" / "not met". */
 export const Clause = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/),
-  logic: z.record(z.unknown()).refine(isKnownLogic, 'Not a valid JSON Logic expression (unknown operator?)'),
+  logic: z
+    .record(z.unknown())
+    .refine(isKnownLogic, 'Not a valid JSON Logic expression (unknown operator?)'),
   textUr: z.string().min(2).max(200),
   textEn: z.string().min(2).max(200),
 });
@@ -30,7 +32,12 @@ export type RuleDefinition = z.infer<typeof RuleDefinition>;
 
 /** Facts the rules can read with `{ "var": "..." }`. Built from verified sources, not from the claim alone. */
 export interface Facts {
-  claim: { fullName: string; district: string | null; householdSize: number | null; isWidow: boolean | null };
+  claim: {
+    fullName: string;
+    district: string | null;
+    householdSize: number | null;
+    isWidow: boolean | null;
+  };
   nadra: {
     match: boolean;
     nameScore: number;
@@ -39,7 +46,12 @@ export interface Facts {
     gender: string;
     district: string;
   } | null;
-  household: { householdSize: number; monthlyIncomePkr: number; district: string; pmtScore: number } | null;
+  household: {
+    householdSize: number;
+    monthlyIncomePkr: number;
+    district: string;
+    pmtScore: number;
+  } | null;
 }
 
 export interface ClauseResult {
@@ -52,8 +64,14 @@ export function combinedLogic(clauses: Clause[]): RulesLogic {
 }
 
 /** Evaluate every clause (not short-circuited) so the explanation can list each one. */
-export function evaluateRules(clauses: Clause[], facts: Facts): { eligible: boolean; results: ClauseResult[] } {
-  const results = clauses.map((c) => ({ id: c.id, passed: jsonLogic.apply(c.logic as RulesLogic, facts) === true }));
+export function evaluateRules(
+  clauses: Clause[],
+  facts: Facts,
+): { eligible: boolean; results: ClauseResult[] } {
+  const results = clauses.map((c) => ({
+    id: c.id,
+    passed: jsonLogic.apply(c.logic as RulesLogic, facts) === true,
+  }));
   return { eligible: results.every((r) => r.passed), results };
 }
 

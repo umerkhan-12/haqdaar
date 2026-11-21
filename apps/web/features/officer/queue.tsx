@@ -20,16 +20,23 @@ export function OfficerQueue() {
             <h1 id="queue-h" className="text-xl font-bold">
               Review queue {data && <span className="text-muted">({data.length})</span>}
             </h1>
-            <button onClick={reload} className="min-h-12 rounded-lg px-3 text-sm text-brand underline">
+            <button
+              onClick={reload}
+              className="min-h-12 rounded-lg px-3 text-sm text-brand underline"
+            >
               Refresh
             </button>
           </div>
           {loading && !data ? (
             <Skeleton lines={6} />
           ) : error ? (
-            <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">{staffError(error)}</p>
+            <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">
+              {staffError(error)}
+            </p>
           ) : !data?.length ? (
-            <p className="rounded-xl border border-dashed border-slate-300 p-4 text-muted">Queue is empty. Automation handled everything it was sure about.</p>
+            <p className="rounded-xl border border-dashed border-slate-300 p-4 text-muted">
+              Queue is empty. Automation handled everything it was sure about.
+            </p>
           ) : (
             <ol className="space-y-2">
               {data.map((c) => (
@@ -42,12 +49,17 @@ export function OfficerQueue() {
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xs text-muted">{c.id.slice(0, 8)}</span>
                       <StatusPill tone={laneTone(c.lane)}>{c.status}</StatusPill>
-                      <span className="ml-auto text-xs text-muted">priority {c.priority?.toFixed(2)}</span>
+                      <span className="ml-auto text-xs text-muted">
+                        priority {c.priority?.toFixed(2)}
+                      </span>
                     </div>
                     <div className="mt-1 text-sm">
-                      {c.district ?? '—'} · conf {c.confidence?.toFixed(2) ?? '—'} · waiting {c.waitingMinutes} min
+                      {c.district ?? '—'} · conf {c.confidence?.toFixed(2) ?? '—'} · waiting{' '}
+                      {c.waitingMinutes} min
                     </div>
-                    {c.flags.length > 0 && <div className="mt-1 text-xs text-amber-900">{c.flags.join(', ')}</div>}
+                    {c.flags.length > 0 && (
+                      <div className="mt-1 text-xs text-amber-900">{c.flags.join(', ')}</div>
+                    )}
                   </button>
                 </li>
               ))}
@@ -55,7 +67,13 @@ export function OfficerQueue() {
           )}
         </section>
         <section aria-label="Case detail">
-          {open ? <CasePanel id={open} onDone={reload} /> : <p className="rounded-xl border border-dashed border-slate-300 p-6 text-muted">Select a case from the queue.</p>}
+          {open ? (
+            <CasePanel id={open} onDone={reload} />
+          ) : (
+            <p className="rounded-xl border border-dashed border-slate-300 p-6 text-muted">
+              Select a case from the queue.
+            </p>
+          )}
         </section>
       </div>
     </Shell>

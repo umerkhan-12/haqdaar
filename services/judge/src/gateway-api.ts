@@ -26,7 +26,12 @@ export class GatewayApi {
   async call<T = any>(
     method: string,
     path: string,
-    o: { token?: string; body?: unknown; headers?: Record<string, string>; timeoutMs?: number } = {},
+    o: {
+      token?: string;
+      body?: unknown;
+      headers?: Record<string, string>;
+      timeoutMs?: number;
+    } = {},
   ): Promise<ApiResult<T>> {
     const headers: Record<string, string> = { ...o.headers };
     if (o.token) headers.authorization = `Bearer ${o.token}`;
@@ -51,7 +56,9 @@ export class GatewayApi {
   /** Access token for a demo role, cached until shortly before it expires. */
   async as(role: DemoRole): Promise<string> {
     return this.cached(`role:${role}`, async () => {
-      const r = await this.call('POST', '/auth/login', { body: { phone: ACCOUNTS[role], password: this.password } });
+      const r = await this.call('POST', '/auth/login', {
+        body: { phone: ACCOUNTS[role], password: this.password },
+      });
       if (r.status !== 200) throw new Error(`Demo login failed for ${role} (HTTP ${r.status})`);
       return r.body;
     });
@@ -64,7 +71,8 @@ export class GatewayApi {
         token: await this.as('helper'),
         body: { personId: f.personId, pin: f.pin },
       });
-      if (r.status !== 200) throw new Error(`Helper could not switch to ${f.fullName} (HTTP ${r.status})`);
+      if (r.status !== 200)
+        throw new Error(`Helper could not switch to ${f.fullName} (HTTP ${r.status})`);
       return r.body;
     });
   }
@@ -77,11 +85,17 @@ export class GatewayApi {
     return `${prefix}-${randomUUID()}`;
   }
 
-  private async cached(key: string, fetchPair: () => Promise<{ accessToken: string; expiresIn: number }>) {
+  private async cached(
+    key: string,
+    fetchPair: () => Promise<{ accessToken: string; expiresIn: number }>,
+  ) {
     const hit = this.tokens.get(key);
     if (hit && hit.expiresAt > Date.now()) return hit.token;
     const pair = await fetchPair();
-    this.tokens.set(key, { token: pair.accessToken, expiresAt: Date.now() + (pair.expiresIn - 60) * 1000 });
+    this.tokens.set(key, {
+      token: pair.accessToken,
+      expiresAt: Date.now() + (pair.expiresIn - 60) * 1000,
+    });
     return pair.accessToken;
   }
 }

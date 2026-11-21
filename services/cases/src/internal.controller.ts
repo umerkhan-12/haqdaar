@@ -1,4 +1,11 @@
-import { ConflictException, Controller, Get, NotFoundException, Param, ParseUUIDPipe } from '@nestjs/common';
+import {
+  ConflictException,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { InternalOnly } from '@haqdaar/nest-kit';
 import { PrismaService } from './prisma.service';
@@ -16,7 +23,8 @@ export class InternalController {
   async payout(@Param('id', ParseUUIDPipe) id: string) {
     const c = await this.prisma.case.findUnique({ where: { id }, include: { person: true } });
     if (!c) throw new NotFoundException('Case not found');
-    if (c.status !== 'APPROVED' && c.status !== 'PAID') throw new ConflictException(`Case is ${c.status}`);
+    if (c.status !== 'APPROVED' && c.status !== 'PAID')
+      throw new ConflictException(`Case is ${c.status}`);
     if (!c.amount) throw new ConflictException('Case has no amount');
     return {
       caseId: c.id,
