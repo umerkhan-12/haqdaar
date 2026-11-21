@@ -1,5 +1,6 @@
 import { BadRequestException, Controller, Get, HttpCode, PayloadTooLargeException, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import type { MultipartFile } from '@fastify/multipart';
 import type { FastifyRequest } from 'fastify';
 import { CurrentPrincipal, PartnerScope, Roles, ZBody, type Principal } from '@haqdaar/nest-kit';
 import { ScamCheckRequest } from '@haqdaar/shared';
@@ -14,6 +15,13 @@ const TypedCnic = z
   .string()
   .regex(/^\d{5}-?\d{7}-?\d$/)
   .transform((c) => c.replace(/-/g, '').replace(/^(\d{5})(\d{7})(\d)$/, '$1-$2-$3'));
+
+/** Upload body; over the multipart limit → 413 (multipart throws, which would otherwise be a 500). */
+const readLimited = (file: MultipartFile, what: string) =>
+  file.toBuffer().catch((err: { code?: string }) => {
+    if (err.code === 'FST_REQ_FILE_TOO_LARGE') throw new PayloadTooLargeException(`${what} too large (max 5 MB)`);
+    throw err;
+  });
 
 const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/m4a'];
 
@@ -71,9 +79,7 @@ export class AiController {
     if (!file) throw new BadRequestException('Audio file is required (field "file")');
     const mime = file.mimetype.split(';')[0]!;
     if (!AUDIO_TYPES.includes(mime)) throw new BadRequestException(`Unsupported audio type: ${mime}`);
-    const audio = await file.toBuffer();
-    if (file.file.truncated) throw new BadRequestException('Audio too large (max 5 MB)');
-    return this.ai.transcribe(audio, mime);
+    return this.ai.transcribe(await readLimited(file, 'Audio'), mime);
   }
 
   /**
@@ -90,10 +96,7 @@ export class AiController {
     let typed: string | undefined;
     for await (const part of req.parts()) {
       if (part.type === 'file') {
-        const buf = await part.toBuffer().catch((err: { code?: string }) => {
-          if (err.code === 'FST_REQ_FILE_TOO_LARGE') throw new PayloadTooLargeException('Image too large (max 5 MB)');
-          throw err;
-        });
+        const buf = await readLimited(part, 'Image');
         if (part.fieldname === 'file') image = buf;
       } else if (part.fieldname === 'cnic' && typeof part.value === 'string' && part.value.trim()) {
         typed = part.value.trim();
