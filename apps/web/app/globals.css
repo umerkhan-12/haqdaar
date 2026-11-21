@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-brand: #0b6b4f;
+  --color-brand-dark: #08513c;
+  --color-brand-soft: #e6f3ee;
+  --color-ink: #1d2433;
+  --color-muted: #5b6677;
+  --color-ok: #15803d;
+  --color-bad: #b91c1c;
+  --color-warn: #b45309;
+  --font-urdu: var(--font-nastaliq), 'Noto Nastaliq Urdu', serif;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: #f6f8f7;
+  color: var(--color-ink);
+}
+
+/* Nastaliq needs generous line height or the letters collide. */
+[lang='ur'] .ur,
+html[lang='ur'] body {
+  font-family: var(--font-urdu);
+  line-height: 2.1;
+}
+
+.latin {
+  font-family: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+:focus-visible {
+  outline: 3px solid #f59e0b;
+  outline-offset: 2px;
+}

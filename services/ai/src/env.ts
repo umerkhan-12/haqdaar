@@ -11,7 +11,7 @@ const Env = BaseEnv.extend({
   SEAL_SECRET: z.string().min(32),
   AI_PROFILE: AiProfile.default('dev'),
   GROQ_API_KEY: z.string().optional(),
-  GROQ_LLM_MODEL: z.string().default('llama-3.3-70b-versatile'),
+  GROQ_LLM_MODEL: z.string().default('openai/gpt-oss-120b'),
   GROQ_STT_MODEL: z.string().default('whisper-large-v3'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_DEMO_API_KEY: z.string().optional(),
