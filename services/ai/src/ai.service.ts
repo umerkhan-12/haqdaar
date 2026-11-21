@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { buildEvent, EventBus, HealthRegistry, type Principal } from '@haqdaar/nest-kit';
 import { env } from './env';
 import { AiRouter, PROFILES, type CallRecord, type ProfileName } from './router/ai-router';
@@ -7,6 +7,8 @@ import { GeminiProvider } from './providers/gemini.provider';
 import { MockProvider } from './providers/mock.provider';
 import { extractClaim } from './tasks/extract-claim';
 import { scamCheck } from './tasks/scam-check';
+import { documentCheck, UnsupportedImageError } from './vision/document-check';
+import { OcrEngine } from './vision/readers';
 
 /** Rolling in-memory stats for the evaluation dashboard (persisted via events to audit). */
 interface Stats {
@@ -18,9 +20,10 @@ interface Stats {
 }
 
 @Injectable()
-export class AiService implements OnModuleInit {
+export class AiService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AiService.name);
   readonly router: AiRouter;
+  private readonly ocr = new OcrEngine(env.TESSDATA_DIR);
   private readonly stats: Stats = { calls: 0, failures: 0, fallbacks: 0, mockAnswers: 0, byProvider: {} };
 
   constructor(
@@ -48,6 +51,12 @@ export class AiService implements OnModuleInit {
     }
     // Non-critical: the service stays up (and answers via the mock) even if every vendor is down.
     this.health.register('ai_providers', async () => this.router.status(), false);
+    // Load the OCR model off the request path; the first boot downloads it once.
+    void this.ocr.warm();
+  }
+
+  onModuleDestroy() {
+    return this.ocr.terminate();
   }
 
   status() {
@@ -88,6 +97,19 @@ export class AiService implements OnModuleInit {
       // Empty text from the mock = "I could not hear you" → UI falls back to icons / helper.
       understood: !r.isMock && r.value.text.length > 0,
     };
+  }
+
+  /** Local only: the image never reaches an external model. Kill AI → every document to a human. */
+  async documentCheck(image: Buffer, typedCnic?: string) {
+    try {
+      return await documentCheck(image, typedCnic, {
+        ocr: (png) => this.ocr.readLines(png, env.AI_TIMEOUT_MS),
+        killed: this.router.isKilled,
+      });
+    } catch (err) {
+      if (err instanceof UnsupportedImageError) throw new BadRequestException(err.message);
+      throw err;
+    }
   }
 
   private record(r: CallRecord) {

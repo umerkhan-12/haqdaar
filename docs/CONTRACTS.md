@@ -70,3 +70,35 @@ Consumes **every** event type in `ALL_EVENT_TYPES`. Append-only, hash-chained. R
 | Route | Who | Notes |
 |---|---|---|
 | `GET /consents/check?personId&purpose&grantedTo?` | internal | `{ allowed: boolean, consentId: string \| null }` |
+
+## ai (port 4003)
+
+| Route | Who | Notes |
+|---|---|---|
+| `POST /ai/document-check` | citizen, helper, officer | CNIC photo checks. `multipart/form-data`: `file` (JPEG or PNG **by magic bytes**, max 5 MB → 413) and optional `cnic` the citizen typed (`12345-1234567-1`, dashes optional → 400 if malformed). Anything else → 400. |
+
+Response (200):
+
+```json
+{
+  "kind": "jpeg",
+  "cnicFromOcr": "42201-1234567-4",
+  "cnicFromQr": "42201-1234567-4",
+  "fields": { "name": "Zainab Bibi", "fatherName": "Allah Ditta", "gender": "F", "dateOfBirth": "01.01.1980", "dateOfIssue": "15.03.2021", "dateOfExpiry": "15.03.2031" },
+  "checks": [{ "id": "cnic_read", "ok": true, "detail": "Read 42201-1234567-4 from the card" }],
+  "forgeryScore": 0.083,
+  "blurScore": 0,
+  "editedRegions": [{ "x": 0.032, "y": 0.61, "width": 0.24, "height": 0.051 }],
+  "needsHuman": false,
+  "retakeRequired": false,
+  "explanationUr": "…",
+  "explanationEn": "The card was read clearly and every check passed."
+}
+```
+
+Check ids: `cnic_read`, `qr_read` (a missing QR is not a doubt), `ocr_matches_qr` (only when both read), `typed_matches_card` (typed vs printed number, QR if unreadable; only when something was read), `compression_consistent` (ELA), `no_editor_software` (EXIF/XMP), `sharp_enough` (blur), `card_not_expired` (only when the expiry date was read), `ai_available` (only under Kill AI).
+
+- **Never rejects on heuristics.** Any failed check → `needsHuman: true` with the reason in `checks` and the explanations. `retakeRequired` when blurry (`blurScore ≥ 0.5`) or no CNIC could be read at all.
+- `forgeryScore` 0..1 (≥ 0.5 means at least one edited-looking region); `editedRegions` are fractions of the **uploaded** image (before EXIF rotation). `blurScore` 0 = sharp, 1 = very blurry.
+- The image is re-encoded with sharp (metadata and trailing bytes dropped) before OCR/QR/blur; ELA and EXIF read the original bytes. Nothing is sent to an external model. OCR is Tesseract (English) in a worker thread, model cached in `TESSDATA_DIR` (default: OS temp dir), loaded at boot; OCR unavailable or over `AI_TIMEOUT_MS` → `cnic_read` fails → human.
+- Synthetic test cards: `node services/ai/dist/vision/fixtures.js [outDir]` (genuine, genuinePng, tampered, blurred, editedExif, mismatchedQr, expired).

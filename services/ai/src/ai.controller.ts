@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
+import { BadRequestException, Controller, Get, HttpCode, PayloadTooLargeException, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { CurrentPrincipal, PartnerScope, Roles, ZBody, type Principal } from '@haqdaar/nest-kit';
@@ -9,6 +9,11 @@ import { AiService } from './ai.service';
 const ProfileBody = z.object({ profile: z.enum(['dev', 'demo', 'offline']) });
 const KillBody = z.object({ killed: z.boolean() });
 const ExtractBody = z.object({ transcript: z.string().min(1).max(4000) });
+
+const TypedCnic = z
+  .string()
+  .regex(/^\d{5}-?\d{7}-?\d$/)
+  .transform((c) => c.replace(/-/g, '').replace(/^(\d{5})(\d{7})(\d)$/, '$1-$2-$3'));
 
 const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/m4a'];
 
@@ -69,5 +74,34 @@ export class AiController {
     const audio = await file.toBuffer();
     if (file.file.truncated) throw new BadRequestException('Audio too large (max 5 MB)');
     return this.ai.transcribe(audio, mime);
+  }
+
+  /**
+   * CNIC photo checks (OCR, QR, ELA forgery, EXIF, blur, cross-checks). multipart/form-data:
+   * `file` (JPEG/PNG by content, max 5 MB) and optional `cnic` the citizen typed.
+   * Never rejects on heuristics: doubt → `needsHuman`, blurry → `retakeRequired`.
+   */
+  @Roles('citizen', 'helper', 'officer')
+  @ApiConsumes('multipart/form-data')
+  @Post('document-check')
+  @HttpCode(200)
+  async documentCheck(@Req() req: FastifyRequest) {
+    let image: Buffer | undefined;
+    let typed: string | undefined;
+    for await (const part of req.parts()) {
+      if (part.type === 'file') {
+        const buf = await part.toBuffer().catch((err: { code?: string }) => {
+          if (err.code === 'FST_REQ_FILE_TOO_LARGE') throw new PayloadTooLargeException('Image too large (max 5 MB)');
+          throw err;
+        });
+        if (part.fieldname === 'file') image = buf;
+      } else if (part.fieldname === 'cnic' && typeof part.value === 'string' && part.value.trim()) {
+        typed = part.value.trim();
+      }
+    }
+    if (!image) throw new BadRequestException('Image file is required (field "file")');
+    const cnic = typed === undefined ? undefined : TypedCnic.safeParse(typed);
+    if (cnic && !cnic.success) throw new BadRequestException('cnic must look like 12345-1234567-1');
+    return this.ai.documentCheck(image, cnic?.data);
   }
 }
