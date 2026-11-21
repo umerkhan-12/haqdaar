@@ -10,6 +10,8 @@ import { RulesController } from './rules/rules.controller';
 import { RulesService } from './rules/rules.service';
 import { InternalController } from './internal.controller';
 import { EventsConsumer } from './events.consumer';
+import { EvalController } from './eval/eval.controller';
+import { EvalService } from './eval/eval.service';
 
 @Module({
   imports: [
@@ -26,12 +28,13 @@ import { EventsConsumer } from './events.consumer';
       outboxDatabaseUrl: env.CASES_DATABASE_URL,
     }),
   ],
-  controllers: [CasesController, RulesController, InternalController, DemoResetController],
+  controllers: [CasesController, RulesController, EvalController, InternalController, DemoResetController],
   providers: [
     PrismaService,
     Upstream,
     RulesService,
     CasesService,
+    EvalService,
     EventsConsumer,
     { provide: DemoResetter, useClass: CasesDemoReset },
   ],

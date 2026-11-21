@@ -188,3 +188,22 @@ model OutboxEvent {
   @@index([publishedAt, createdAt])
   @@map("outbox")
 }
+
+/// Offline evaluation runs on the synthetic labelled set (POST /eval/run).
+model EvalRun {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  datasetSeed Int      @map("dataset_seed")
+  datasetSize Int      @map("dataset_size")
+  /// Cost settings used: { wrongApproval, humanReview, askMore, threshold, amountCap }
+  costs       Json
+  /// Headline numbers for lists and the live summary
+  headline    Json
+  /// Full report: metrics, calibration, reliability table, cost curve
+  report      Json
+  createdBy   String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@map("eval_runs")
+}
