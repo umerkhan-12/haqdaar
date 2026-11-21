@@ -35,9 +35,12 @@ const USERS = [
   { name: 'Asif (shopkeeper helper)', role: 'helper', phone: '03001110002', personId: null },
   { name: 'Officer Sana', role: 'officer', phone: '03001110003', personId: null },
   { name: 'Officer Kamran', role: 'officer', phone: '03001110006', personId: null },
-  { name: 'Admin Hira', role: 'admin', phone: '03001110004', personId: null },
+  { name: 'Admin Hira', role: 'admin', phone: '03001110004', personId: null, platformAdmin: true },
   { name: 'Auditor Bilal', role: 'auditor', phone: '03001110005', personId: null },
 ] as const;
+
+/** Admin Hira is also the platform operator: she can launch new programs (tenants). */
+const platformAdmin = (u: (typeof USERS)[number]) => 'platformAdmin' in u && u.platformAdmin;
 
 async function main() {
   const prisma = new PrismaClient();
@@ -59,7 +62,7 @@ async function main() {
     const phoneHash = lookupHash(phone, env.PII_HASH_KEY);
     await prisma.user.upsert({
       where: { phoneHash },
-      update: { passwordHash, failedLogins: 0, lockedUntil: null },
+      update: { passwordHash, failedLogins: 0, lockedUntil: null, platformAdmin: platformAdmin(u) },
       create: {
         tenantId: DEMO_IDS.reliefTenant,
         role: u.role,
@@ -68,6 +71,7 @@ async function main() {
         phoneHash,
         passwordHash,
         personId: u.personId,
+        platformAdmin: platformAdmin(u),
       },
     });
   }

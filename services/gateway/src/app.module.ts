@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { KitModule } from '@haqdaar/nest-kit';
 import { env } from './env';
 import { StatusController } from './status.controller';
+import { UsageMeter } from './usage-meter';
 
 @Module({
   imports: [
@@ -14,5 +15,6 @@ import { StatusController } from './status.controller';
     }),
   ],
   controllers: [StatusController],
+  providers: [UsageMeter],
 })
 export class AppModule {}

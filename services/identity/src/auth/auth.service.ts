@@ -174,6 +174,7 @@ export class AuthService {
       role: user.role,
       phoneMasked: phone.replace(/^(.{4}).*(.{2})$/, '$1*****$2'),
       tenant: { id: user.tenant.id, name: user.tenant.name, type: user.tenant.type },
+      platformAdmin: user.platformAdmin,
       personId: user.personId,
       onBehalfOf: principal.onBehalfOf ?? null,
     };

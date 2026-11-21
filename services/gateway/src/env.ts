@@ -5,6 +5,8 @@ loadRootEnv();
 
 const Env = BaseEnv.extend({
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).default(1200),
+  /** How often per-tenant usage counts are flushed to identity. */
+  USAGE_FLUSH_MS: z.coerce.number().int().min(1000).default(15_000),
   LOG_PRETTY: z.string().optional(),
 });
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CaseStatus, Lane, PaymentState } from './domain';
+import { CaseStatus, Lane, PaymentState, TenantType } from './domain';
 
 /** Every event on the bus is wrapped in this envelope. */
 export const EventEnvelope = z.object({
@@ -22,6 +22,13 @@ export type EventEnvelope<P = Record<string, unknown>> = Omit<
 /** Event names and payload schemas. Producers and consumers both validate against these. */
 export const EventSchemas = {
   'identity.user.logged_in': z.object({ userId: z.string() }),
+  /** A platform admin launched a new program (tenant) with its first admin user. */
+  'identity.tenant.created': z.object({
+    tenantId: z.string().uuid(),
+    name: z.string(),
+    type: TenantType,
+    adminUserId: z.string().uuid(),
+  }),
   'identity.consent.granted': z.object({
     consentId: z.string(),
     personId: z.string(),

@@ -29,12 +29,16 @@ enum ConsentStatus {
 }
 
 model Tenant {
-  id        String     @id @default(uuid()) @db.Uuid
-  name      String
-  type      TenantType
-  createdAt DateTime   @default(now()) @map("created_at")
-  users     User[]
-  apiKeys   ApiKey[]
+  id                  String     @id @default(uuid()) @db.Uuid
+  name                String
+  type                TenantType
+  /// Requests per calendar month (UTC) through the gateway; usage shows percent used, nothing is blocked
+  monthlyRequestQuota Int        @default(100000) @map("monthly_request_quota")
+  /// Platform admin who launched it; null for seeded tenants
+  createdBy           String?    @map("created_by") @db.Uuid
+  createdAt           DateTime   @default(now()) @map("created_at")
+  users               User[]
+  apiKeys             ApiKey[]
 
   @@map("tenants")
 }
@@ -56,6 +60,8 @@ model User {
   failedLogins Int      @default(0) @map("failed_logins")
   lockedUntil  DateTime? @map("locked_until")
   active       Boolean  @default(true)
+  /// Platform operator: may launch programs (tenants) and read every tenant's usage. Only seeded, never via API.
+  platformAdmin Boolean @default(false) @map("platform_admin")
   createdAt    DateTime @default(now()) @map("created_at")
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
@@ -135,6 +141,40 @@ model Consent {
 
   @@index([personId, purpose, status])
   @@map("consents")
+}
+
+/// Requests per tenant, UTC day and service, counted by the gateway and flushed every 15 s.
+model UsageDaily {
+  tenantId String   @map("tenant_id") @db.Uuid
+  day      DateTime @db.Date
+  service  String
+  requests Int      @default(0)
+  /// Responses with status >= 500 (including 503 when the upstream is down)
+  errors   Int      @default(0)
+
+  @@id([tenantId, day, service])
+  @@map("usage_daily")
+}
+
+/// AI calls per tenant and UTC day, from `ai.call.completed` events that carry a tenant id.
+model AiUsageDaily {
+  tenantId  String   @map("tenant_id") @db.Uuid
+  day       DateTime @db.Date
+  calls     Int      @default(0)
+  failures  Int      @default(0)
+  fallbacks Int      @default(0)
+
+  @@id([tenantId, day])
+  @@map("ai_usage_daily")
+}
+
+/// Idempotent consumers: an event id is processed at most once.
+model ProcessedEvent {
+  eventId     String   @id @map("event_id") @db.Uuid
+  type        String
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("processed_events")
 }
 
 /// Transactional outbox: written in the same transaction as the change, published by the relay.

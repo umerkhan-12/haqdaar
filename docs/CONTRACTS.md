@@ -70,3 +70,16 @@ Consumes **every** event type in `ALL_EVENT_TYPES`. Append-only, hash-chained. R
 | Route | Who | Notes |
 |---|---|---|
 | `GET /consents/check?personId&purpose&grantedTo?` | internal | `{ allowed: boolean, consentId: string \| null }` |
+| `POST /tenants` | platform admin | "Launch a program". `{ programName, type: "relief" \| "fraud_desk", adminName, adminPhone, adminPassword (≥ 8), monthlyRequestQuota? }` → 201 `{ tenant: { id, name, type, monthlyRequestQuota, createdAt }, admin: { id, name, role: "admin", phoneMasked } }`. Tenant, first admin and `identity.tenant.created` are written in one transaction (outbox). 409 if the phone already has an account |
+| `GET /tenants` | platform admin | `[{ id, name, type, monthlyRequestQuota, createdAt, users }]` |
+| `GET /tenants/me` | any user | `{ id, name, type, monthlyRequestQuota, createdAt, platformAdmin }` |
+| `GET /tenants/:id/usage?days=7` (1–90) | that tenant's admin, or platform admin | `{ tenant, from, to, totals: { requests, errors, aiCalls }, quota: { monthlyRequestQuota, monthToDateRequests, percentUsed, exceeded }, daily: [{ day, requests, errors, aiCalls, services: { <service>: { requests, errors } } }] }`. Days are UTC, zero-filled. Anyone else: 403 (also for unknown ids) |
+| `POST /internal/usage` | internal (gateway only) | `{ entries: [{ tenantId, day: "YYYY-MM-DD", service, requests, errors }] }` → adds to `usage_daily`; unknown tenants are dropped |
+
+**Platform admin** = an `admin` user with `users.platform_admin = true`. Seeded on Admin Hira (`03001110004`) only; there is no API to set it. Identity checks the flag in its database on every tenants call (no token claim), so revoking it is immediate. `GET /auth/me` also returns `platformAdmin`.
+
+**Onboarding:** cases consumes `identity.tenant.created` (idempotent) and gives the new tenant a **published rule v1** (copy of the Sahara template, emits `cases.rule.published`) and default cost settings, so the program can take claims at once.
+
+**Usage metering:** the gateway counts every proxied response per (tenant, UTC day, service). The tenant comes from the bearer token's `tid` claim, decoded without verification — for metering only; services still verify every token. 401 responses are not counted (a forged `tid` cannot inflate another tenant's usage). `errors` = status ≥ 500. Counts are held in memory and flushed to `POST /internal/usage` every 15 s (`USAGE_FLUSH_MS`); a gateway crash loses at most that window. The quota is reported (percent used), not enforced.
+
+**AI usage gap:** identity consumes `ai.call.completed` into `ai_usage_daily`, but only events with an envelope `tenantId` count. The ai service currently publishes without a principal (`tenantId: null`), so `aiCalls` stays 0 until ai passes the caller to `buildEvent`. Per-tenant AI traffic is still visible as gateway requests to the `ai` service.
