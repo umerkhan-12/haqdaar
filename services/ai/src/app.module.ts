@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { EventBusModule, KitModule } from '@haqdaar/nest-kit';
 import { env } from './env';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { CallerContextInterceptor } from './caller-context';
 
 @Module({
   imports: [
@@ -17,6 +19,6 @@ import { AiService } from './ai.service';
     EventBusModule.forRoot({ service: 'ai', busUrl: env.BUS_DATABASE_URL }),
   ],
   controllers: [AiController],
-  providers: [AiService],
+  providers: [AiService, { provide: APP_INTERCEPTOR, useClass: CallerContextInterceptor }],
 })
 export class AppModule {}

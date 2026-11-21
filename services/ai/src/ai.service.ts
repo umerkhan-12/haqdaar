@@ -7,6 +7,7 @@ import { GeminiProvider } from './providers/gemini.provider';
 import { MockProvider } from './providers/mock.provider';
 import { extractClaim } from './tasks/extract-claim';
 import { scamCheck } from './tasks/scam-check';
+import { callerContext } from './caller-context';
 
 /** Rolling in-memory stats for the evaluation dashboard (persisted via events to audit). */
 interface Stats {
@@ -113,7 +114,7 @@ export class AiService implements OnModuleInit {
             ok: r.ok,
             fallbackUsed: r.fallbackUsed,
           },
-          { source: 'ai' },
+          { source: 'ai', principal: callerContext.getStore() },
         ),
       )
       .catch(() => undefined);

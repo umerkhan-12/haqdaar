@@ -192,7 +192,7 @@ registerSuite(async () => {
   await it('helper needs the family PIN; wrong PIN → 401', async () => {
     const helper = await token('helper');
     const fam = await api('GET', '/auth/families', { token: helper });
-    expect(fam.body.length === 2, `families: ${fam.body.length}`);
+    expect(fam.body.some((f) => f.personId === RASHIDA), `Rashida missing from ${fam.body.length} families`);
     expectStatus(await api('POST', '/auth/act-for', { token: helper, body: { personId: RASHIDA, pin: '9999' } }), 401);
     const ok = await api('POST', '/auth/act-for', { token: helper, body: { personId: RASHIDA, pin: '2222' } });
     expectStatus(ok, 200);

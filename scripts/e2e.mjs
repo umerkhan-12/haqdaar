@@ -315,7 +315,7 @@ async function gatewaySuite() {
   describe('Gateway & resilience');
   await it('/status reports every service', async () => {
     const r = await api('GET', '/status');
-    expect(r.body.services.length === 6, 'six backends');
+    expect(r.body.services.length === 7, `seven backends, got ${r.body.services.length}`);
     const down = r.body.services.filter((s) => !s.ok).map((s) => s.name);
     expect(down.length === 0, `down: ${down.join(', ')}`);
   });
