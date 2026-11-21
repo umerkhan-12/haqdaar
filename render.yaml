@@ -1,0 +1,198 @@
+# Render Blueprint — 8 Haqdaar services on the FREE plan (see docs/DEPLOY.md first).
+#
+# Before syncing this Blueprint, create the env group `haqdaar-secrets` in the Render Dashboard
+# (Blueprints cannot declare secret values inside env groups). It holds:
+#   JWT_PUBLIC_KEY, INTERNAL_SECRET, BUS_DATABASE_URL, CORS_ORIGINS,
+#   GATEWAY_URL, IDENTITY_URL, CASES_URL, AI_URL, PAYMENTS_URL, AUDIT_URL, RAILS_URL, JUDGE_URL
+#
+# Free web services cannot RECEIVE private-network traffic, so services call each other over their
+# public https://<name>.onrender.com URLs. That is safe: every internal call carries a 60-second
+# internal token with the target service as audience, and every service verifies user JWTs itself.
+#
+# One Dockerfile for all services: Render passes env vars to Docker builds as build args,
+# so `SERVICE` selects which service the image contains.
+
+envVarGroups:
+  - name: haqdaar-config
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # Judge Mode + demo reset. Remove (or set 0) for anything that is not a demo.
+      - key: DEMO_MODE
+        value: '1'
+
+services:
+  - type: web
+    name: haqdaar-gateway
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: gateway
+      - key: RATE_LIMIT_PER_MINUTE
+        value: '1200'
+      - fromGroup: haqdaar-config
+      - fromGroup: haqdaar-secrets
+
+  - type: web
+    name: haqdaar-identity
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: identity
+      - key: IDENTITY_DATABASE_URL
+        sync: false
+      # Only identity can mint tokens: the private key lives here and nowhere else.
+      - key: JWT_PRIVATE_KEY
+        sync: false
+      - key: PII_ENC_KEY
+        sync: false
+      - key: PII_HASH_KEY
+        sync: false
+      - key: ACCESS_TOKEN_TTL_SECONDS
+        value: '900'
+      - key: REFRESH_TOKEN_TTL_DAYS
+        value: '7'
+      - fromGroup: haqdaar-config
+      - fromGroup: haqdaar-secrets
+
+  - type: web
+    name: haqdaar-cases
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: cases
+      - key: CASES_DATABASE_URL
+        sync: false
+      - key: PII_ENC_KEY
+        sync: false
+      - key: PII_HASH_KEY
+        sync: false
+      - key: AUTO_APPROVE_AMOUNT_CAP_PKR
+        value: '15000'
+      - fromGroup: haqdaar-config
+      - fromGroup: haqdaar-secrets
+
+  - type: web
+    name: haqdaar-ai
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: ai
+      - key: SEAL_SECRET
+        sync: false
+      # dev = Groq first (free) | demo = paid Gemini first (judging day) | offline = no external AI
+      - key: AI_PROFILE
+        value: dev
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_DEMO_API_KEY
+        sync: false
+      - key: GROQ_LLM_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GROQ_STT_MODEL
+        value: whisper-large-v3
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: AI_TIMEOUT_MS
+        value: '20000'
+      - fromGroup: haqdaar-config
+      - fromGroup: haqdaar-secrets
+
+  - type: web
+    name: haqdaar-payments
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: payments
+      - key: PAYMENTS_DATABASE_URL
+        sync: false
+      - key: WEBHOOK_SIGNING_SECRET
+        sync: false
+      - key: SEAL_SECRET
+        sync: false
+      - key: MAKER_CHECKER_LIMIT_PKR
+        value: '20000'
+      - key: PROGRAM_DEBTOR_IBAN
+        value: PK00SAHA0000000000000001
+      - key: PROGRAM_DEBTOR_NAME
+        value: SAHARA RELIEF PROGRAM
+      # Public URLs between free services add latency; keep the provider timeout realistic.
+      - key: RAAST_TIMEOUT_MS
+        value: '5000'
+      - fromGroup: haqdaar-config
+      - fromGroup: haqdaar-secrets
+
+  - type: web
+    name: haqdaar-audit
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: audit
+      - key: AUDIT_DATABASE_URL
+        sync: false
+      - fromGroup: haqdaar-config
+      - fromGroup: haqdaar-secrets
+
+  - type: web
+    name: haqdaar-rails-mock
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: rails-mock
+      - fromGroup: haqdaar-config
+      - fromGroup: haqdaar-secrets
+
+  - type: web
+    name: haqdaar-judge
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: judge
+      - key: SEAL_SECRET
+        sync: false
+      - fromGroup: haqdaar-config
+      - fromGroup: haqdaar-secrets
