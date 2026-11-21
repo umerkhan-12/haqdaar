@@ -20,15 +20,20 @@ export class HealthRegistry {
     await Promise.all(
       [...this.checks.entries()].map(async ([name, { fn, critical }]) => {
         const t = Date.now();
+        let timer: NodeJS.Timeout | undefined;
         try {
           const info = await Promise.race([
             fn(),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000)),
+            new Promise((_, rej) => {
+              timer = setTimeout(() => rej(new Error('timeout')), 2000);
+            }),
           ]);
           results[name] = { ok: true, ms: Date.now() - t, info: info ?? undefined };
         } catch (e) {
           results[name] = { ok: false, ms: Date.now() - t, error: (e as Error).message };
           if (critical) healthy = false;
+        } finally {
+          clearTimeout(timer);
         }
       }),
     );

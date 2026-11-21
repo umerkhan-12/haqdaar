@@ -28,7 +28,7 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
   private readonly boss: PgBoss;
   private started = false;
   private registering: Promise<void> = Promise.resolve();
-  private readonly pending: Array<{ types: EventType[]; handler: EventHandler }> = [];
+  private readonly pending: Array<{ types: EventType[]; handler: EventHandler; consumer?: string }> = [];
   private relay?: OutboxRelay;
 
   constructor(private readonly opts: EventBusOptions) {
@@ -47,7 +47,7 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
     await this.boss.start();
     this.started = true;
     await this.ensureQueue(this.dlq(), {});
-    for (const s of this.pending.splice(0)) await this.register(s.types, s.handler);
+    for (const s of this.pending.splice(0)) await this.register(s.types, s.handler, s.consumer);
     this.relay?.start();
     this.logger.log(`Event bus ready for "${this.opts.service}"`);
   }
@@ -62,15 +62,19 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
     await this.boss.publish(event.type, event as object);
   }
 
-  /** Subscribe this service to one or more event types. Safe to call before init and concurrently. */
-  async subscribe(types: EventType | EventType[], handler: EventHandler): Promise<void> {
+  /**
+   * Subscribe this service to one or more event types. Safe to call before init and concurrently.
+   * `consumer` names the handler: two handlers of the same event need different names, each gets
+   * its own queue (same queue = jobs would be split between them, not delivered to both).
+   */
+  async subscribe(types: EventType | EventType[], handler: EventHandler, consumer?: string): Promise<void> {
     const list = Array.isArray(types) ? types : [types];
     if (!this.started) {
-      this.pending.push({ types: list, handler });
+      this.pending.push({ types: list, handler, consumer });
       return;
     }
     // Serialise registrations: concurrent createQueue/subscribe calls race inside pg-boss.
-    const next = this.registering.then(() => this.register(list, handler));
+    const next = this.registering.then(() => this.register(list, handler, consumer));
     this.registering = next.catch(() => undefined);
     await next;
   }
@@ -80,9 +84,9 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
     this.relay?.kick();
   }
 
-  private async register(types: EventType[], handler: EventHandler): Promise<void> {
+  private async register(types: EventType[], handler: EventHandler, consumer?: string): Promise<void> {
     for (const type of types) {
-      const queue = `${this.opts.service}__${type}`;
+      const queue = consumer ? `${this.opts.service}__${type}__${consumer}` : `${this.opts.service}__${type}`;
       await this.ensureQueue(queue, {
         retryLimit: 5,
         retryDelay: 2,

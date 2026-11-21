@@ -63,6 +63,8 @@ model Payment {
   checkerId       String?      @map("checker_id")
   providerRef     String?      @map("provider_ref")
   settledAt       DateTime?    @map("settled_at")
+  /// Haq Receipt: sealed SMS with the exact amount, sent once after SUCCESS
+  receiptSentAt   DateTime?    @map("receipt_sent_at")
   /// Optimistic locking: every transition updates `where version = x`
   version         Int          @default(0)
   createdAt       DateTime     @default(now()) @map("created_at")

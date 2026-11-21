@@ -11,6 +11,7 @@ import { ReconciliationController } from './reconciliation/reconciliation.contro
 import { WebhooksController } from './webhooks/webhooks.controller';
 import { WebhooksService } from './webhooks/webhooks.service';
 import { EventsConsumer } from './events.consumer';
+import { ReceiptsService } from './receipts/receipts.service';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { EventsConsumer } from './events.consumer';
     RailsClient,
     PayoutService,
     WebhooksService,
+    ReceiptsService,
     EventsConsumer,
   ],
 })

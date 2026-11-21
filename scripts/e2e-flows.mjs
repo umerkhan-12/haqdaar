@@ -98,6 +98,22 @@ registerSuite(async () => {
     }, 'case PAID');
   });
 
+  await it('Haq Receipt: sealed SMS with the exact amount; the scam checker proves it GENUINE', async () => {
+    const admin = await token('admin');
+    const sms = await waitFor(async () => {
+      const r = await api('GET', '/mock/sms/inbox/03001110001', { token: admin });
+      return items(r.body).find((m) => /12,000/.test(m.body) && /Haqdaar code/i.test(m.body));
+    }, 'receipt SMS');
+    expect(/barah hazaar/.test(sms.body), 'amount in words');
+    const check = await api('POST', '/ai/scam-check', { token: citizen, body: { text: sms.body } });
+    expect(check.body.verdict === 'GENUINE' && check.body.sealValid === true, JSON.stringify(check.body).slice(0, 200));
+    const forged = await api('POST', '/ai/scam-check', {
+      token: citizen,
+      body: { text: sms.body.replace('12,000', '120,000') },
+    });
+    expect(forged.body.verdict === 'SCAM', `forged receipt verdict ${forged.body.verdict}`);
+  });
+
   await it('ledger is balanced (double entry: debits = credits)', async () => {
     const r = await api('GET', '/ledger/balances', { token: await token('admin') });
     expectStatus(r, 200);
