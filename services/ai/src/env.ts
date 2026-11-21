@@ -17,6 +17,8 @@ const Env = BaseEnv.extend({
   GEMINI_DEMO_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   AI_TIMEOUT_MS: z.coerce.number().int().min(1000).default(20_000),
+  /** Cache for the Tesseract English model (downloaded once). Defaults to the OS temp dir. */
+  TESSDATA_DIR: z.string().optional(),
   LOG_PRETTY: z.string().optional(),
 });
 
@@ -29,4 +31,5 @@ export const env = {
   GROQ_API_KEY: blank(raw.GROQ_API_KEY),
   GEMINI_API_KEY: blank(raw.GEMINI_API_KEY),
   GEMINI_DEMO_API_KEY: blank(raw.GEMINI_DEMO_API_KEY),
+  TESSDATA_DIR: blank(raw.TESSDATA_DIR),
 };
