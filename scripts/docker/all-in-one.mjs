@@ -6,7 +6,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
 const root = '/app';
-const DB_SERVICES = ['identity', 'cases', 'payments', 'audit'];
+const DB_SERVICES = ['identity', 'cases', 'payments', 'audit', 'knowledge'];
 const publicPort = process.env.PUBLIC_PORT ?? process.env.PORT ?? '7860';
 
 const base = process.env.DATABASE_URL;

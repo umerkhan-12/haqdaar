@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // Order matters a little: audit first so it is subscribed before others publish.
 const SERVICES = ['audit', 'identity', 'rails-mock', 'ai', 'cases', 'payments', 'judge', 'knowledge', 'gateway'];
-const COLORS = [31, 32, 33, 34, 35, 36, 91, 37];
+const COLORS = [31, 32, 33, 34, 35, 36, 91, 92, 37];
 
 const children = new Map();
 const restarts = new Map();

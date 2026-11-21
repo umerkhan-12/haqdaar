@@ -6,7 +6,7 @@ set -e
 if [ -n "$DATABASE_URL" ]; then
   export BUS_DATABASE_URL="${BUS_DATABASE_URL:-$DATABASE_URL}"
   case "$SERVICE" in
-    identity|cases|payments|audit)
+    identity|cases|payments|audit|knowledge)
       var="$(echo "$SERVICE" | tr '[:lower:]' '[:upper:]')_DATABASE_URL"
       eval "current=\${$var:-}"
       case "$DATABASE_URL" in *\?*) sep='&' ;; *) sep='?' ;; esac
