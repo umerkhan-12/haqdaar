@@ -22,6 +22,8 @@ export type EventEnvelope<P = Record<string, unknown>> = Omit<
 /** Event names and payload schemas. Producers and consumers both validate against these. */
 export const EventSchemas = {
   'identity.user.logged_in': z.object({ userId: z.string() }),
+  /** A citizen created their own account (phone verified by a one-time code). */
+  'identity.user.registered': z.object({ userId: z.string(), personId: z.string() }),
   /** A platform admin launched a new program (tenant) with its first admin user. */
   'identity.tenant.created': z.object({
     tenantId: z.string().uuid(),
@@ -39,11 +41,26 @@ export const EventSchemas = {
     personId: z.string(),
     purpose: z.string(),
   }),
-  'cases.case.submitted': z.object({ caseId: z.string(), personId: z.string(), type: z.string() }),
+  /** A citizen says a stored fact about her is wrong; an officer corrects it after checking (never self-edit). */
+  'identity.correction.requested': z.object({
+    personId: z.string(),
+    field: z.string(),
+    note: z.string().nullable(),
+  }),
+  'cases.case.submitted': z.object({
+    caseId: z.string(),
+    personId: z.string(),
+    type: z.string(),
+    /** Redacted summary of the AI notes sent with the claim (no names, masked CNICs, no transcript text). */
+    aiNotes: z.record(z.unknown()).optional(),
+  }),
   'cases.case.status_changed': z.object({
     caseId: z.string(),
     from: CaseStatus.nullable(),
     to: CaseStatus,
+    /** Officer case-management steps that are not a plain status move: `escalated`, `closed`, `assigned`. */
+    action: z.string().max(40).optional(),
+    note: z.string().max(500).optional(),
   }),
   'cases.case.decided': z.object({
     caseId: z.string(),

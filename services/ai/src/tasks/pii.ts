@@ -13,9 +13,10 @@ export function normalizeDigits(text: string): string {
 }
 
 // 13 digits, with or without dashes/spaces: 42101-1234567-3, 4210112345673, 42101 1234567 3
-const CNIC_RE = /\b(\d{5})[-\s]?(\d{7})[-\s]?(\d)\b/g;
-// Pakistani mobiles: 03xx-xxxxxxx, +92 3xx xxxxxxx, 923xxxxxxxxx
-const PHONE_RE = /(?:\+?92[-\s]?|0)3\d{2}[-\s]?\d{7}\b/g;
+// Edges are "not a digit" rather than a word boundary, so a number glued to letters (cnic42101…) is still caught.
+const CNIC_RE = /(?<!\d)(\d{5})[-\s]?(\d{7})[-\s]?(\d)(?!\d)/g;
+// Pakistani mobiles in any grouping: 03xx-xxxxxxx, 0300-123-4567, 0300 123 4567, +92 3xx xxxxxxx, 00923xxxxxxxxx
+const PHONE_RE = /(?<!\d)(?:(?:\+|00)?92[-\s]?|0)3\d{2}(?:[-\s]?\d){7}(?!\d)/g;
 
 export interface Redacted {
   text: string;
@@ -32,7 +33,7 @@ export function redactPii(input: string): Redacted {
   });
   text = text.replace(PHONE_RE, (m) => {
     const digits = m.replace(/\D/g, '');
-    phones.push(digits.startsWith('92') ? `0${digits.slice(2)}` : digits);
+    phones.push(digits.replace(/^(?:0092|92)/, '0'));
     return `[PHONE_${phones.length}]`;
   });
   return { text, cnics, phones };

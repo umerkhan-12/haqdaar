@@ -10,22 +10,23 @@ import {
 
 export type ProfileName = 'dev' | 'demo' | 'offline';
 
-/** Provider order per profile. LLM/STT fall back to mock; embeddings fail closed. */
+/** Provider order per profile. LLM/STT fall back to mock so the system never crashes; embeddings fail closed. */
 export const PROFILES: Record<
   ProfileName,
   { llm: string[]; stt: string[]; embed: string[]; description: string }
 > = {
   dev: {
     llm: ['groq', 'gemini'],
-    stt: ['groq', 'gemini'],
+    stt: ['gemini', 'groq'],
     embed: ['gemini'],
-    description: 'Build mode: free Groq first, free Gemini as fallback',
+    description:
+      'Build mode: free Groq first for text; Gemini listens to speech first (when it has credit), Groq Whisper as fallback',
   },
   demo: {
     llm: ['gemini-demo', 'groq'],
-    stt: ['groq', 'gemini-demo'],
+    stt: ['gemini-demo', 'groq'],
     embed: ['gemini-demo'],
-    description: 'Judging day: paid Gemini first for text, Groq Whisper first for Urdu speech',
+    description: 'Judging day: paid Gemini first for text and Urdu speech, Groq as fallback',
   },
   offline: {
     llm: [],

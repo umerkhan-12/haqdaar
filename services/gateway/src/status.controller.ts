@@ -1,9 +1,8 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Public } from '@haqdaar/nest-kit';
-import { SERVICES, serviceUrl, type ServiceName } from '@haqdaar/shared';
-
-const BACKENDS = (Object.keys(SERVICES) as ServiceName[]).filter((s) => s !== 'gateway');
+import { serviceUrl } from '@haqdaar/shared';
+import { DOCUMENTED as BACKENDS, docsPath } from './docs.controller';
 
 /** One page that tells the judges (and UptimeRobot) whether the whole system is up. */
 @ApiTags('status')
@@ -46,7 +45,8 @@ export class StatusController {
       status: services.every((s) => s.ok) ? 'ok' : 'degraded',
       checkedAt: new Date().toISOString(),
       services,
-      docs: Object.fromEntries(BACKENDS.map((s) => [s, `${serviceUrl(s)}/docs`])),
+      // Gateway-relative paths: the service ports are private on a deployed site.
+      docs: Object.fromEntries(BACKENDS.map((s) => [s, docsPath(s)])),
     };
   }
 }

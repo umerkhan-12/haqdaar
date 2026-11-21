@@ -32,7 +32,7 @@ interface Family {
 
 /** Helper Mode: a shopkeeper serves many families; each needs its own PIN, one at a time. */
 export function HelperFamilies() {
-  const { t } = useI18n();
+  const { t, speak } = useI18n();
   const router = useRouter();
   const { data, error, loading, reload } = useAsync(() => api.families(), []);
   const [chosen, setChosen] = useState<Family | null>(null);
@@ -54,6 +54,7 @@ export function HelperFamilies() {
     } catch (e) {
       setPinError(e);
       setPin('');
+      if (e instanceof ApiError && e.status === 401) speak(`${t('wrongPin')}. ${t('enterPin')}`);
     } finally {
       setBusy(false);
     }
@@ -92,6 +93,7 @@ export function HelperFamilies() {
                       setChosen(f);
                       setPin('');
                       setPinError(null);
+                      speak(`${f.label}. ${t('enterPin')}`);
                     }}
                     className="flex min-h-16 w-full items-center gap-4 rounded-2xl border-2 border-slate-300 bg-white p-4 text-start text-lg font-semibold disabled:opacity-60"
                   >
@@ -106,7 +108,10 @@ export function HelperFamilies() {
       ) : (
         <div className="space-y-5">
           <h1 className="text-2xl font-bold">{chosen.label}</h1>
-          <p className="text-lg">{t('enterPin')}</p>
+          <div className="flex items-center gap-3">
+            <p className="flex-1 text-lg">{t('enterPin')}</p>
+            <AudioButton text={`${chosen.label}. ${t('enterPin')}`} className="text-brand" />
+          </div>
           {wrongPin ? (
             <StatusCard tone="bad" title={t('wrongPin')} urgent />
           ) : pinError ? (

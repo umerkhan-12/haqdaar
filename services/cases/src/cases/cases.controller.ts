@@ -17,7 +17,9 @@ import { CasesService } from './cases.service';
 import {
   ApproveBody,
   AssignBody,
+  CloseBody,
   CreateCase,
+  EscalateBody,
   ListQuery,
   RejectBody,
   RequestInfoBody,
@@ -122,7 +124,34 @@ export class CasesController {
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
     @ZBody(AssignBody) b: z.infer<typeof AssignBody>,
+    @Req() req: FastifyRequest,
   ) {
-    return this.cases.assign(requireUser(user), id, b.officerId);
+    return this.cases.assign(requireUser(user), id, b.officerId, req.id);
+  }
+
+  /** Officer -> supervisor queue, with the officer's reason. */
+  @Roles('officer', 'admin')
+  @Post('cases/:id/escalate')
+  @HttpCode(200)
+  escalate(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ZBody(EscalateBody) b: z.infer<typeof EscalateBody>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.cases.escalate(requireUser(user), id, b.reason, req.id);
+  }
+
+  /** Only finished cases (PAID / REJECTED) can be closed. */
+  @Roles('officer', 'admin')
+  @Post('cases/:id/close')
+  @HttpCode(200)
+  close(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ZBody(CloseBody) b: z.infer<typeof CloseBody>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.cases.close(requireUser(user), id, b.note, req.id);
   }
 }

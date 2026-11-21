@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Shell } from '@/components/shell';
 import { Button, Card, ConfirmDialog, Skeleton, StatusPill, staffError } from '@/components/ui';
-import { api, type Scenario, type ScenarioResult } from '@/lib/api';
+import { api, type RaastFaultMode, type Scenario, type ScenarioResult } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
 const GROUP_TITLE: Record<string, string> = { PAY: 'Bank-grade payouts' };
@@ -36,6 +36,132 @@ function Result({ r }: { r: ScenarioResult }) {
         ))}
       </ol>
     </div>
+  );
+}
+
+const FAULTS: { mode: Exclude<RaastFaultMode, 'none'>; label: string; expect: string }[] = [
+  {
+    mode: 'fail',
+    label: 'Raast is down',
+    expect:
+      'The rail refuses the next transfer. The payment becomes FAILED, no money moves, and a retry reuses the same transfer id.',
+  },
+  {
+    mode: 'timeout',
+    label: 'Raast times out',
+    expect:
+      'The rail answers too late (8 s) and moves no money. The payment becomes UNKNOWN and is not re-sent blindly: a status inquiry settles it.',
+  },
+  {
+    mode: 'timeout_after_debit',
+    label: 'Times out after taking the money',
+    expect:
+      'The worst case: the money moves but the answer is lost. The payment becomes UNKNOWN, a status inquiry confirms it, and it is paid once, never twice.',
+  },
+  {
+    mode: 'duplicate_statement',
+    label: 'Statement lists a payment twice',
+    expect: 'The next bank statement repeats a line. Reconciliation must count it once.',
+  },
+];
+
+/**
+ * Lets a judge break the (mock) public payment rail live and watch the system stay safe.
+ * Only Raast has a fault switch; the mock NADRA has none, its outage path is covered by the scenarios above.
+ */
+function BreakRail() {
+  const { data, error, loading, reload } = useAsync(() => api.railFaults(), []);
+  const [times, setTimes] = useState(1);
+  const [msg, setMsg] = useState<string | null>(null);
+  const active = data && data.raast.mode !== 'none' ? data.raast : null;
+  const activeLabel = FAULTS.find((f) => f.mode === active?.mode)?.label;
+
+  async function set(mode: RaastFaultMode, note: string) {
+    try {
+      await api.setRailFault(mode, mode === 'none' ? 0 : times);
+      setMsg(note);
+      reload();
+    } catch (e) {
+      setMsg(staffError(e));
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="mr-auto">
+          <h2 className="text-lg font-bold">Break a public rail</h2>
+          <p className="text-sm text-muted">
+            Make the mock Raast payment rail fail, then pay a claim (officer &gt; Payments, or a
+            payout scenario below) and watch what happens.
+          </p>
+        </div>
+        {loading && !data ? (
+          <StatusPill>checking…</StatusPill>
+        ) : error ? (
+          <StatusPill tone="bad">{staffError(error)}</StatusPill>
+        ) : active ? (
+          <StatusPill tone="bad">
+            BROKEN: {activeLabel ?? active.mode} · next {active.remaining} call
+            {active.remaining === 1 ? '' : 's'}
+          </StatusPill>
+        ) : (
+          <StatusPill tone="ok">Raast is healthy</StatusPill>
+        )}
+        <Button variant="ghost" className="min-h-10 text-sm" onClick={() => reload()}>
+          Refresh
+        </Button>
+        <Button
+          variant="ghost"
+          className="min-h-10 text-sm"
+          disabled={!active}
+          onClick={() => set('none', 'Raast is healthy again.')}
+        >
+          Reset rail
+        </Button>
+      </div>
+      <label className="mt-3 flex items-center gap-2 text-sm">
+        Break the next
+        <select
+          value={times}
+          onChange={(e) => setTimes(Number(e.target.value))}
+          className="min-h-10 rounded-lg border-2 border-slate-400 px-2"
+        >
+          {[1, 2, 3, 5].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+        call{times === 1 ? '' : 's'}, then heal by itself
+      </label>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {FAULTS.map((f) => (
+          <div
+            key={f.mode}
+            className={`rounded-xl border-2 p-3 ${active?.mode === f.mode ? 'border-red-700 bg-red-50' : 'border-slate-200'}`}
+          >
+            <Button
+              variant="danger"
+              className="min-h-10 w-full text-sm"
+              onClick={() => set(f.mode, `Fault armed: ${f.label}. ${f.expect}`)}
+            >
+              {f.label}
+            </Button>
+            <p className="mt-2 text-sm text-muted">{f.expect}</p>
+          </div>
+        ))}
+      </div>
+      {msg && (
+        <p role="status" className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">
+          {msg}
+        </p>
+      )}
+      <p className="mt-3 text-sm text-muted">
+        The fault state resets with &quot;Reset demo&quot;. A scenario that sets its own fault
+        replaces this one.
+      </p>
+    </Card>
   );
 }
 
@@ -87,6 +213,9 @@ export function JudgeMode() {
           {msg}
         </p>
       )}
+      <div className="mb-6">
+        <BreakRail />
+      </div>
       {loading && !data ? (
         <Skeleton lines={6} />
       ) : error ? (

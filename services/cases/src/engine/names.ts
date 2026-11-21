@@ -89,14 +89,23 @@ const HONORIFICS = new Set([
   'mai',
 ]);
 
+/** Vowel marks written on their own (Urdu zabar/zer/pesh): decoration, not letters. */
+const LOOSE_MARKS = /\p{Mn}/gu;
+/** Latin letters; an accented one is reduced to the plain letter. Urdu letters are never decomposed. */
+const LATIN_LETTER = /\p{Script=Latin}/gu;
+
 export function normalizeName(input: string): string {
   const tokens = input
     .normalize('NFKC')
+    .replace(LOOSE_MARKS, '')
+    .replace(LATIN_LETTER, (ch) => ch.normalize('NFD').replace(LOOSE_MARKS, ''))
     .toLowerCase()
     .split(/\s+/)
     .map((t) => URDU_TO_LATIN[t] ?? t)
     .join(' ')
-    .replace(/[^a-z\s]/g, ' ')
+    // Letters of every script stay: a name the table does not know must still differ from another one.
+    .replace(/[^\p{L}\s]/gu, ' ')
+    .replace(/\bbi\s+bi\b/g, 'bibi')
     .split(/\s+/)
     .filter(Boolean)
     .map((t) => fold(VARIANTS[t] ?? t))
@@ -146,10 +155,14 @@ export function jaroWinkler(a: string, b: string): number {
   return jaro + prefix * 0.1 * (1 - jaro);
 }
 
-/** Similarity of two raw names in [0, 1], robust to word order. */
+/**
+ * Similarity of two raw names in [0, 1], robust to word order.
+ * A name with no letters at all scores 0: two blanks are not evidence of the same person.
+ */
 export function nameSimilarity(a: string, b: string): number {
   const na = normalizeName(a);
   const nb = normalizeName(b);
+  if (!na || !nb) return 0;
   const sorted = (s: string) => s.split(' ').sort().join(' ');
   return Math.max(jaroWinkler(na, nb), jaroWinkler(sorted(na), sorted(nb)));
 }

@@ -30,7 +30,15 @@ export const TransferBody = z.object({
 
 export const StatementQuery = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 
-export const SmsSendBody = z.object({ to: Alias, body: z.string().min(1).max(1000) });
+export const SmsSendBody = z.object({
+  to: Alias,
+  body: z.string().min(1).max(1000),
+  /** Sender name shown on the phone; defaults to SAHARA. */
+  from: z
+    .string()
+    .regex(/^[A-Z0-9-]{3,11}$/)
+    .optional(),
+});
 
 export const FaultsBody = z.object({
   raast: z.object({

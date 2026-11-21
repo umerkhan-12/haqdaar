@@ -15,6 +15,7 @@ import {
   saveSession,
   type Role,
 } from '@/lib/session';
+import { leaveTo } from './history-guard';
 import { IconUsers } from './icons';
 import { OfflineBanner, Skeleton } from './ui';
 
@@ -27,11 +28,18 @@ const STAFF_NAV: Partial<Record<Role, { href: string; label: string }[]>> = {
     { href: '/admin', label: 'Rules' },
     { href: '/admin/ai', label: 'AI' },
     { href: '/admin/money', label: 'Money' },
+    { href: '/admin/eval', label: 'Evaluation' },
+    { href: '/admin/tenants', label: 'Programs' },
     { href: '/admin/keys', label: 'API keys' },
+    { href: '/admin/webhooks', label: 'Webhooks' },
+    { href: '/admin/docs', label: 'API docs' },
     { href: '/judge', label: 'Judge Mode' },
     { href: '/phone', label: 'Mock phone' },
   ],
-  auditor: [{ href: '/auditor', label: 'Audit log' }],
+  auditor: [
+    { href: '/auditor', label: 'Audit log' },
+    { href: '/admin/eval', label: 'Evaluation' },
+  ],
 };
 
 /**
@@ -77,7 +85,8 @@ export function Shell({
   const logout = async () => {
     await api.logout(session.refreshToken).catch(() => undefined);
     clearSession();
-    router.replace('/login');
+    // A full page load (not a client route change) drops everything this account had on screen or in memory.
+    leaveTo('/login');
   };
 
   const leaveFamily = () => {

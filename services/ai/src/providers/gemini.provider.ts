@@ -1,3 +1,6 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   readError,
   type AiProvider,
@@ -11,9 +14,38 @@ import {
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
+/** USD per million tokens, set above Gemini Flash-Lite list prices so the spending cap trips early, never late. */
+const USD_PER_M_INPUT = 1;
+const USD_PER_M_OUTPUT = 4;
+
+/** Spend shared by every Gemini instance, kept on disk so a restart does not reset the cap. */
+class SpendLedger {
+  private readonly file = join(tmpdir(), 'haqdaar-gemini-spend.json');
+  private usd: number;
+
+  constructor() {
+    try {
+      this.usd = (JSON.parse(readFileSync(this.file, 'utf8')) as { usd: number }).usd;
+    } catch {
+      this.usd = 0;
+    }
+  }
+
+  get spentUsd() {
+    return this.usd;
+  }
+
+  add(inputTokens = 0, outputTokens = 0) {
+    this.usd += (inputTokens * USD_PER_M_INPUT + outputTokens * USD_PER_M_OUTPUT) / 1_000_000;
+    writeFileSync(this.file, JSON.stringify({ usd: this.usd }));
+  }
+}
+
+const ledger = new SpendLedger();
+
 /**
  * Gemini over REST. Two instances exist: `gemini` (free key, dev fallback) and
- * `gemini-demo` (paid key, used only when AI_PROFILE=demo).
+ * `gemini-demo` (paid key, used only when AI_PROFILE=demo). Both stop at the shared spending cap.
  */
 export class GeminiProvider implements AiProvider {
   readonly isMock = false;
@@ -22,10 +54,12 @@ export class GeminiProvider implements AiProvider {
     readonly id: string,
     private readonly apiKey: string | undefined,
     private readonly model: string,
+    private readonly budgetUsd: number,
   ) {}
 
+  /** Over budget counts as not configured: the router skips it and falls back to Groq. */
   get configured() {
-    return !!this.apiKey;
+    return !!this.apiKey && ledger.spentUsd < this.budgetUsd;
   }
 
   async complete(req: LlmRequest): Promise<LlmResponse> {
@@ -43,8 +77,13 @@ export class GeminiProvider implements AiProvider {
   }
 
   async transcribe(req: SttRequest): Promise<SttResponse> {
+    // Transcribe, never answer: without this the model sometimes replies to the speaker instead.
     const r = await this.generate(
-      'You transcribe audio verbatim. Output only the transcript in the original language and script. No translation, no notes.',
+      'You transcribe voice recordings word for word. The speaker is a person in Pakistan asking a relief program for help, ' +
+        'usually in Urdu (often with a Sindhi or Punjabi accent), sometimes in English or a mix. ' +
+        'Write Urdu in Urdu script and English words in English. Write every number as Western digits (0-9), ' +
+        'including identity card and phone numbers spoken as words. Do not translate, summarise or answer, and add no commentary. ' +
+        'Output only the words spoken. If nothing is audible, output nothing.',
       [
         {
           role: 'user',
@@ -55,7 +94,7 @@ export class GeminiProvider implements AiProvider {
                 data: req.audio.toString('base64'),
               },
             },
-            { text: `Transcribe this ${req.language === 'ur' ? 'Urdu' : req.language} audio.` },
+            { text: 'Transcribe this recording.' },
           ],
         },
       ],
@@ -115,6 +154,7 @@ export class GeminiProvider implements AiProvider {
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
       modelVersion?: string;
     };
+    ledger.add(data.usageMetadata?.promptTokenCount, data.usageMetadata?.candidatesTokenCount);
     const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
     return {
       text,

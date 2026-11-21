@@ -1,11 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { Button, ErrorState, Field, inputCls, StatusCard } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { HOME, saveHelperSession, saveSession, sessionFrom } from '@/lib/session';
+import { HOME, saveHelperSession, rememberPhone, saveSession, sessionFrom } from '@/lib/session';
 
 const DEMO = [
   { role: 'Citizen — Zainab', phone: '03001110001' },
@@ -32,6 +33,7 @@ export default function LoginPage() {
       const s = sessionFrom(await api.login(phone, password));
       saveHelperSession(null);
       saveSession(s);
+      rememberPhone(phone);
       router.replace(HOME[s.role]);
     } catch (err) {
       setError(err);
@@ -68,7 +70,7 @@ export default function LoginPage() {
             required
           />
         </Field>
-        <Field label={t('password')}>
+        <Field label={t('passwordOrPin')}>
           <input
             className={inputCls}
             dir="ltr"
@@ -88,6 +90,13 @@ export default function LoginPage() {
           {busy ? t('loading') : t('signIn')}
         </Button>
       </form>
+
+      <Link
+        href="/signup"
+        className="mt-4 flex min-h-16 w-full items-center justify-center rounded-xl border-2 border-brand bg-white px-5 text-xl font-semibold text-brand-dark hover:bg-brand-soft"
+      >
+        {t('signupTitle')}
+      </Link>
 
       <section
         className="latin mt-6 rounded-2xl border border-dashed border-slate-300 p-4"

@@ -52,6 +52,51 @@ export function jaroWinkler(a: string, b: string): number {
   return jaro + prefix * 0.1 * (1 - jaro);
 }
 
+/**
+ * Word-by-word agreement: every word of the shorter name must have a partner in the other name; the
+ * weakest pair is returned. Whole-string similarity alone lets a shared family word or suffix (Bibi,
+ * Khan) carry two different people over the line: "Zainab Bibi" and "Shazia Bibi" look 90% alike as
+ * strings, but Zainab has no partner at all.
+ */
+function weakestWordMatch(a: string, b: string): number {
+  const pair = (short: string[], long: string[]): number => {
+    const free = [...long];
+    let weakest = 1;
+    for (const word of short) {
+      let best = 0;
+      let at = -1;
+      free.forEach((other, i) => {
+        const s = jaroWinkler(word, other);
+        if (s >= best) [best, at] = [s, i];
+      });
+      if (at >= 0) free.splice(at, 1);
+      weakest = Math.min(weakest, best);
+    }
+    return weakest;
+  };
+  const [x, y] = [a.split(' '), b.split(' ')];
+  if (x.length < y.length) return pair(x, y);
+  if (y.length < x.length) return pair(y, x);
+  // Same number of words: the order must not matter, so take the stricter of the two pairings.
+  return Math.min(pair(x, y), pair(y, x));
+}
+
+/**
+ * Below this, a word is not a spelling variant of its partner: it is a different word. Honest variants
+ * score 0.93+ (Zainab/Zaynab, Parveen/Perveen); look-alike names of other people score 0.80-0.87
+ * (Hameeda/Jameela, Sughra/Bushra). A miss only holds the payout for an officer, it never rejects.
+ */
+const DIFFERENT_WORD = 0.88;
+
+/**
+ * A spelling slip in one word keeps the whole-name score (so honest variants are judged as before);
+ * a word with no real partner caps the score at that word's match, however alike the rest looks.
+ */
+function withWordCheck(whole: number, a: string, b: string): number {
+  const weakest = weakestWordMatch(a, b);
+  return weakest < DIFFERENT_WORD ? Math.min(whole, weakest) : whole;
+}
+
 const sortTokens = (s: string) => s.split(' ').sort().join(' ');
 
 /** 0..1, rounded to 3 decimals. */
@@ -59,6 +104,7 @@ export function nameMatchScore(a: string, b: string): number {
   const na = normalizeName(a);
   const nb = normalizeName(b);
   if (!na || !nb) return 0;
-  const score = Math.max(jaroWinkler(na, nb), jaroWinkler(sortTokens(na), sortTokens(nb)));
+  const whole = Math.max(jaroWinkler(na, nb), jaroWinkler(sortTokens(na), sortTokens(nb)));
+  const score = withWordCheck(whole, na, nb);
   return Math.round(score * 1000) / 1000;
 }

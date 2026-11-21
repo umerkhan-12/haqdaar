@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Noto_Nastaliq_Urdu } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { I18nProvider } from '@/lib/i18n';
+import { HistoryGuard } from '@/components/history-guard';
 import { ServiceWorker } from '@/components/service-worker';
 import './globals.css';
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <I18nProvider>{children}</I18nProvider>
         <ServiceWorker />
+        <HistoryGuard />
       </body>
     </html>
   );

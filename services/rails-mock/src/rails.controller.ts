@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { InternalOnly, Roles, ZBody, ZodPipe, ZQuery } from '@haqdaar/nest-kit';
+import { InternalOnly, Public, Roles, ZBody, ZodPipe, ZQuery } from '@haqdaar/nest-kit';
 import { z } from 'zod';
 import { RailsStore } from './rails.store';
 import { SimulatedLatency } from './latency.interceptor';
@@ -23,6 +23,9 @@ import {
   TitleFetchBody,
   TransferBody,
 } from './schemas';
+
+/** Sender name identity uses for sign-up codes. */
+const SIGNUP_SENDER = 'HAQDAAR';
 
 @ApiTags('nadra')
 @ApiSecurity('internal')
@@ -91,7 +94,19 @@ export class SmsController {
   @Post('send')
   @HttpCode(200)
   send(@ZBody(SmsSendBody) b: z.infer<typeof SmsSendBody>) {
-    return this.rails.sendSms(b.to, b.body);
+    return this.rails.sendSms(b.to, b.body, b.from);
+  }
+
+  /**
+   * PROTOTYPE ONLY: the newest sign-up SMS for a number, readable without a login so a new
+   * citizen can see their simulated code on the sign-up screen. Only messages from the sign-up
+   * sender are returned (never receipts). A real SMS rail has no such route.
+   */
+  @Public()
+  @Get('signup/:phone')
+  signupSms(@Param('phone', new ZodPipe(Alias)) phone: string) {
+    const m = this.rails.inbox(phone).find((x) => x.from === SIGNUP_SENDER);
+    return { simulated: true, message: m ? { body: m.body, receivedAt: m.receivedAt } : null };
   }
 
   /**

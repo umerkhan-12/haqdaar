@@ -98,14 +98,123 @@ export function deriveHardFlags(facts: Facts, evidence: Evidence): HardFlag[] {
   return flags;
 }
 
+/** Inputs are replayed from the database and filled from other services: `unknown` until proven well-formed. */
+type Loose = Record<string, unknown>;
+const isObject = (v: unknown): v is Loose =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+const unit = (v: unknown): number | null => (typeof v === 'number' && v >= 0 && v <= 1 ? v : null);
+
+const EMPTY_CLAIM: Facts['claim'] = {
+  fullName: '',
+  district: null,
+  householdSize: null,
+  isWidow: null,
+};
+
+/**
+ * Make any stored or upstream value safe to decide on. Anything malformed is dropped and reported, so the
+ * caller can fail closed (a human looks) instead of crashing the claim or guessing.
+ */
+function sanitize(raw: unknown): { input: DecisionInputs; malformed: boolean } {
+  let malformed = false;
+  const bad = <T>(fallback: T): T => {
+    malformed = true;
+    return fallback;
+  };
+  const root = isObject(raw) ? raw : bad<Loose>({});
+  const facts = isObject(root.facts) ? root.facts : bad<Loose>({});
+  const ev = isObject(root.evidence) ? root.evidence : bad<Loose>({});
+
+  const n = facts.nadra;
+  const nadra =
+    n === null || n === undefined
+      ? null
+      : isObject(n) && typeof n.match === 'boolean' && typeof n.deceased === 'boolean'
+        ? (n as unknown as NonNullable<Facts['nadra']>)
+        : bad(null);
+  const h = facts.household;
+  const household =
+    h === null || h === undefined
+      ? null
+      : isObject(h) &&
+          Number.isFinite(h.householdSize) &&
+          Number.isFinite(h.monthlyIncomePkr) &&
+          typeof h.district === 'string'
+        ? (h as unknown as NonNullable<Facts['household']>)
+        : bad(null);
+
+  const strings = (v: unknown): string[] => {
+    const list = Array.isArray(v) ? v : bad<unknown[]>([]);
+    return [
+      ...new Set(
+        list.filter((x): x is string => (typeof x === 'string' && x.length > 0) || bad(false)),
+      ),
+    ];
+  };
+  const extraction = ev.extractionConfidence;
+
+  return {
+    input: {
+      facts: {
+        claim: isObject(facts.claim) ? (facts.claim as unknown as Facts['claim']) : EMPTY_CLAIM,
+        nadra,
+        household,
+      },
+      evidence: {
+        // Evidence can never claim more than the records show.
+        nadraMatch: ev.nadraMatch === true && nadra?.match === true,
+        nameScore: unit(ev.nameScore) ?? bad(0),
+        householdVerified: ev.householdVerified === true && household !== null,
+        extractionConfidence:
+          extraction === null || extraction === undefined ? null : (unit(extraction) ?? bad(0)),
+        possibleDuplicate: ev.possibleDuplicate !== false,
+      },
+      externalFlags: strings(root.externalFlags) as HardFlag[],
+      missing: strings(root.missing),
+    },
+    malformed,
+  };
+}
+
+/** Costs must describe a real trade-off (0 < review < wrong approval); otherwise nothing is approved automatically. */
+function safeThreshold(costs: unknown): number | null {
+  if (!isObject(costs)) return null;
+  const { wrongApproval: w, humanReview: h } = costs;
+  if (
+    typeof w !== 'number' ||
+    typeof h !== 'number' ||
+    !Number.isFinite(w) ||
+    !Number.isFinite(h) ||
+    h <= 0 ||
+    w <= h
+  )
+    return null;
+  return autoApproveThreshold(costs as unknown as CostSettings);
+}
+
+function safeCalibration(c: unknown): PlattParams | null {
+  if (c === null) return null;
+  return isObject(c) && Number.isFinite(c.a) && Number.isFinite(c.b) && (c.a as number) > 0
+    ? (c as unknown as PlattParams)
+    : ACTIVE_CALIBRATION;
+}
+
 /**
  * The decision engine. Automation may approve (when very sure) or escalate — it never rejects.
- * Only a human can say no.
+ * Only a human can say no. It is total: malformed input or settings never throw, they go to a human.
  */
-export function decide(input: DecisionInputs, ctx: DecisionContext): DecisionOutcome {
-  const threshold = autoApproveThreshold(ctx.costs);
+export function decide(rawInput: DecisionInputs, rawCtx: DecisionContext): DecisionOutcome {
+  const { input, malformed } = sanitize(rawInput);
+  const ctx: Partial<DecisionContext> = isObject(rawCtx) ? rawCtx : {};
+  const clauses = Array.isArray(ctx.clauses) ? ctx.clauses : [];
+  const costThreshold = safeThreshold(ctx.costs);
+  const threshold = costThreshold ?? 1;
   const hardFlags = [
-    ...new Set([...input.externalFlags, ...deriveHardFlags(input.facts, input.evidence)]),
+    ...new Set<HardFlag>([
+      ...input.externalFlags,
+      ...deriveHardFlags(input.facts, input.evidence),
+      ...(malformed ? (['verification_unavailable'] as const) : []),
+    ]),
   ];
   const base = { threshold, hardFlags };
 
@@ -121,10 +230,11 @@ export function decide(input: DecisionInputs, ctx: DecisionContext): DecisionOut
   }
 
   const verified = !!(input.facts.nadra && input.facts.household);
-  const calibration = ctx.calibration === undefined ? ACTIVE_CALIBRATION : ctx.calibration;
-  const confidence = verified ? confidenceScore(input.evidence, calibration) : 0;
+  const confidence = verified
+    ? confidenceScore(input.evidence, safeCalibration(ctx.calibration))
+    : 0;
   const { eligible, results } = verified
-    ? evaluateRules(ctx.clauses, input.facts)
+    ? evaluateRules(clauses, input.facts)
     : { eligible: false, results: [] as ClauseResult[] };
 
   if (hardFlags.length || !eligible) {
@@ -134,29 +244,34 @@ export function decide(input: DecisionInputs, ctx: DecisionContext): DecisionOut
       confidence,
       eligible: verified ? eligible : null,
       clauses: results,
-      ...explainReview(hardFlags, results, ctx.clauses, null),
+      ...explainReview(hardFlags, results, clauses, null),
     };
   }
 
-  if (confidence >= threshold && ctx.amount <= ctx.amountCap) {
+  const amountOk =
+    typeof ctx.amount === 'number' &&
+    typeof ctx.amountCap === 'number' &&
+    ctx.amount > 0 &&
+    ctx.amount <= ctx.amountCap;
+  if (costThreshold !== null && confidence >= threshold && amountOk) {
     return {
       ...base,
       lane: 'AUTO_APPROVE',
       confidence,
       eligible,
       clauses: results,
-      ...explainApproved(results, ctx.clauses),
+      ...explainApproved(results, clauses),
     };
   }
 
-  const reason = ctx.amount > ctx.amountCap ? 'amount_cap' : 'low_confidence';
+  const reason = amountOk ? 'low_confidence' : 'amount_cap';
   return {
     ...base,
     lane: 'HUMAN_REVIEW',
     confidence,
     eligible,
     clauses: results,
-    ...explainReview([], results, ctx.clauses, reason),
+    ...explainReview([], results, clauses, reason),
   };
 }
 
@@ -212,16 +327,26 @@ const REASON_TEXT = {
 } as const;
 
 function clauseTexts(results: ClauseResult[], clauses: Clause[], passed: boolean) {
-  const byId = new Map(clauses.map((c) => [c.id, c]));
+  const byId = new Map(clauses.filter(isObject).map((c) => [c.id, c]));
   const picked = results
     .filter((r) => r.passed === passed)
-    .map((r) => byId.get(r.id)!)
-    .filter(Boolean);
+    .map((r) => byId.get(r.id))
+    .filter((c): c is Clause => typeof c?.textUr === 'string' && typeof c.textEn === 'string');
   return { ur: picked.map((c) => c.textUr), en: picked.map((c) => c.textEn) };
 }
 
+/** Shown for anything without its own sentence: a raw id (or whatever a client sent) is never read out to a citizen. */
+const OTHER_MISSING: [string, string] = ['کچھ مزید معلومات', 'some more details'];
+const OTHER_FLAG: [string, string] = [
+  'اس درخواست کو افسر کی تصدیق درکار ہے',
+  'this claim needs an officer’s check',
+];
+
+const textOf = (table: Record<string, [string, string]>, key: string, other: [string, string]) =>
+  Object.hasOwn(table, key) ? table[key]! : other;
+
 function explainAskMore(missing: string[]) {
-  const items = missing.map((m) => MISSING_TEXT[m] ?? [m, m]);
+  const items = [...new Set(missing.map((m) => textOf(MISSING_TEXT, m, OTHER_MISSING)))];
   return {
     explanationUr: `ہمیں مزید معلومات چاہییں: ${items.map((i) => i[0]).join('، ')}۔`,
     explanationEn: `We need more information: ${items.map((i) => i[1]).join(', ')}.`,
@@ -243,18 +368,21 @@ function explainReview(
   reason: keyof typeof REASON_TEXT | null,
 ) {
   const failed = clauseTexts(results, clauses, false);
-  const shown = flags.filter((f): f is Exclude<HardFlag, AnomalyFlag> => !isAnomalyFlag(f));
-  // Only an anomaly flag sent this to a human: say what any uncertain claim is told, nothing more.
-  const why = reason ?? (shown.length === 0 && failed.en.length === 0 ? 'low_confidence' : null);
+  // Anomaly (fraud-ring) flags are skipped: the claimant is never told which fraud check fired.
+  const shown = flags.filter((f) => !isAnomalyFlag(f));
+  const flagTexts = [...new Set(shown.map((f) => textOf(FLAG_TEXT, f, OTHER_FLAG)))];
+  // Never an empty reason: with nothing specific to say (e.g. records missing, or only an anomaly flag),
+  // say that an officer must check.
+  if (!flagTexts.length && !failed.ur.length && !reason) flagTexts.push(OTHER_FLAG);
   const ur = [
-    ...shown.map((f) => FLAG_TEXT[f][0]),
+    ...flagTexts.map((t) => t[0]),
     ...failed.ur.map((t) => `یہ شرط پوری نہیں ہوئی: ${t}`),
-    ...(why ? [REASON_TEXT[why][0]] : []),
+    ...(reason ? [REASON_TEXT[reason][0]] : []),
   ];
   const en = [
-    ...shown.map((f) => FLAG_TEXT[f][1]),
+    ...flagTexts.map((t) => t[1]),
     ...failed.en.map((t) => `not met: ${t}`),
-    ...(why ? [REASON_TEXT[why][1]] : []),
+    ...(reason ? [REASON_TEXT[reason][1]] : []),
   ];
   return {
     explanationUr: `ایک افسر آپ کی درخواست دیکھے گا۔ ${ur.join('۔ ')}۔`,

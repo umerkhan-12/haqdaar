@@ -2,10 +2,12 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Header,
   HttpCode,
   PayloadTooLargeException,
   Post,
   Req,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { MultipartFile } from '@fastify/multipart';
@@ -24,6 +26,11 @@ import { AiService } from './ai.service';
 
 const ProfileBody = z.object({ profile: z.enum(['dev', 'demo', 'offline']) });
 const KillBody = z.object({ killed: z.boolean() });
+/** One or two sentences at a time: long text is the caller's job to split, so every piece caches well. */
+const SpeakBody = z.object({
+  text: z.string().trim().min(1).max(600),
+  lang: z.enum(['ur', 'en']).default('ur'),
+});
 const ExtractBody = z.object({ transcript: z.string().min(1).max(4000) });
 const EmbedBody = z.object({
   text: z.string().min(1).max(4000),
@@ -109,6 +116,20 @@ export class AiController {
   @HttpCode(200)
   scam(@ZBody(ScamCheckRequest) b: z.infer<typeof ScamCheckRequest>) {
     return this.ai.scamCheck(b.text);
+  }
+
+  /**
+   * Text → speech (audio/mpeg) in a Pakistani Urdu voice, for people who cannot read.
+   * 503 with `details.fallback = "browser"` means: use the phone's own voice instead.
+   */
+  @Roles('citizen', 'helper', 'officer', 'admin', 'auditor')
+  @Post('speak')
+  @HttpCode(200)
+  @Header('content-type', 'audio/mpeg')
+  @Header('cache-control', 'private, max-age=86400')
+  async speak(@ZBody(SpeakBody) b: z.infer<typeof SpeakBody>) {
+    const { audio } = await this.ai.speak(b.text, b.lang);
+    return new StreamableFile(audio, { type: 'audio/mpeg', length: audio.length });
   }
 
   /** Urdu speech → text. multipart/form-data with field `file` (max 5 MB, audio only). */

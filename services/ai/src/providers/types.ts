@@ -26,7 +26,8 @@ export interface SttRequest {
   audio: Buffer;
   mimeType: string;
   /** ISO 639-1, e.g. `ur` */
-  language: string;
+  /** ISO 639-1 to force a language; omit to auto-detect (Urdu and English both work). */
+  language?: string;
   timeoutMs: number;
 }
 
@@ -76,7 +77,9 @@ export class ProviderError extends Error {
 
 export async function readError(provider: string, res: Response): Promise<never> {
   const body = await res.text().catch(() => '');
-  const retryable = res.status === 429 || res.status >= 500;
+  // Only a malformed request (400/413/415/422) is our fault. Auth, billing (401/402/403), a retired model (404),
+  // rate limits and outages are this vendor's problem, so the next vendor in the chain gets its turn.
+  const retryable = ![400, 413, 415, 422].includes(res.status);
   throw new ProviderError(
     provider,
     `HTTP ${res.status}: ${body.slice(0, 300)}`,

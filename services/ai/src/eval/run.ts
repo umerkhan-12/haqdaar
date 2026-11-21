@@ -71,17 +71,36 @@ const providers = providerArg
         ? [new GroqProvider(env.GROQ_API_KEY, env.GROQ_LLM_MODEL, env.GROQ_STT_MODEL)]
         : []),
       ...(providerArg === 'gemini'
-        ? [new GeminiProvider('gemini', env.GEMINI_API_KEY, env.GEMINI_MODEL)]
+        ? [
+            new GeminiProvider(
+              'gemini',
+              env.GEMINI_API_KEY,
+              env.GEMINI_MODEL,
+              env.GEMINI_BUDGET_USD,
+            ),
+          ]
         : []),
       ...(providerArg === 'gemini-demo'
-        ? [new GeminiProvider('gemini-demo', env.GEMINI_DEMO_API_KEY, env.GEMINI_MODEL)]
+        ? [
+            new GeminiProvider(
+              'gemini-demo',
+              env.GEMINI_DEMO_API_KEY,
+              env.GEMINI_MODEL,
+              env.GEMINI_BUDGET_USD,
+            ),
+          ]
         : []),
       new MockProvider(),
     ]
   : [
       new GroqProvider(env.GROQ_API_KEY, env.GROQ_LLM_MODEL, env.GROQ_STT_MODEL),
-      new GeminiProvider('gemini', env.GEMINI_API_KEY, env.GEMINI_MODEL),
-      new GeminiProvider('gemini-demo', env.GEMINI_DEMO_API_KEY, env.GEMINI_MODEL),
+      new GeminiProvider('gemini', env.GEMINI_API_KEY, env.GEMINI_MODEL, env.GEMINI_BUDGET_USD),
+      new GeminiProvider(
+        'gemini-demo',
+        env.GEMINI_DEMO_API_KEY,
+        env.GEMINI_MODEL,
+        env.GEMINI_BUDGET_USD,
+      ),
       new MockProvider(),
     ];
 const routeOverrides: ProviderRoutes = providerArg ? { llm: [providerArg] } : {};

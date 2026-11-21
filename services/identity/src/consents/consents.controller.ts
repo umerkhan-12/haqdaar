@@ -13,6 +13,7 @@ import {
 import { ConsentPurpose } from '@haqdaar/shared';
 import { z } from 'zod';
 import { ConsentsService } from './consents.service';
+import { CorrectionRequestBody } from './correction';
 
 const GrantBody = z.object({
   personId: z.string().uuid(),
@@ -48,6 +49,16 @@ export class ConsentsController {
   @Post(':id/withdraw')
   withdraw(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.consents.withdraw(user, id);
+  }
+
+  /** "Correct my data": verified identity data is never self-edited; this files an audited request for an officer. */
+  @Roles('citizen', 'helper')
+  @Post('correction-request')
+  requestCorrection(
+    @CurrentUser() user: AuthUser,
+    @ZBody(CorrectionRequestBody) body: CorrectionRequestBody,
+  ) {
+    return this.consents.requestCorrection(user, body);
   }
 
   /** Service-to-service: "may I read this person's data for this purpose right now?" */

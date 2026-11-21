@@ -102,14 +102,20 @@ export function BigActionCard({
 }
 
 /** Speaks any text aloud: the voice channel of every state (DESIGN.md: never colour alone). */
-export function AudioButton({ text, className = '' }: { text: string; className?: string }) {
+export function AudioButton({
+  text,
+  className = '',
+}: {
+  text: string | string[];
+  className?: string;
+}) {
   const { t, speak } = useI18n();
   return (
     <button
       type="button"
       onClick={() => speak(text)}
       className={`inline-flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded-full border-2 border-current ${className}`}
-      aria-label={`${t('listen')}: ${text}`}
+      aria-label={`${t('listen')}: ${Array.isArray(text) ? text.join('. ') : text}`}
     >
       <IconSpeaker className="h-6 w-6" />
     </button>
@@ -141,7 +147,7 @@ export function StatusCard({
         <p className="text-lg font-semibold">{title}</p>
         {body && <p className="mt-1">{body}</p>}
       </div>
-      <AudioButton text={body ? `${title}. ${body}` : title} />
+      <AudioButton text={body ? [title, body] : title} />
     </div>
   );
 }
@@ -222,7 +228,7 @@ export function VerdictCard({ v }: { v: ScamVerdict }) {
       <div className="flex items-center gap-4">
         <Icon className="h-12 w-12 shrink-0" />
         <p className="flex-1 text-2xl font-bold">{t(key)}</p>
-        <AudioButton text={`${t(key)}. ${reason}`} />
+        <AudioButton text={[t(key), reason]} />
       </div>
       <p className="text-lg">{reason}</p>
       {v.sealValid && <StatusPill tone="ok">Haqdaar Seal ✓</StatusPill>}

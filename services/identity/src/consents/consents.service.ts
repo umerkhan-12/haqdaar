@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { buildEvent, EventBus, outboxRow, type AuthUser, type Principal } from '@haqdaar/nest-kit';
 import type { ConsentPurpose } from '@haqdaar/shared';
 import { PrismaService } from '../prisma.service';
+import type { CorrectionRequestBody } from './correction';
 
 @Injectable()
 export class ConsentsService {
@@ -35,6 +36,18 @@ export class ConsentsService {
 
   async grant(user: AuthUser, personId: string, purpose: ConsentPurpose, grantedTo?: string) {
     this.assertSubject(user, personId);
+    // Idempotent: a permission that is already in force is returned as is. A retry on a weak connection
+    // (or a second tap) must not pile up duplicate rows, each of which would need its own withdrawal.
+    const inForce = await this.prisma.consent.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        personId,
+        purpose,
+        status: 'ACTIVE',
+        grantedTo: grantedTo ?? null,
+      },
+    });
+    if (inForce) return inForce;
     const consent = await this.prisma.$transaction(async (tx) => {
       const c = await tx.consent.create({
         data: { tenantId: user.tenantId, personId, purpose, grantedTo },
@@ -75,6 +88,29 @@ export class ConsentsService {
     });
     this.bus.kick();
     return updated;
+  }
+
+  /**
+   * The citizen (or her helper) reports that a stored fact is wrong. Nothing is changed here:
+   * the request goes to the tamper-evident audit log, where staff pick it up and fix the record
+   * only after checking, so a thief with her phone cannot rewrite a verified identity.
+   */
+  async requestCorrection(user: AuthUser, body: CorrectionRequestBody) {
+    const personId = this.subjectOf(user);
+    const event = buildEvent(
+      'identity.correction.requested',
+      { personId, field: body.field, note: body.note ?? null },
+      { source: 'identity', principal: user },
+    );
+    await this.prisma.outboxEvent.create({ data: outboxRow(event) });
+    this.bus.kick();
+    return {
+      requestId: event.eventId,
+      personId,
+      field: body.field,
+      status: 'RECEIVED' as const,
+      at: event.occurredAt,
+    };
   }
 
   /** Internal check used by other services before reading personal data. */

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { KitModule } from '@haqdaar/nest-kit';
+import { DocsController } from './docs.controller';
 import { env } from './env';
 import { StatusController } from './status.controller';
 import { UsageMeter } from './usage-meter';
@@ -14,7 +15,7 @@ import { UsageMeter } from './usage-meter';
       prettyLogs: env.LOG_PRETTY === '1',
     }),
   ],
-  controllers: [StatusController],
+  controllers: [StatusController, DocsController],
   providers: [UsageMeter],
 })
 export class AppModule {}

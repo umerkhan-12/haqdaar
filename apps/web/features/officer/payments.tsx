@@ -34,6 +34,7 @@ export function OfficerPayments() {
   );
   const [releasing, setReleasing] = useState<Payment | null>(null);
   const [note, setNote] = useState('');
+  const [retrying, setRetrying] = useState<Payment | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -53,6 +54,7 @@ export function OfficerPayments() {
     } finally {
       setBusy(false);
       setReleasing(null);
+      setRetrying(null);
       setNote('');
     }
   }
@@ -144,6 +146,30 @@ export function OfficerPayments() {
                   >
                     Approve
                   </Button>
+                ) : p.state === 'UNKNOWN' ? (
+                  // The bank did not answer in time: ask what happened. An inquiry never sends money again.
+                  <Button
+                    variant="ghost"
+                    className="min-h-10 text-sm"
+                    disabled={busy}
+                    onClick={() =>
+                      act(
+                        () => api.paymentInquiry(p.id),
+                        'Asked the bank. The payout now shows its real result.',
+                      )
+                    }
+                  >
+                    Ask bank (inquiry)
+                  </Button>
+                ) : p.state === 'FAILED' ? (
+                  <Button
+                    variant="ghost"
+                    className="min-h-10 text-sm"
+                    disabled={busy}
+                    onClick={() => setRetrying(p)}
+                  >
+                    Retry…
+                  </Button>
                 ) : null,
             },
           ]}
@@ -172,6 +198,22 @@ export function OfficerPayments() {
             className="w-full rounded-xl border-2 border-slate-400 p-2"
           />
         </label>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={!!retrying}
+        title="Retry a failed payout"
+        confirmLabel="Send again"
+        busy={busy}
+        onClose={() => setRetrying(null)}
+        onConfirm={() =>
+          retrying &&
+          act(() => api.paymentRetry(retrying.id), 'Sent again with the same payment reference.')
+        }
+      >
+        <p className="text-sm">
+          Rs {retrying?.amount.toLocaleString('en-PK')} to {retrying?.creditorName}. The retry
+          reuses the same payment reference, so the bank cannot pay it twice.
+        </p>
       </ConfirmDialog>
     </Shell>
   );

@@ -63,8 +63,16 @@ export function saveHelperSession(s: Session | null): void {
 export function clearSession(): void {
   localStorage.removeItem(KEY);
   localStorage.removeItem(HELPER_KEY);
+  localStorage.removeItem(PHONE_KEY);
   window.dispatchEvent(new Event('hq:session'));
 }
+
+/** The number she signed in with, kept so her relief money defaults to her own phone (no typing). */
+const PHONE_KEY = 'hq.phone';
+export const rememberPhone = (phone: string): void =>
+  localStorage.setItem(PHONE_KEY, phone.replace(/\D/g, ''));
+export const ownPhone = (): string =>
+  typeof window === 'undefined' ? '' : (localStorage.getItem(PHONE_KEY) ?? '');
 
 export const HOME: Record<Role, string> = {
   citizen: '/citizen',

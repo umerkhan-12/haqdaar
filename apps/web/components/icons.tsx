@@ -44,3 +44,10 @@ export const IconUsers = base(
 export const IconMessage = base('M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z');
 export const IconLock = base('M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4');
 export const IconPlay = base('M6 4l14 8-14 8V4z');
+export const IconCamera = base(
+  'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+);
+export const IconIdCard = base(
+  'M3 5h18v14H3zM7 10h4M7 14h4M15 9.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM13 16c.4-1.2 1.2-1.8 2-1.8s1.6.6 2 1.8',
+);
+export const IconStop = base('M6 6h12v12H6z');
