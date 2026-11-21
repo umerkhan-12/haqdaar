@@ -1,5 +1,6 @@
 import { autoApproveThreshold, type CostSettings, type Lane } from '@haqdaar/shared';
 import { evaluateRules, type Clause, type ClauseResult, type Facts } from './rules';
+import { ACTIVE_CALIBRATION, sigmoid, type PlattParams } from './calibration';
 
 /** Evidence quality signals that feed the confidence score. */
 export interface Evidence {
@@ -36,6 +37,8 @@ export interface DecisionContext {
   amount: number;
   costs: CostSettings;
   amountCap: number;
+  /** Platt parameters for the confidence score; defaults to the engine's fitted ones (null = raw score) */
+  calibration?: PlattParams | null;
 }
 
 export interface DecisionOutcome {
@@ -52,22 +55,27 @@ export interface DecisionOutcome {
 export const NAME_MATCH_MIN = 0.8;
 
 /**
- * Confidence that approving is correct, from evidence (logistic model).
- * Weights are hand-set placeholders, to be replaced by Platt scaling fitted on the labelled
- * synthetic set: perfect evidence ≈ 0.997; missing household verification drops below 0.988.
+ * Raw evidence score (logit) with hand-set weights: it orders cases, but its scale is not a probability.
+ * `confidenceScore` maps it to a calibrated probability with Platt scaling fitted on the labelled set.
  */
 const W = { bias: -4, nadraMatch: 3, nameScore: 4, householdVerified: 2, extraction: 1, duplicate: -3 };
 const DEFAULT_EXTRACTION_CONFIDENCE = 0.8;
 
-export function confidenceScore(e: Evidence): number {
-  const z =
+export function rawEvidenceLogit(e: Evidence): number {
+  return (
     W.bias +
     W.nadraMatch * Number(e.nadraMatch) +
     W.nameScore * e.nameScore +
     W.householdVerified * Number(e.householdVerified) +
     W.extraction * (e.extractionConfidence ?? DEFAULT_EXTRACTION_CONFIDENCE) +
-    W.duplicate * Number(e.possibleDuplicate);
-  return 1 / (1 + Math.exp(-z));
+    W.duplicate * Number(e.possibleDuplicate)
+  );
+}
+
+/** Confidence that approving is correct, from evidence. */
+export function confidenceScore(e: Evidence, platt: PlattParams | null = ACTIVE_CALIBRATION): number {
+  const z = rawEvidenceLogit(e);
+  return platt ? sigmoid(platt.a * z + platt.b) : sigmoid(z);
 }
 
 export function deriveHardFlags(facts: Facts, evidence: Evidence): HardFlag[] {
@@ -99,7 +107,8 @@ export function decide(input: DecisionInputs, ctx: DecisionContext): DecisionOut
   }
 
   const verified = !!(input.facts.nadra && input.facts.household);
-  const confidence = verified ? confidenceScore(input.evidence) : 0;
+  const calibration = ctx.calibration === undefined ? ACTIVE_CALIBRATION : ctx.calibration;
+  const confidence = verified ? confidenceScore(input.evidence, calibration) : 0;
   const { eligible, results } = verified
     ? evaluateRules(ctx.clauses, input.facts)
     : { eligible: false, results: [] as ClauseResult[] };

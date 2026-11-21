@@ -42,6 +42,8 @@ jobs:
         run: pnpm build
       - name: Unit tests
         run: pnpm test
+      - name: Golden-set evaluation (decision engine)
+        run: pnpm --filter @haqdaar/cases eval:check
       - name: Database schemas
         run: pnpm db:push
       - name: Dependency audit (high and above)

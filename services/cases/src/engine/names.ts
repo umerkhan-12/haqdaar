@@ -4,7 +4,7 @@
  * A name score is evidence only: persons are keyed by CNIC hash and never merged on name.
  */
 
-const URDU_TO_LATIN: Record<string, string> = {
+export const URDU_TO_LATIN: Record<string, string> = {
   محمد: 'mhd',
   زینب: 'zainab',
   فاطمہ: 'fatima',
