@@ -1,4 +1,4 @@
-﻿// End-to-end business flows and their worst cases: claim â†’ decision â†’ payout â†’ receipt.
+// End-to-end business flows and their worst cases: claim → decision → payout → receipt.
 // Loaded by e2e.mjs. Requires a reset demo state (`pnpm e2e` resets first).
 import { randomUUID } from 'node:crypto';
 import { api, describe, expect, expectStatus, it, login, registerSuite, token, ZAINAB } from './e2e-lib.mjs';
@@ -55,7 +55,7 @@ async function setFault(mode, remaining = 1) {
 }
 
 registerSuite(async () => {
-  describe('Claim â†’ decision â†’ payout (happy path)');
+  describe('Claim → decision → payout (happy path)');
   const citizen = await token('citizen');
   let zainabCase;
 
@@ -66,7 +66,7 @@ registerSuite(async () => {
     );
   });
 
-  await it('claim without consent â†’ ASK_MORE (never processed with data she did not share)', async () => {
+  await it('claim without consent → ASK_MORE (never processed with data she did not share)', async () => {
     const r = await api('POST', '/cases', {
       token: citizen,
       body: ZAINAB_CLAIM,
@@ -77,7 +77,7 @@ registerSuite(async () => {
     zainabCase = r.body;
   });
 
-  await it('after consent, resubmit â†’ AUTO_APPROVE with an Urdu explanation', async () => {
+  await it('after consent, resubmit → AUTO_APPROVE with an Urdu explanation', async () => {
     await grantConsents(citizen, ZAINAB);
     const r = await api('POST', `/cases/${zainabCase.id}/resubmit`, { token: citizen });
     expectStatus(r, 200, 201);
@@ -128,14 +128,14 @@ registerSuite(async () => {
 
   describe('Idempotency & duplicates');
 
-  await it('same idempotency key twice â†’ same case, no second claim', async () => {
+  await it('same idempotency key twice → same case, no second claim', async () => {
     const key = `dup-${randomUUID()}`;
     const a = await api('POST', '/cases', { token: citizen, body: ZAINAB_CLAIM, headers: { 'idempotency-key': key } });
     const b = await api('POST', '/cases', { token: citizen, body: ZAINAB_CLAIM, headers: { 'idempotency-key': key } });
     expect(a.body.id && a.body.id === b.body.id, `${a.body.id} vs ${b.body.id}`);
   });
 
-  await it('5 parallel submits with one key (double-tap on a slow phone) â†’ one case', async () => {
+  await it('5 parallel submits with one key (double-tap on a slow phone) → one case', async () => {
     const key = `race-${randomUUID()}`;
     const rs = await Promise.all(
       Array.from({ length: 5 }, () =>
@@ -146,7 +146,7 @@ registerSuite(async () => {
     expect(ids.size === 1, `distinct cases: ${ids.size}, statuses ${rs.map((r) => r.status)}`);
   });
 
-  await it('second claim in the same month is never auto-approved (duplicate flag â†’ human)', async () => {
+  await it('second claim in the same month is never auto-approved (duplicate flag → human)', async () => {
     const r = await api('POST', '/cases', {
       token: citizen,
       body: ZAINAB_CLAIM,
@@ -155,11 +155,11 @@ registerSuite(async () => {
     expect(r.body.lane !== 'AUTO_APPROVE', `lane ${r.body.lane}`);
   });
 
-  await it('missing idempotency key â†’ 400', async () => {
+  await it('missing idempotency key → 400', async () => {
     expectStatus(await api('POST', '/cases', { token: citizen, body: ZAINAB_CLAIM }), 400);
   });
 
-  await it('claiming with another personâ€™s CNIC â†’ 403', async () => {
+  await it('claiming with another person’s CNIC → 403', async () => {
     expectStatus(
       await api('POST', '/cases', {
         token: citizen,
@@ -189,7 +189,7 @@ registerSuite(async () => {
   describe('Helper Mode');
 
   let helperForRashida;
-  await it('helper needs the family PIN; wrong PIN â†’ 401', async () => {
+  await it('helper needs the family PIN; wrong PIN → 401', async () => {
     const helper = await token('helper');
     const fam = await api('GET', '/auth/families', { token: helper });
     expect(fam.body.length === 2, `families: ${fam.body.length}`);
@@ -209,7 +209,7 @@ registerSuite(async () => {
 
   describe('Bank-grade payouts (fintech worst cases)');
 
-  await it('Raast times out AFTER debiting â†’ UNKNOWN â†’ status inquiry â†’ SUCCESS, paid exactly once', async () => {
+  await it('Raast times out AFTER debiting → UNKNOWN → status inquiry → SUCCESS, paid exactly once', async () => {
     await grantConsents(helperForRashida, RASHIDA);
     await setFault('timeout_after_debit', 1);
     const r = await api('POST', '/cases', {
@@ -225,7 +225,7 @@ registerSuite(async () => {
     expect(ps.length === 1, `payments: ${ps.length}`);
     const detail = await api('GET', `/payments/${ps[0].id}`, { token: await token('officer') });
     const states = (detail.body.transitions ?? []).map((t) => t.to);
-    expect(states.includes('UNKNOWN'), `transitions: ${states.join(' â†’ ')}`);
+    expect(states.includes('UNKNOWN'), `transitions: ${states.join(' → ')}`);
     expect(!states.slice(states.indexOf('UNKNOWN') + 1).includes('SENT'), 'resent blindly after UNKNOWN');
   });
 

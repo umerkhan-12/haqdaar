@@ -94,7 +94,8 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
         deadLetter: this.dlq(),
       });
       await this.boss.subscribe(type, queue);
-      await this.boss.work<EventEnvelope>(queue, { batchSize: 10 }, async (jobs) => {
+      // pg-boss defaults (poll 2 s, batch 10) cap a queue at ~5 events/s and add up to 2 s latency.
+      await this.boss.work<EventEnvelope>(queue, { batchSize: 50, pollingIntervalSeconds: 0.5 }, async (jobs) => {
         for (const job of jobs) await handler(job.data);
       });
     }

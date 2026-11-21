@@ -23,7 +23,9 @@
     "db:seed": "pnpm --filter \"./services/*\" run db:seed",
     "keys": "node scripts/gen-keys.mjs",
     "e2e": "node scripts/reset-demo.mjs && node scripts/e2e.mjs",
-    "demo:reset": "node scripts/reset-demo.mjs"
+    "demo:reset": "node scripts/reset-demo.mjs",
+    "chaos": "node scripts/reset-demo.mjs && node scripts/chaos.mjs",
+    "load": "node scripts/load.mjs"
   },
   "devDependencies": {
     "@nestjs/cli": "^11",

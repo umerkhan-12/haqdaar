@@ -58,7 +58,12 @@ export async function bootstrapService(
   });
 
   const port = o.port ?? Number(process.env.PORT ?? SERVICES[o.service].port);
-  await app.listen(port, '0.0.0.0');
+  // Dual-stack: clients resolving `localhost` to ::1 (Windows, Node) connect instantly instead of
+  // waiting for an IPv6 attempt to fail. Hosts without IPv6 fall back to IPv4.
+  await app.listen(port, '::').catch(async (err: NodeJS.ErrnoException) => {
+    if (err.code !== 'EAFNOSUPPORT' && err.code !== 'EADDRNOTAVAIL') throw err;
+    await app.listen(port, '0.0.0.0');
+  });
   app.get(Logger).log(`${o.service} listening on :${port} (docs at /docs)`);
   return app;
 }

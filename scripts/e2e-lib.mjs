@@ -1,4 +1,4 @@
-﻿// Shared harness for the end-to-end suites: tiny test runner, HTTP client, demo accounts.
+// Shared harness for the end-to-end suites: tiny test runner, HTTP client, demo accounts.
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -32,10 +32,10 @@ export async function it(name, fn) {
   try {
     await fn();
     results.push({ section, name, ok: true });
-    console.log(`  \x1b[32mâœ”\x1b[0m ${name} \x1b[90m(${Date.now() - t} ms)\x1b[0m`);
+    console.log(`  \x1b[32m✔\x1b[0m ${name} \x1b[90m(${Date.now() - t} ms)\x1b[0m`);
   } catch (e) {
     results.push({ section, name, ok: false, error: e.message });
-    console.log(`  \x1b[31mâœ– ${name}\x1b[0m\n    ${e.message}`);
+    console.log(`  \x1b[31m✖ ${name}\x1b[0m\n    ${e.message}`);
   }
 }
 export function expect(cond, msg) {

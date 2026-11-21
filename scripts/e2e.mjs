@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 // End-to-end worst-case suite. Runs against a live stack through the gateway, like a real client.
 // Usage: pnpm e2e   (resets demo state first; stack must be running and seeded)
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
@@ -11,14 +11,14 @@ async function identitySuite() {
     for (const role of Object.keys(PHONES)) await login(role);
   });
 
-  await it('no token â†’ 401 with the uniform error body and a request id', async () => {
+  await it('no token → 401 with the uniform error body and a request id', async () => {
     const r = await api('GET', '/auth/me');
     expectStatus(r, 401);
     expect(r.body.statusCode === 401 && r.body.requestId, 'uniform error body with requestId');
     expect(r.headers.get('x-request-id'), 'x-request-id response header');
   });
 
-  await it('token signed with an attacker key â†’ 401', async () => {
+  await it('token signed with an attacker key → 401', async () => {
     const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const forged = jwt.sign({ sub: randomUUID(), tid: randomUUID(), role: 'admin', name: 'x' }, privateKey, {
       algorithm: 'RS256',
@@ -28,13 +28,13 @@ async function identitySuite() {
     expectStatus(await api('GET', '/auth/me', { token: forged }), 401);
   });
 
-  await it('"alg: none" token â†’ 401', async () => {
+  await it('"alg: none" token → 401', async () => {
     const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
     const none = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ sub: 'x', role: 'admin', iss: 'haqdaar-identity', aud: 'haqdaar' })}.`;
     expectStatus(await api('GET', '/auth/me', { token: none }), 401);
   });
 
-  await it('HS256 token signed with the PUBLIC key (algorithm confusion) â†’ 401', async () => {
+  await it('HS256 token signed with the PUBLIC key (algorithm confusion) → 401', async () => {
     const pub = process.env.JWT_PUBLIC_KEY.replace(/\\n/g, '\n');
     const confused = jwt.sign({ sub: 'x', role: 'admin', tid: 'x', name: 'x' }, pub, {
       algorithm: 'HS256',
@@ -44,7 +44,7 @@ async function identitySuite() {
     expectStatus(await api('GET', '/auth/me', { token: confused }), 401);
   });
 
-  await it('expired token â†’ 401', async () => {
+  await it('expired token → 401', async () => {
     const priv = process.env.JWT_PRIVATE_KEY.replace(/\\n/g, '\n');
     const expired = jwt.sign({ sub: randomUUID(), tid: randomUUID(), role: 'admin', name: 'x' }, priv, {
       algorithm: 'RS256',
@@ -68,7 +68,7 @@ async function identitySuite() {
     expectStatus(r, 401, 403);
   });
 
-  await it('citizen cannot call admin-only endpoints (Kill AI) â†’ 403', async () => {
+  await it('citizen cannot call admin-only endpoints (Kill AI) → 403', async () => {
     expectStatus(await api('POST', '/ai/kill-switch', { token: await token('citizen'), body: { killed: true } }), 403);
   });
 
@@ -94,7 +94,7 @@ async function identitySuite() {
     expect(a.status === 401 && b.status === 401 && a.body.message === b.body.message, 'same 401 message');
   });
 
-  await it('malformed input â†’ 400 (never 500): bad JSON, wrong types, oversized fields', async () => {
+  await it('malformed input → 400 (never 500): bad JSON, wrong types, oversized fields', async () => {
     expectStatus(await api('POST', '/auth/login', { raw: '{"phone":', headers: { 'content-type': 'application/json' } }), 400);
     expectStatus(await api('POST', '/auth/login', { body: { phone: 123, password: ['x'] } }), 400);
     expectStatus(await api('POST', '/auth/login', { body: { phone: '0'.repeat(5000), password: 'x'.repeat(5000) } }), 400);
@@ -119,7 +119,7 @@ async function aiSuite() {
   const admin = await token('admin');
   const citizen = await token('citizen');
 
-  await it('scam with fee + PIN + fake program name â†’ SCAM with Urdu explanation', async () => {
+  await it('scam with fee + PIN + fake program name → SCAM with Urdu explanation', async () => {
     const r = await api('POST', '/ai/scam-check', {
       token: citizen,
       body: { text: 'BISP mubarak! Rs 25000 ke liye Rs 500 fee easypaisa karein aur PIN bhejein' },
@@ -147,7 +147,7 @@ async function aiSuite() {
     }
   });
 
-  await it('oversized transcript â†’ 400', async () => {
+  await it('oversized transcript → 400', async () => {
     expectStatus(await api('POST', '/ai/extract-claim', { token: citizen, body: { transcript: 'x'.repeat(5000) } }), 400);
   });
 }

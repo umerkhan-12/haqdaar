@@ -99,6 +99,8 @@ export class AiService implements OnModuleInit {
     p.calls += 1;
     p.totalMs += r.latencyMs;
 
+    // Audit what left the system: only real vendor calls. Local mock answers send no data anywhere.
+    if (r.isMock) return;
     void this.bus
       .publish(
         buildEvent(

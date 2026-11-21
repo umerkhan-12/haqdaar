@@ -41,6 +41,18 @@ export async function configureEdge(app: NestFastifyApplication): Promise<void> 
       rewritePrefix: prefix,
       http2: false,
       replyOptions: {
+        // Upstream down or timed out: a clean 503 in the uniform error format, never an empty 500.
+        onError: (
+          reply: { request: { id: string }; code: (c: number) => { send: (b: unknown) => void } },
+          _err: unknown,
+        ) => {
+          reply.code(503).send({
+            statusCode: 503,
+            error: 'Service Unavailable',
+            message: `The ${service} service is temporarily unavailable. Please try again.`,
+            requestId: reply.request.id,
+          });
+        },
         rewriteRequestHeaders: (
           req: { id: string; ip: string },
           headers: Record<string, string | string[] | undefined>,
