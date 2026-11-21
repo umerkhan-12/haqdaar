@@ -1,7 +1,7 @@
 import { BadRequestException, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
-import { CurrentPrincipal, Roles, ZBody, type Principal } from '@haqdaar/nest-kit';
+import { CurrentPrincipal, PartnerScope, Roles, ZBody, type Principal } from '@haqdaar/nest-kit';
 import { ScamCheckRequest } from '@haqdaar/shared';
 import { z } from 'zod';
 import { AiService } from './ai.service';
@@ -49,6 +49,7 @@ export class AiController {
   }
 
   @Roles('citizen', 'helper', 'officer', 'admin', 'auditor')
+  @PartnerScope('scam:check')
   @Post('scam-check')
   @HttpCode(200)
   scam(@ZBody(ScamCheckRequest) b: z.infer<typeof ScamCheckRequest>) {

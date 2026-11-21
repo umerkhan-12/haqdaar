@@ -114,6 +114,54 @@ async function identitySuite() {
   });
 }
 
+async function partnerSuite() {
+  describe('Public API: partner API keys (client credentials)');
+  const admin = await token('admin');
+  let key;
+
+  await it('admin creates a scoped key; the secret is shown once and never listed again', async () => {
+    const r = await api('POST', '/api-keys', { token: admin, body: { name: 'Telco SMS filter', scopes: ['scam:check'] } });
+    expectStatus(r, 200, 201);
+    key = r.body;
+    expect(key.key.startsWith('hq_live_'), 'key format');
+    const list = await api('GET', '/api-keys', { token: admin });
+    expect(!JSON.stringify(list.body).includes(key.key), 'full key must never be listed');
+  });
+
+  await it('citizen cannot create API keys', async () => {
+    expectStatus(await api('POST', '/api-keys', { token: await token('citizen'), body: { name: 'x y z', scopes: ['scam:check'] } }), 403);
+  });
+
+  await it('key → partner token → scam check works (in scope)', async () => {
+    const t = await api('POST', '/auth/token', { body: { apiKey: key.key } });
+    expectStatus(t, 200);
+    const r = await api('POST', '/ai/scam-check', { token: t.body.accessToken, body: { text: 'Send OTP and Rs 500 fee' } });
+    expectStatus(r, 200);
+    expect(r.body.verdict === 'SCAM', r.body.verdict);
+  });
+
+  await it('partner token is denied everywhere outside its scope (deny by default)', async () => {
+    const t = (await api('POST', '/auth/token', { body: { apiKey: key.key } })).body.accessToken;
+    for (const [m, p] of [
+      ['GET', '/cases'],
+      ['GET', '/queue'],
+      ['GET', '/payments'],
+      ['GET', '/audit'],
+      ['GET', '/auth/me'],
+      ['POST', '/ai/extract-claim'],
+    ]) {
+      const r = await api(m, p, { token: t, body: m === 'POST' ? { transcript: 'x' } : undefined });
+      expect(r.status === 403, `${m} ${p} → ${r.status}`);
+    }
+  });
+
+  await it('revoked or forged keys are rejected', async () => {
+    expectStatus(await api('DELETE', `/api-keys/${key.id}`, { token: admin }), 204);
+    expectStatus(await api('POST', '/auth/token', { body: { apiKey: key.key } }), 401);
+    expectStatus(await api('POST', '/auth/token', { body: { apiKey: 'hq_live_forgedforgedforgedforged' } }), 401);
+  });
+}
+
 async function aiSuite() {
   describe('AI service & Kill AI');
   const admin = await token('admin');
@@ -185,6 +233,7 @@ async function gatewaySuite() {
 registerSuite(gatewaySuite);
 registerSuite(identitySuite);
 registerSuite(aiSuite);
+registerSuite(partnerSuite);
 await import('./e2e-flows.mjs');
 registerSuite(auditSuite);
 await runAll();

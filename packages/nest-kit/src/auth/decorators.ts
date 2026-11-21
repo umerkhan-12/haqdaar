@@ -1,5 +1,5 @@
 import { createParamDecorator, ExecutionContext, SetMetadata } from '@nestjs/common';
-import type { Role } from '@haqdaar/shared';
+import type { ApiScope, Role } from '@haqdaar/shared';
 
 export const IS_PUBLIC = 'haqdaar:isPublic';
 export const ROLES = 'haqdaar:roles';
@@ -14,6 +14,11 @@ export const Roles = (...roles: Role[]) => SetMetadata(ROLES, roles);
 /** Route can only be called by another service with an internal token (never by a user). */
 export const InternalOnly = () => SetMetadata(INTERNAL_ONLY, true);
 
+export const SCOPE = 'haqdaar:scope';
+
+/** Opens the route to partner (API key) tokens that carry this scope. Without it, partners get 403. */
+export const PartnerScope = (scope: ApiScope) => SetMetadata(SCOPE, scope);
+
 export interface AuthUser {
   kind: 'user';
   id: string;
@@ -22,6 +27,8 @@ export interface AuthUser {
   name: string;
   /** Helper Mode: acting on behalf of this person. */
   onBehalfOf?: string;
+  /** Partner (API key) tokens: allowed scopes. */
+  scopes?: string[];
 }
 
 export interface AuthService {

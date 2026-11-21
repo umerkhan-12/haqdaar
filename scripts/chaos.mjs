@@ -126,7 +126,7 @@ registerSuite(async () => {
     expect(paid.length === 1, `payments: ${paid.length}`);
   });
 
-  await it('AI vendors unreachable → scam check still answers from seal + rules', async () => {
+  await it('AI service down → gateway answers a clean 503; after restart scam checks work', async () => {
     await stop('ai');
     try {
       const r = await api('POST', '/ai/scam-check', { token: rashida, body: { text: 'Rs 500 fee bhejein' } });

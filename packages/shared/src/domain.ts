@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
-/** The five user roles. Service accounts use `service`. */
-export const Role = z.enum(['citizen', 'helper', 'officer', 'admin', 'auditor']);
+/** The five user roles, plus `partner` for API-key clients (client-credentials tokens). */
+export const Role = z.enum(['citizen', 'helper', 'officer', 'admin', 'auditor', 'partner']);
 export type Role = z.infer<typeof Role>;
+
+/** What an API key may do. A partner token can only reach routes that declare one of these. */
+export const ApiScope = z.enum(['scam:check', 'cases:status']);
+export type ApiScope = z.infer<typeof ApiScope>;
 
 export const TenantType = z.enum(['relief', 'fraud_desk']);
 export type TenantType = z.infer<typeof TenantType>;

@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Role } from '@haqdaar/shared';
-import { INTERNAL_ONLY, IS_PUBLIC, ROLES, type Principal } from './decorators';
+import { INTERNAL_ONLY, IS_PUBLIC, ROLES, SCOPE, type Principal } from './decorators';
 import { verifyAccessToken, verifyInternalToken } from './tokens';
 import { KIT_OPTIONS, type KitOptions } from '../kit.options';
 
@@ -58,6 +58,7 @@ export class AuthGuard implements CanActivate {
           role: c.role,
           name: c.name,
           onBehalfOf: c.obo,
+          scopes: c.scp,
         } satisfies Principal;
         return true;
       } catch {
@@ -70,18 +71,29 @@ export class AuthGuard implements CanActivate {
   }
 }
 
-/** Checks `@Roles(...)`. Services always pass; their routes are guarded by `@InternalOnly`. */
+/**
+ * Checks `@Roles(...)`. Services always pass; their routes are guarded by `@InternalOnly`.
+ * Partner (API key) tokens are denied everywhere unless the route declares `@PartnerScope(x)`
+ * and the token carries scope x.
+ */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(ctx: ExecutionContext): boolean {
-    const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES, [
-      ctx.getHandler(),
-      ctx.getClass(),
-    ]);
-    if (!roles?.length) return true;
+    const targets = [ctx.getHandler(), ctx.getClass()];
     const p = ctx.switchToHttp().getRequest().principal as Principal | undefined;
+
+    if (p?.kind === 'user' && p.role === 'partner') {
+      const scope = this.reflector.getAllAndOverride<string | undefined>(SCOPE, targets);
+      if (!scope || !p.scopes?.includes(scope)) {
+        throw new ForbiddenException(scope ? `API key lacks scope: ${scope}` : 'Not available to API keys');
+      }
+      return true;
+    }
+
+    const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES, targets);
+    if (!roles?.length) return true;
     if (!p) throw new UnauthorizedException();
     if (p.kind === 'service') return true;
     if (!roles.includes(p.role)) throw new ForbiddenException(`Requires role: ${roles.join(' | ')}`);

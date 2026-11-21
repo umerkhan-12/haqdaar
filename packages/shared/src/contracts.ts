@@ -25,6 +25,8 @@ export interface AccessTokenClaims {
   name: string;
   /** Helper Mode: the family this helper is currently acting for. */
   obo?: string;
+  /** Partner (API key) tokens only: allowed scopes. */
+  scp?: string[];
 }
 
 // ---------- ai ----------

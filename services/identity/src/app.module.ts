@@ -9,6 +9,8 @@ import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { ConsentsController } from './consents/consents.controller';
 import { ConsentsService } from './consents/consents.service';
+import { ApiKeysController } from './api-keys/api-keys.controller';
+import { ApiKeysService } from './api-keys/api-keys.service';
 
 @Module({
   imports: [
@@ -26,12 +28,13 @@ import { ConsentsService } from './consents/consents.service';
     }),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
   ],
-  controllers: [AuthController, ConsentsController],
+  controllers: [AuthController, ConsentsController, ApiKeysController],
   providers: [
     { provide: APP_GUARD, useClass: LoginThrottlerGuard },
     PrismaService,
     AuthService,
     ConsentsService,
+    ApiKeysService,
   ],
 })
 export class AppModule {}
