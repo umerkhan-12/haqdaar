@@ -56,6 +56,11 @@ export function loadEnv<T extends z.ZodTypeAny>(schema: T, env = process.env): z
   return parsed.data;
 }
 
+/** Demo-only features (Judge Mode, demo reset) exist only when DEMO_MODE=1. Never in production. */
+export function isDemoMode(env = process.env): boolean {
+  return env.DEMO_MODE === '1';
+}
+
 /** PEM keys are often stored in env with literal "\n". */
 export function pem(value: string): string {
   return value.includes('\\n') ? value.replace(/\\n/g, '\n') : value;

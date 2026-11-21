@@ -5,6 +5,7 @@ export * from './bootstrap';
 export * from './health';
 export * from './crypto';
 export * from './seal';
+export * from './demo';
 export * from './auth/decorators';
 export * from './auth/guards';
 export * from './auth/tokens';

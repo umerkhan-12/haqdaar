@@ -7,6 +7,7 @@ export const SERVICES = {
   payments: { port: 4004, urlEnv: 'PAYMENTS_URL' },
   audit: { port: 4005, urlEnv: 'AUDIT_URL' },
   'rails-mock': { port: 4006, urlEnv: 'RAILS_URL' },
+  judge: { port: 4007, urlEnv: 'JUDGE_URL' },
 } as const;
 
 export type ServiceName = keyof typeof SERVICES;
@@ -27,6 +28,7 @@ export const GATEWAY_ROUTES: Record<string, ServiceName> = {
   '/queue': 'cases',
   '/rules': 'cases',
   '/decisions': 'cases',
+  '/cost-settings': 'cases',
   '/ai': 'ai',
   '/payments': 'payments',
   '/ledger': 'payments',
@@ -34,4 +36,5 @@ export const GATEWAY_ROUTES: Record<string, ServiceName> = {
   '/webhooks': 'payments',
   '/audit': 'audit',
   '/mock': 'rails-mock',
+  '/judge': 'judge',
 };

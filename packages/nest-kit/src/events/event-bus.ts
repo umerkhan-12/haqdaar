@@ -101,14 +101,22 @@ export class EventBus implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
-  /** Create the queue unless it exists. Any other error is real and must surface at boot. */
+  /**
+   * Create the queue unless it exists. Services booting together can deadlock inside pg-boss's
+   * create_queue (Postgres aborts one side): that is transient, so retry with backoff.
+   */
   private async ensureQueue(name: string, options: Omit<PgBoss.Queue, 'name'>): Promise<void> {
-    if (await this.boss.getQueue(name)) return;
-    try {
-      await this.boss.createQueue(name, { name, ...options } as PgBoss.Queue);
-    } catch (err) {
-      if (await this.boss.getQueue(name)) return; // created concurrently by another replica
-      throw err;
+    for (let attempt = 1; ; attempt++) {
+      if (await this.boss.getQueue(name)) return;
+      try {
+        await this.boss.createQueue(name, { name, ...options } as PgBoss.Queue);
+        return;
+      } catch (err) {
+        if (await this.boss.getQueue(name)) return; // created concurrently by another service
+        const transient = ['40P01', '40001', '23505'].includes((err as { code?: string }).code ?? '');
+        if (!transient || attempt >= 6) throw err;
+        await new Promise((r) => setTimeout(r, 100 * 2 ** attempt + Math.random() * 100));
+      }
     }
   }
 

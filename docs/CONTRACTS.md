@@ -11,6 +11,21 @@ Events and their payload schemas live in `packages/shared/src/events.ts` (valida
 | Rashida Begum (Karachi West, household 7, income 22,000) | `10000000-0000-4000-8000-000000000002` | `42201-7654321-2` | `03001110007` | `PK52SAHA0000007654321098` | `RASHIDA BEGUM` |
 | Mule account (fraud demo) | — | — | `03009990000` | `PK11MULE0000009999999999` | `MUHAMMAD ASLAM` |
 
+**Helper families** (helper `03001110002` acts for each with its PIN; used by Judge Mode):
+
+| Family | Person id | CNIC | Alias | PIN | Why it is in the demo |
+|---|---|---|---|---|---|
+| Zainab Bibi | `…0001` | `42201-1234567-4` | `03001110001` | 1111 | Happy path |
+| Rashida Begum | `…0002` | `42201-7654321-2` | `03001110007` | 2222 | Consent, payout faults |
+| Nasreen Bi Bi | `…0003` | `42401-3344556-6` | `03451234504` | 3333 | Eligible widow (cost of being wrong) |
+| Kaneez Fatima | `…0004` | `42101-6677889-4` | `03151234506` | 4444 | Says "Kaneez Fatma"; outside program districts → human, never rejected |
+| Zainab Bibi (Badin) | `…0005` | `41201-4455667-2` | `03121234501` | 5555 | Same name as Zainab, different person: never merged |
+| Mohammad Akram | `…0006` | `41101-5566778-3` | `03331234503` | 6666 | Spelling variants of Muhammad |
+| Ghulam Rasool | `…0007` | `44201-9988776-5` | — | 7777 | Deceased in NADRA: hard flag |
+| Shazia Bibi | `…0008` | `43201-1122334-8` | `03011234505` | 8888 | NADRA record in Urdu script |
+
+Person ids are `10000000-0000-4000-8000-00000000000N`.
+
 Tenants: relief `00000000-0000-4000-8000-000000000001`, fraud desk `00000000-0000-4000-8000-000000000002`.
 Program debtor account: `PK00SAHA0000000000000001`, title `SAHARA RELIEF PROGRAM`. Monthly amount: **PKR 12,000**.
 
@@ -28,7 +43,7 @@ All `/mock/*` routes are `@InternalOnly()` unless marked. Simulated latency 50�
 | `GET /mock/raast/statement?date=YYYY-MM-DD` | — | `{ date, entries: [{ endToEndId, amount, creditorIban, status, settledAt }] }` |
 | `POST /mock/sms/send` | `{ to, body }` | `{ messageId }` |
 | `GET /mock/sms/inbox/:phone` (role: admin — Judge Mode phone screen) | — | `[{ messageId, from, body, receivedAt }]` |
-| `GET /mock/faults` / `POST /mock/faults` (role: admin) | `{ raast: { mode: "none" \| "fail" \| "timeout" \| "timeout_after_debit" \| "duplicate_statement", remaining: number } }` | current fault config |
+| `GET /mock/faults` / `POST /mock/faults` (role: admin) | `{ raast: { mode: "none" \| "fail" \| "timeout" \| "timeout_after_debit" \| "duplicate_statement", remaining: number, alias?: string } }` — with `alias`, only transfers to that Raast alias are affected | current fault config |
 
 **Retries:** a business rejection (`AC02`/`AC03`) is final for that `endToEndId`; a new attempt needs a new id. Only after `NOT_FOUND` (never reached the provider) or an injected fault may the same id be resent.
 

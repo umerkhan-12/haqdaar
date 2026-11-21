@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { EventBusModule, KitModule } from '@haqdaar/nest-kit';
+import { DemoResetController, DemoResetter, EventBusModule, KitModule } from '@haqdaar/nest-kit';
+import { CasesDemoReset } from './demo-reset';
 import { env } from './env';
 import { PrismaService } from './prisma.service';
 import { Upstream } from './upstream';
@@ -25,7 +26,14 @@ import { EventsConsumer } from './events.consumer';
       outboxDatabaseUrl: env.CASES_DATABASE_URL,
     }),
   ],
-  controllers: [CasesController, RulesController, InternalController],
-  providers: [PrismaService, Upstream, RulesService, CasesService, EventsConsumer],
+  controllers: [CasesController, RulesController, InternalController, DemoResetController],
+  providers: [
+    PrismaService,
+    Upstream,
+    RulesService,
+    CasesService,
+    EventsConsumer,
+    { provide: DemoResetter, useClass: CasesDemoReset },
+  ],
 })
 export class AppModule {}

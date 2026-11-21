@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { EventBusModule, KitModule } from '@haqdaar/nest-kit';
+import { DemoResetController, DemoResetter, EventBusModule, KitModule } from '@haqdaar/nest-kit';
+import { PaymentsDemoReset } from './demo-reset';
 import { env } from './env';
 import { PrismaService } from './prisma.service';
 import { PaymentStateMachine } from './payments/state-machine.service';
@@ -28,8 +29,15 @@ import { ReceiptsService } from './receipts/receipts.service';
       outboxDatabaseUrl: env.PAYMENTS_DATABASE_URL,
     }),
   ],
-  controllers: [PaymentsController, LedgerController, ReconciliationController, WebhooksController],
+  controllers: [
+    PaymentsController,
+    LedgerController,
+    ReconciliationController,
+    WebhooksController,
+    DemoResetController,
+  ],
   providers: [
+    { provide: DemoResetter, useClass: PaymentsDemoReset },
     PrismaService,
     PaymentStateMachine,
     RailsClient,

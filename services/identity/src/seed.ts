@@ -18,6 +18,18 @@ export const DEMO_IDS = {
   rashidaPerson: '10000000-0000-4000-8000-000000000002',
 };
 
+/** Families the shopkeeper helper serves (docs/CONTRACTS.md). Each has its own PIN. */
+const HELPER_FAMILIES = [
+  [DEMO_IDS.zainabPerson, 'Zainab Bibi', '1111'],
+  [DEMO_IDS.rashidaPerson, 'Rashida Begum', '2222'],
+  ['10000000-0000-4000-8000-000000000003', 'Nasreen Bi Bi', '3333'],
+  ['10000000-0000-4000-8000-000000000004', 'Kaneez Fatima', '4444'],
+  ['10000000-0000-4000-8000-000000000005', 'Zainab Bibi (Badin)', '5555'],
+  ['10000000-0000-4000-8000-000000000006', 'Mohammad Akram', '6666'],
+  ['10000000-0000-4000-8000-000000000007', 'Ghulam Rasool', '7777'],
+  ['10000000-0000-4000-8000-000000000008', 'Shazia Bibi', '8888'],
+] as const;
+
 const USERS = [
   { name: 'Zainab Bibi', role: 'citizen', phone: '03001110001', personId: DEMO_IDS.zainabPerson },
   { name: 'Asif (shopkeeper helper)', role: 'helper', phone: '03001110002', personId: null },
@@ -60,14 +72,10 @@ async function main() {
     });
   }
 
-  // The helper may act for two families; each family has its own PIN.
   const helper = await prisma.user.findUniqueOrThrow({
     where: { phoneHash: lookupHash(normalizePhone('03001110002'), env.PII_HASH_KEY) },
   });
-  for (const [personId, label, pin] of [
-    [DEMO_IDS.zainabPerson, 'Zainab Bibi', '1111'],
-    [DEMO_IDS.rashidaPerson, 'Rashida Begum', '2222'],
-  ] as const) {
+  for (const [personId, label, pin] of HELPER_FAMILIES) {
     await prisma.helperLink.upsert({
       where: { helperId_personId: { helperId: helper.id, personId } },
       update: {},

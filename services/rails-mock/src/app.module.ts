@@ -1,5 +1,5 @@
 import { Module, OnModuleInit } from '@nestjs/common';
-import { HealthRegistry, KitModule } from '@haqdaar/nest-kit';
+import { DemoResetController, DemoResetter, HealthRegistry, KitModule } from '@haqdaar/nest-kit';
 import { env } from './env';
 import { buildSeed } from './data/seed-data';
 import { RailsStore } from './rails.store';
@@ -15,8 +15,15 @@ import { FaultsController, NadraController, RaastController, SmsController } fro
       prettyLogs: env.LOG_PRETTY === '1',
     }),
   ],
-  controllers: [NadraController, RaastController, SmsController, FaultsController],
-  providers: [{ provide: RailsStore, useFactory: () => new RailsStore(buildSeed()) }],
+  controllers: [NadraController, RaastController, SmsController, FaultsController, DemoResetController],
+  providers: [
+    { provide: RailsStore, useFactory: () => new RailsStore(buildSeed()) },
+    {
+      provide: DemoResetter,
+      useFactory: (rails: RailsStore) => ({ reset: async () => rails.resetActivity() }),
+      inject: [RailsStore],
+    },
+  ],
 })
 export class AppModule implements OnModuleInit {
   constructor(

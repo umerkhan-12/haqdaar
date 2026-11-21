@@ -5,7 +5,7 @@ import { nameScore } from './names';
 export const RAAST_FAULT_MODES = ['none', 'fail', 'timeout', 'timeout_after_debit', 'duplicate_statement'] as const;
 export type RaastFaultMode = (typeof RAAST_FAULT_MODES)[number];
 export interface Faults {
-  raast: { mode: RaastFaultMode; remaining: number };
+  raast: { mode: RaastFaultMode; remaining: number; alias?: string };
 }
 
 /** Longer than any caller's timeout, so the caller sees a timeout. */
@@ -114,13 +114,14 @@ export class RailsStore {
     const existing = this.transfers.get(req.endToEndId);
     if (existing) return { result: existing.result, delayMs: 0 };
 
-    const fault = this.takeFault(['fail', 'timeout', 'timeout_after_debit']);
+    const creditor = this.resolve(req.creditor);
+    // Targeted faults match the resolved account, whether the payer used the IBAN or the alias.
+    const fault = this.takeFault(['fail', 'timeout', 'timeout_after_debit'], creditor?.alias ?? req.creditor.alias);
     // Fault rejections settle nothing and are not remembered, so the same id can be retried.
     if (fault === 'fail') return { result: this.reject(req, 'PROVIDER_UNAVAILABLE'), delayMs: 0 };
     if (fault === 'timeout') return { result: this.reject(req, 'TIMEOUT'), delayMs: TIMEOUT_DELAY_MS };
 
     const debtor = this.byIban.get(req.debtor.iban);
-    const creditor = this.resolve(req.creditor);
     const result = !debtor
       ? this.reject(req, 'AC02_INVALID_DEBTOR_ACCOUNT')
       : !creditor
@@ -172,14 +173,24 @@ export class RailsStore {
     return structuredClone(this.faults);
   }
 
+  /** Demo reset: forget transfers, statements and SMS; reference data (people, accounts) stays. */
+  resetActivity(): { transfers: number; inboxes: number } {
+    const out = { transfers: this.transfers.size, inboxes: this.inboxes.size };
+    this.transfers.clear();
+    this.inboxes.clear();
+    this.setFaults({ raast: { mode: 'none', remaining: 0 } });
+    return out;
+  }
+
   setFaults(f: Faults): Faults {
     this.faults = f.raast.mode === 'none' ? { raast: { mode: 'none', remaining: 0 } } : structuredClone(f);
     return this.getFaults();
   }
 
-  private takeFault(modes: RaastFaultMode[]): RaastFaultMode | null {
+  private takeFault(modes: RaastFaultMode[], creditorAlias?: string): RaastFaultMode | null {
     const f = this.faults.raast;
     if (!modes.includes(f.mode) || f.remaining <= 0) return null;
+    if (f.alias && (!creditorAlias || normalizeAlias(creditorAlias) !== normalizeAlias(f.alias))) return null;
     const mode = f.mode;
     f.remaining -= 1;
     if (f.remaining === 0) f.mode = 'none';

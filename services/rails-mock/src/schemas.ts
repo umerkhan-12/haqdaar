@@ -36,5 +36,7 @@ export const FaultsBody = z.object({
   raast: z.object({
     mode: z.enum(RAAST_FAULT_MODES),
     remaining: z.number().int().min(0).max(100).default(1),
+    /** Only transfers to this Raast alias are affected (deterministic demos with background traffic). */
+    alias: Alias.optional(),
   }),
 });

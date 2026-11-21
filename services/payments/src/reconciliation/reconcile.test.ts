@@ -26,6 +26,21 @@ test('reconciliation finds every kind of mismatch', () => {
   });
 });
 
+test('the bank settling the same transfer twice is caught, not silently merged', () => {
+  const items = reconcile(
+    [{ paymentId: 'p1', endToEndId: 'E1', amount: 12_000 }],
+    [
+      { endToEndId: 'E1', amount: 12_000, status: 'ACSC' },
+      { endToEndId: 'E1', amount: 12_000, status: 'ACSC' },
+    ],
+  );
+  assert.deepEqual(
+    items.map((i) => i.status),
+    ['matched', 'duplicate_in_provider'],
+  );
+  assert.equal(items[1]!.paymentId, 'p1');
+});
+
 test('webhook retry backoff doubles', () => {
   assert.deepEqual([1, 2, 3].map(backoffMs), [10_000, 20_000, 40_000]);
 });

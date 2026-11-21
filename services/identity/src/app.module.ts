@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { LoginThrottlerGuard } from './login-throttler.guard';
-import { EventBusModule, KitModule } from '@haqdaar/nest-kit';
+import { DemoResetController, DemoResetter, EventBusModule, KitModule } from '@haqdaar/nest-kit';
+import { IdentityDemoReset } from './demo-reset';
 import { env } from './env';
 import { PrismaService } from './prisma.service';
 import { AuthController } from './auth/auth.controller';
@@ -28,8 +29,9 @@ import { ApiKeysService } from './api-keys/api-keys.service';
     }),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
   ],
-  controllers: [AuthController, ConsentsController, ApiKeysController],
+  controllers: [AuthController, ConsentsController, ApiKeysController, DemoResetController],
   providers: [
+    { provide: DemoResetter, useClass: IdentityDemoReset },
     { provide: APP_GUARD, useClass: LoginThrottlerGuard },
     PrismaService,
     AuthService,

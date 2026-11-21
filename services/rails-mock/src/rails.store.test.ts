@@ -76,6 +76,16 @@ test('duplicate_statement repeats one entry once, then stops', () => {
   assert.equal(s.statement('2026-11-21').entries.length, 1);
 });
 
+test('a fault targeted at one alias leaves other transfers alone', () => {
+  const s = store();
+  s.setFaults({ raast: { mode: 'fail', remaining: 1, alias: '03001110007' } });
+  assert.equal(s.transfer(transfer('E2E-0007')).result.status, 'ACSC');
+  assert.equal(s.getFaults().raast.remaining, 1);
+  const r = s.transfer(transfer('E2E-0008', { name: 'Rashida Begum', iban: 'PK52SAHA0000007654321098' }));
+  assert.equal(r.result.status, 'RJCT', 'paying by IBAN still hits the fault aimed at the alias');
+  assert.equal(s.getFaults().raast.mode, 'none');
+});
+
 test('NADRA: name variants match, different names do not, deceased is reported', () => {
   const s = store();
   const urdu = s.verifyNadra(DEMO_SCENARIOS.urduScriptRecord.cnic, DEMO_SCENARIOS.urduScriptRecord.saysName);
