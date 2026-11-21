@@ -10,7 +10,9 @@ The knowledge service answers questions from the synthetic bilingual documents i
 4. Start the stack with `pnpm dev` or `pnpm start`.
 5. In a second terminal, run `pnpm knowledge:ingest`. The command reports the selected mode, model and vector dimension.
 
-Set `AI_PROFILE=offline` before `pnpm knowledge:ingest` for deterministic hashed bag-of-words vectors without a vendor key. Re-ingest after changing between offline and Gemini index modes. In offline mode, cross-language matching is limited to shared words and is less capable than Gemini semantic embeddings. If Kill AI is active while a Gemini index is loaded, retrieval uses local lexical matching and never calls a model.
+The live index needs a Gemini key (`GEMINI_API_KEY`, or `GEMINI_DEMO_API_KEY` in the `demo` profile): Groq has no embeddings. Without one, `pnpm knowledge:ingest` fails and leaves the existing index untouched.
+
+Set `AI_PROFILE=offline` before `pnpm knowledge:ingest` for deterministic hashed bag-of-words vectors without a vendor key. Re-ingest after changing between offline and Gemini index modes. In offline mode, cross-language matching is limited to shared words and is less capable than Gemini semantic embeddings. If Kill AI is active while a Gemini index is loaded, retrieval uses local lexical matching and never calls a model. The same local path answers whenever live embeddings cannot be had: the AI service is down, there is no Gemini key or quota, or the index was built in another mode. Local answers are the best-matching policy sentences, word for word; out-of-scope questions are still refused.
 
 `pnpm knowledge:ingest` reads Markdown headings and estimates token cost as one token per four Unicode code points per word (minimum one), targeting 400 estimated tokens with 50 estimated tokens of overlap. This is deterministic but is not a model tokenizer. Each chunk retains its stable source heading. Chunk hashes avoid re-embedding unchanged content. Removed documents and stale chunks are deleted in the same transaction that activates the new model/mode index.
 

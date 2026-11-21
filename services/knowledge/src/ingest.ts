@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { PrismaClient } from '../generated/prisma';
@@ -6,6 +5,7 @@ import { loadRootEnv } from '@haqdaar/nest-kit';
 import { serviceUrl } from '@haqdaar/shared';
 import { signInternalToken } from '@haqdaar/nest-kit';
 import { OFFLINE_DIMENSIONS, OFFLINE_MODEL, hashedEmbedding } from './retrieval/embeddings';
+import { chunkDocument, normalize, sha, type ChunkInput } from './retrieval/chunk';
 
 loadRootEnv();
 
@@ -16,7 +16,6 @@ const model = mode === 'offline' ? OFFLINE_MODEL : LIVE_MODEL;
 const timeoutMs = Number(process.env.AI_TIMEOUT_MS ?? 20_000);
 const prisma = new PrismaClient();
 
-type ChunkInput = { id: string; docId: string; heading: string; content: string; contentHash: string; ordinal: number };
 
 async function main() {
   const files = (await readdir(POLICY_DIR)).filter((file) => file.endsWith('.md')).sort();
@@ -80,61 +79,6 @@ async function main() {
   console.log(`Knowledge index active: ${docs.length} documents, ${prepared.length} chunks, ${mode}/${model}, dimension ${dimension}`);
 }
 
-function chunkDocument(docId: string, markdown: string): ChunkInput[] {
-  const lines = markdown.split(/\r?\n/);
-  const sections: { heading: string; lines: string[] }[] = [];
-  let current: { heading: string; lines: string[] } = { heading: docId, lines: [] };
-  for (const line of lines) {
-    const heading = line.match(/^##\s+(.+?)\s*$/);
-    if (heading) {
-      if (current.lines.join(' ').trim()) sections.push(current);
-      current = { heading: heading[1]!, lines: [] };
-    } else if (!line.startsWith('# ') && !line.startsWith('Corpus version:')) {
-      current.lines.push(line);
-    }
-  }
-  if (current.lines.join(' ').trim()) sections.push(current);
-
-  const out: ChunkInput[] = [];
-  for (const section of sections) {
-    const words = section.lines.join(' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
-    const size = 400;
-    const overlap = 50;
-    let start = 0;
-    while (start < words.length) {
-      let end = start;
-      let tokenCount = 0;
-      while (end < words.length && (tokenCount + approxTokens(words[end]!) <= size || end === start)) {
-        tokenCount += approxTokens(words[end]!);
-        end++;
-      }
-      const content = words.slice(start, end).join(' ').trim();
-      if (!content) continue;
-      const ordinal = out.length;
-      out.push({
-        id: `${docId}-${sha(`${section.heading}:${ordinal}`).slice(0, 20)}`,
-        docId,
-        heading: section.heading,
-        content,
-        contentHash: sha(normalize(content)),
-        ordinal,
-      });
-      if (end >= words.length) break;
-      let nextStart = end;
-      let overlapCount = 0;
-      while (nextStart > start && overlapCount < overlap) {
-        nextStart--;
-        overlapCount += approxTokens(words[nextStart]!);
-      }
-      start = nextStart;
-    }
-  }
-  return out;
-}
-
-/** Rough subword estimate: one token per four Unicode code points, at least one per word. */
-function approxTokens(word: string) { return Math.max(1, Math.ceil(Array.from(word).length / 4)); }
-
 async function requestEmbedding(text: string): Promise<number[]> {
   const secret = process.env.INTERNAL_SECRET;
   if (!secret) throw new Error('INTERNAL_SECRET is required to request embeddings through AiRouter');
@@ -155,7 +99,5 @@ async function requestEmbedding(text: string): Promise<number[]> {
   return data.embedding;
 }
 
-function normalize(value: string) { return value.normalize('NFKC').replace(/\s+/g, ' ').trim(); }
-function sha(value: string) { return createHash('sha256').update(value).digest('hex'); }
 
 main().catch((error) => { console.error('Knowledge ingestion failed:', error); process.exitCode = 1; }).finally(() => prisma.$disconnect());
