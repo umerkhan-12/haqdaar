@@ -3,26 +3,30 @@ import {
   ProviderError,
   type AiProvider,
   type LlmRequest,
+  type EmbeddingRequest,
   type SttRequest,
 } from '../providers/types';
 
 export type ProfileName = 'dev' | 'demo' | 'offline';
 
-/** Provider order per profile. `mock` is always the last resort, so the system never crashes. */
-export const PROFILES: Record<ProfileName, { llm: string[]; stt: string[]; description: string }> = {
+/** Provider order per profile. LLM/STT fall back to mock; embeddings fail closed. */
+export const PROFILES: Record<ProfileName, { llm: string[]; stt: string[]; embed: string[]; description: string }> = {
   dev: {
     llm: ['groq', 'gemini'],
     stt: ['groq', 'gemini'],
+    embed: ['gemini'],
     description: 'Build mode: free Groq first, free Gemini as fallback',
   },
   demo: {
     llm: ['gemini-demo', 'groq'],
     stt: ['groq', 'gemini-demo'],
+    embed: ['gemini-demo'],
     description: 'Judging day: paid Gemini first for text, Groq Whisper first for Urdu speech',
   },
   offline: {
     llm: [],
     stt: [],
+    embed: [],
     description: 'No external AI: deterministic mock, every uncertain case goes to a human',
   },
 };
@@ -46,7 +50,7 @@ export interface RoutedResult<T> {
 
 export interface CallRecord {
   task: string;
-  kind: 'llm' | 'stt';
+  kind: 'llm' | 'stt' | 'embed';
   provider: string;
   model: string;
   ok: boolean;
@@ -110,6 +114,7 @@ export class AiRouter {
       killed: this.killed,
       llm: chain(prof.llm),
       stt: chain(prof.stt),
+      embed: chain(prof.embed),
       lastResort: 'mock',
     };
   }
@@ -128,6 +133,13 @@ export class AiRouter {
     });
   }
 
+  embed(req: EmbeddingRequest): Promise<RoutedResult<{ embedding: number[]; model: string }>> {
+    return this.route('embed', req.task, PROFILES[this.profile].embed, (p) => {
+      if (!p.embed) throw new ProviderError(p.id, 'no embedding support', undefined, true);
+      return p.embed(req);
+    });
+  }
+
   private breaker(id: string): CircuitBreaker {
     let b = this.breakers.get(id);
     if (!b) {
@@ -138,7 +150,7 @@ export class AiRouter {
   }
 
   private async route<T extends { model: string }>(
-    kind: 'llm' | 'stt',
+    kind: 'llm' | 'stt' | 'embed',
     task: string,
     order: string[],
     call: (p: AiProvider) => Promise<T>,
@@ -170,13 +182,14 @@ export class AiRouter {
       }
     }
 
+    if (kind === 'embed') throw new ProviderError('ai-router', 'No embedding provider is available');
     const value = await call(this.mock);
     attempts.push({ provider: this.mock.id, ok: true, ms: 0 });
     return this.done(kind, task, value, this.mock, attempts, started);
   }
 
   private done<T extends { model: string }>(
-    kind: 'llm' | 'stt',
+    kind: 'llm' | 'stt' | 'embed',
     task: string,
     value: T,
     p: AiProvider,

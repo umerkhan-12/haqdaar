@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { buildEvent, EventBus, HealthRegistry, type Principal } from '@haqdaar/nest-kit';
 import { env } from './env';
 import { AiRouter, PROFILES, type CallRecord, type ProfileName } from './router/ai-router';
@@ -7,6 +7,7 @@ import { GeminiProvider } from './providers/gemini.provider';
 import { MockProvider } from './providers/mock.provider';
 import { extractClaim } from './tasks/extract-claim';
 import { scamCheck } from './tasks/scam-check';
+import { redactPii } from './tasks/pii';
 import { callerContext } from './caller-context';
 import { documentCheck, UnsupportedImageError } from './vision/document-check';
 import { OcrEngine } from './vision/readers';
@@ -98,6 +99,26 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       // Empty text from the mock = "I could not hear you" → UI falls back to icons / helper.
       understood: !r.isMock && r.value.text.length > 0,
     };
+  }
+
+  async embed(text: string, taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_QUERY') {
+    if (this.router.isKilled || this.router.activeProfile === 'offline') {
+      throw new ServiceUnavailableException('AI embeddings are unavailable in the current mode');
+    }
+    const result = await this.router.embed({
+      task: 'rag_embed@v1',
+      model: env.KNOWLEDGE_EMBEDDING_MODEL,
+      taskType,
+      text: redactPii(text).text,
+      timeoutMs: env.AI_TIMEOUT_MS,
+    });
+    if (result.isMock) throw new ServiceUnavailableException('AI embeddings are unavailable');
+    return { embedding: result.value.embedding, model: result.value.model, provider: result.provider };
+  }
+
+  async answerFromSources(question: string, sources: { id: string; docId: string; heading: string; content: string }[]) {
+    const { answerFromSources } = await import('./tasks/answer-from-sources');
+    return answerFromSources(this.router, question, sources);
   }
 
   /** Local only: the image never reaches an external model. Kill AI → every document to a human. */

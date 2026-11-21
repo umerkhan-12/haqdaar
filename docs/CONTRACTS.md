@@ -3,6 +3,14 @@
 The agreed interfaces between services. Change a contract only with a heads-up to everyone who uses it.
 Events and their payload schemas live in `packages/shared/src/events.ts` (validated on publish).
 
+## knowledge (port 4008)
+
+| Route | Who | Request / response |
+|---|---|---|
+| `POST /knowledge/ask` (gateway prefix `/knowledge`) | citizen, helper, officer | Request `{ question: string }`, max 1,200 characters. Response `{ answer: string, citations: [{ docId, heading, quote }], refused: boolean }`. Every answer sentence is an exact quote from a returned policy chunk; unsupported questions return a fixed bilingual refusal with no citations. |
+
+The service owns the `knowledge` schema. It retrieves at most four policy chunks and never reads another service's schema. `/ai/embed` and `/ai/answer-from-sources` are internal-only service calls. The latter returns extractive quotes validated against the supplied chunks. Policy text is untrusted data. The corpus is synthetic prototype guidance, not a real benefits determination. See [docs/KNOWLEDGE.md](KNOWLEDGE.md) for setup and model/index compatibility.
+
 ## Synthetic reference data (shared by all seeds)
 
 | Who | Person id | CNIC | Phone (Raast alias) | Account (IBAN) | Account title |

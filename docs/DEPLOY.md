@@ -2,7 +2,7 @@
 
 | Part | Where | Cost |
 |---|---|---|
-| 8 NestJS services (gateway, identity, cases, ai, payments, audit, rails-mock, judge) | Render free web services, Docker, region Singapore | Free |
+| 9 NestJS services (gateway, identity, cases, ai, payments, audit, rails-mock, judge, knowledge) | Render free web services, Docker, region Singapore | Free |
 | PostgreSQL (one schema per service + `pgboss`) | Supabase free project, region Singapore | Free |
 | Web app (`apps/web`) | Vercel Hobby | Free |
 | Keep-alive pings | UptimeRobot free | Free |
@@ -19,7 +19,7 @@ All images come from one `Dockerfile`: `docker build --build-arg SERVICE=<name> 
 - A free service **spins down after 15 minutes without inbound traffic** and takes about a minute to spin up again.
 - Free web services **can send but cannot receive private-network traffic.** So our services call each other over their **public** `https://haqdaar-<name>.onrender.com` URLs. That is safe by design: internal calls carry a 60-second internal token scoped to the target service, and every service verifies user JWTs itself.
 
-**Budget maths:** 8 services always awake = 8 × 24 = 192 hours/day → 750 hours last about **3.9 days**. So:
+**Budget maths:** 9 services always awake = 9 × 24 = 216 hours/day → 750 hours last about **3.5 days**. So:
 - deploy on **Sat 21 Nov** (not earlier), keep everything awake through judging on **Mon 23 Nov** (≈ 2.5 days ≈ 480 hours), and
 - if you need to save hours, let `rails-mock`, `audit` and `judge` sleep until rehearsals (they wake on the first request).
 
@@ -40,11 +40,12 @@ All images come from one `Dockerfile`: `docker build --build-arg SERVICE=<name> 
    CREATE SCHEMA IF NOT EXISTS cases;
    CREATE SCHEMA IF NOT EXISTS payments;
    CREATE SCHEMA IF NOT EXISTS audit;
+   CREATE SCHEMA IF NOT EXISTS knowledge;
    CREATE SCHEMA IF NOT EXISTS pgboss;
    ```
 3. Project Settings → Database → Connection string → **Session pooler**. It looks like
    `postgresql://postgres.<ref>:<PASSWORD>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`
-4. Build the five URLs (same base, different `schema`; keep connections small on the free tier):
+4. Build the service database URLs (same base, different `schema`; keep connections small on the free tier):
 
    | Variable | Value |
    |---|---|
@@ -52,9 +53,10 @@ All images come from one `Dockerfile`: `docker build --build-arg SERVICE=<name> 
    | `CASES_DATABASE_URL` | `<session-url>?schema=cases&connection_limit=5` |
    | `PAYMENTS_DATABASE_URL` | `<session-url>?schema=payments&connection_limit=5` |
    | `AUDIT_DATABASE_URL` | `<session-url>?schema=audit&connection_limit=5` |
+   | `KNOWLEDGE_DATABASE_URL` | `<session-url>?schema=knowledge&connection_limit=5` |
    | `BUS_DATABASE_URL` | `<session-url>` (no `schema`) |
 
-5. Create tables and seed **from a laptop** (put the five URLs in your local `.env` temporarily):
+5. Create tables and seed **from a laptop** (put the database URLs in your local `.env` temporarily):
    ```bash
    pnpm db:generate && pnpm build
    pnpm db:push
@@ -101,11 +103,13 @@ Multi-line PEM keys: paste them as one line with literal `\n` (exactly as `pnpm 
    AUDIT_URL=https://haqdaar-audit.onrender.com
    RAILS_URL=https://haqdaar-rails-mock.onrender.com
    JUDGE_URL=https://haqdaar-judge.onrender.com
+   KNOWLEDGE_URL=https://haqdaar-knowledge.onrender.com
    ```
    (If Render gives a service a different hostname, update the URL here after the first deploy.)
 2. **Blueprints → New Blueprint Instance** → pick the GitHub repo. Render reads `render.yaml` and asks for every `sync: false` value (DB URLs and the per-service secrets from section 3).
-3. Wait for all 8 builds. Check `https://haqdaar-gateway.onrender.com/status` → every service `ok`.
+3. Wait for all 9 builds. Check `https://haqdaar-gateway.onrender.com/status` → every service `ok`.
 4. The `haqdaar-config` group sets `DEMO_MODE=1` (Judge Mode + demo reset). For a non-demo deployment, set it to `0`.
+5. The first deployment has an empty knowledge index. From a trusted operator machine with the production `KNOWLEDGE_DATABASE_URL`, `AI_URL`, `INTERNAL_SECRET`, and the selected AI profile credentials configured temporarily, run `pnpm knowledge:ingest`. Do not commit these values. Re-run ingestion after policy changes or embedding-model changes.
 
 ---
 

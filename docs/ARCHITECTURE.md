@@ -30,7 +30,7 @@
         v              v                         v
   +------------------------------------------------------------------+
   | PostgreSQL — one schema per service: identity, cases, payments,  |
-  | audit, rails, ai  (+ pgboss schema for the bus)                  |
+| audit, rails, knowledge (+ pgboss schema for the bus)             |
   +------------------------------------------------------------------+
 ```
 
@@ -45,6 +45,7 @@
 | `payments` | 4004 | payments, attempts, ledger entries, approvals, reconciliation runs, webhooks | Payout state machine, idempotency, title fetch, maker-checker, double-entry ledger, reconciliation, signed webhooks | A (Umer) |
 | `audit` | 4005 | audit log (append-only) | Consumes every event, hash-chains it, verify-chain endpoint, read-only for auditors | A (Umer) |
 | `rails-mock` | 4006 | mock citizens, mock bank accounts, mock statements | Simulated NADRA, Raast (title fetch, transfer, status, statement), household data, SMS — with failure injection (timeout, fail, duplicate) | C |
+| `knowledge` | 4008 | policy documents, chunks and embeddings | Policy-only retrieval; sends bounded sources to AI for extractive answers | B (Ayan) |
 | `web` | 3000 | IndexedDB outbox (on the phone) | Citizen voice flow, helper, officer, admin, auditor, Judge Mode | C |
 
 **Rule:** a service never reads another service's schema. It calls its API or listens to its events.

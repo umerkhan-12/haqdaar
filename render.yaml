@@ -1,9 +1,9 @@
-# Render Blueprint — 8 Haqdaar services on the FREE plan (see docs/DEPLOY.md first).
+# Render Blueprint — Haqdaar services on the FREE plan (see docs/DEPLOY.md first).
 #
 # Before syncing this Blueprint, create the env group `haqdaar-secrets` in the Render Dashboard
 # (Blueprints cannot declare secret values inside env groups). It holds:
 #   JWT_PUBLIC_KEY, INTERNAL_SECRET, BUS_DATABASE_URL, CORS_ORIGINS,
-#   GATEWAY_URL, IDENTITY_URL, CASES_URL, AI_URL, PAYMENTS_URL, AUDIT_URL, RAILS_URL, JUDGE_URL
+#   GATEWAY_URL, IDENTITY_URL, CASES_URL, AI_URL, PAYMENTS_URL, AUDIT_URL, RAILS_URL, JUDGE_URL, KNOWLEDGE_URL
 #
 # Free web services cannot RECEIVE private-network traffic, so services call each other over their
 # public https://<name>.onrender.com URLs. That is safe: every internal call carries a 60-second
@@ -117,6 +117,8 @@ services:
         value: whisper-large-v3
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
+      - key: KNOWLEDGE_EMBEDDING_MODEL
+        value: gemini-embedding-001
       - key: AI_TIMEOUT_MS
         value: '20000'
       - fromGroup: haqdaar-config
@@ -194,5 +196,25 @@ services:
         value: judge
       - key: SEAL_SECRET
         sync: false
+      - fromGroup: haqdaar-config
+      - fromGroup: haqdaar-secrets
+
+  - type: web
+    name: haqdaar-knowledge
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: knowledge
+      - key: KNOWLEDGE_DATABASE_URL
+        sync: false
+      - key: AI_PROFILE
+        value: dev
+      - key: KNOWLEDGE_EMBEDDING_MODEL
+        value: gemini-embedding-001
       - fromGroup: haqdaar-config
       - fromGroup: haqdaar-secrets

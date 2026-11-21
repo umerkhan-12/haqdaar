@@ -33,6 +33,7 @@ Microservices behind a gateway, one Postgres schema per service, durable events 
 | `payments` | 4004 | Payout state machine, idempotency, maker-checker, double-entry ledger, reconciliation, webhooks |
 | `audit` | 4005 | Append-only hash-chained log of every event |
 | `rails-mock` | 4006 | Simulated NADRA, Raast, household data, SMS, with failure injection |
+| `knowledge` | 4008 | Synthetic policy corpus, citation-grounded program answers |
 
 ```
 apps/web            Next.js PWA (citizen, helper, officer, admin, auditor, Judge Mode)

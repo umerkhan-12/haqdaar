@@ -35,6 +35,19 @@ export interface SttResponse {
   model: string;
 }
 
+export interface EmbeddingRequest {
+  task: string;
+  model: string;
+  taskType?: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT';
+  text: string;
+  timeoutMs: number;
+}
+
+export interface EmbeddingResponse {
+  embedding: number[];
+  model: string;
+}
+
 /** Every AI vendor sits behind this interface, so the profile switch never touches task code. */
 export interface AiProvider {
   /** Stable id used in profiles and metrics, e.g. `groq`, `gemini-demo`, `mock`. */
@@ -45,6 +58,7 @@ export interface AiProvider {
   readonly isMock: boolean;
   complete?(req: LlmRequest): Promise<LlmResponse>;
   transcribe?(req: SttRequest): Promise<SttResponse>;
+  embed?(req: EmbeddingRequest): Promise<EmbeddingResponse>;
 }
 
 export class ProviderError extends Error {

@@ -49,8 +49,9 @@ export async function structured<S extends ZodTypeAny>(
   schema: S,
   req: Omit<LlmRequest, 'json'>,
 ): Promise<StructuredResult<z.infer<S>>> {
-  const key = sha256(JSON.stringify([req.task, req.system, req.messages]));
-  const hit = cache.get(key);
+  const key = sha256(JSON.stringify([router.activeProfile, req.task, req.system, req.messages]));
+  // Never let a prior live response bypass Kill AI. Profile is also part of the cache key.
+  const hit = router.isKilled ? undefined : cache.get(key);
   const base = { task: req.task, latencyMs: 0, fallbackUsed: false, repaired: false };
   if (hit !== undefined) {
     return { ok: true, data: hit as z.infer<S>, meta: { ...base, provider: 'cache', cached: true } };
@@ -87,7 +88,7 @@ export async function structured<S extends ZodTypeAny>(
   }
   if (!parsed.ok) return { ok: false, reason: 'invalid_output', meta };
 
-  cache.set(key, parsed.data);
+  if (!router.isKilled) cache.set(key, parsed.data);
   return { ok: true, data: parsed.data, meta };
 }
 

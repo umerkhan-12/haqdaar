@@ -1,4 +1,4 @@
-import { readError, type AiProvider, type LlmRequest, type LlmResponse, type SttRequest, type SttResponse } from './types';
+import { readError, type AiProvider, type EmbeddingRequest, type EmbeddingResponse, type LlmRequest, type LlmResponse, type SttRequest, type SttResponse } from './types';
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -48,6 +48,22 @@ export class GeminiProvider implements AiProvider {
       req.timeoutMs,
     );
     return { text: r.text.trim(), model: r.model };
+  }
+
+  async embed(req: EmbeddingRequest): Promise<EmbeddingResponse> {
+    const res = await fetch(`${BASE}/${req.model}:embedContent`, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': this.apiKey!, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: `models/${req.model}`, content: { parts: [{ text: req.text }] }, taskType: req.taskType }),
+      signal: AbortSignal.timeout(req.timeoutMs),
+    });
+    if (!res.ok) await readError(this.id, res);
+    const data = (await res.json()) as { embedding?: { values?: number[] } };
+    const embedding = data.embedding?.values;
+    if (!embedding?.length || embedding.some((n) => !Number.isFinite(n))) {
+      throw new Error('Gemini returned an invalid embedding');
+    }
+    return { embedding, model: req.model };
   }
 
   private async generate(
