@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { loadRootEnv } from '@haqdaar/nest-kit';
 import { serviceUrl } from '@haqdaar/shared';
 
@@ -12,7 +11,7 @@ type Answer = { answer: string; citations: { docId: string; heading: string; quo
 async function main() {
   const token = process.env.KNOWLEDGE_EVAL_TOKEN;
   if (!token) throw new Error('Set KNOWLEDGE_EVAL_TOKEN to an authorized citizen, helper or officer access token');
-  const file = join(dirname(fileURLToPath(import.meta.url)), '../eval/golden.jsonl');
+  const file = resolve(process.cwd(), 'eval/golden.jsonl');
   const cases = (await readFile(file, 'utf8')).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as Golden);
   const outcomes: { expectedRefused: boolean; refused: boolean; expectedDocIds: string[]; citedDocIds: string[] }[] = [];
   for (const item of cases) {

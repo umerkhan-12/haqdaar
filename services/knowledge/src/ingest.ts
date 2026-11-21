@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 import { PrismaClient } from '../generated/prisma';
 import { loadRootEnv } from '@haqdaar/nest-kit';
 import { serviceUrl } from '@haqdaar/shared';
@@ -10,7 +9,7 @@ import { OFFLINE_DIMENSIONS, OFFLINE_MODEL, hashedEmbedding } from './retrieval/
 
 loadRootEnv();
 
-const POLICY_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../docs/policy');
+const POLICY_DIR = resolve(process.cwd(), '../../docs/policy');
 const LIVE_MODEL = process.env.KNOWLEDGE_EMBEDDING_MODEL?.trim() || 'gemini-embedding-001';
 const mode = process.env.AI_PROFILE === 'offline' ? 'offline' : 'gemini';
 const model = mode === 'offline' ? OFFLINE_MODEL : LIVE_MODEL;
