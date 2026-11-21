@@ -91,11 +91,63 @@ test('hard flags always go to a human, even with eligible facts', () => {
   assert.deepEqual(mismatch.hardFlags, ['name_mismatch']);
 });
 
-test('fraud anomaly flags force human review with a signal-specific explanation', () => {
-  const d = decide({ ...strong, externalFlags: ['anomaly:shared_payout'] }, ctx);
-  assert.equal(d.lane, 'HUMAN_REVIEW');
-  assert.deepEqual(d.hardFlags, ['anomaly:shared_payout']);
-  assert.match(d.explanationEn, /same payout destination/);
+const ANOMALY_FLAGS = [
+  'anomaly:shared_payout',
+  'anomaly:helper_velocity',
+  'anomaly:household_pattern',
+  'anomaly:identity_collision',
+] as const;
+/** Words that would tell a claimant which fraud check fired (English and Urdu). */
+const ANOMALY_WORDING =
+  /anomal|fraud|ring|payout|account|destination|helper|household size|multiple people|several|identit|collision|same name|ادائیگی|اکاؤنٹ|مددگار|گھرانے|ملتے جلتے|دعوو/i;
+
+test('anomaly flags force human review, but the explanation the citizen reads stays generic', () => {
+  const unsure = decide({ ...strong, evidence: { ...strong.evidence, nadraMatch: false } }, ctx);
+  assert.equal(unsure.lane, 'HUMAN_REVIEW');
+  assert.deepEqual(unsure.hardFlags, []);
+  for (const flag of ANOMALY_FLAGS) {
+    const d = decide({ ...strong, externalFlags: [flag] }, ctx);
+    assert.equal(d.lane, 'HUMAN_REVIEW');
+    assert.deepEqual(d.hardFlags, [flag]); // officers still get the flag
+    assert.doesNotMatch(d.explanationEn, ANOMALY_WORDING);
+    assert.doesNotMatch(d.explanationUr, ANOMALY_WORDING);
+    // Word for word what an ordinary "not sure" claim is told: nothing to tell the two apart.
+    assert.equal(d.explanationEn, unsure.explanationEn);
+    assert.equal(d.explanationUr, unsure.explanationUr);
+    assert.equal(d.explanationEn, 'An officer will review this claim: we are not fully sure, so an officer will check.');
+  }
+  const all = decide({ ...strong, externalFlags: [...ANOMALY_FLAGS] }, ctx);
+  assert.equal(all.explanationEn, unsure.explanationEn);
+});
+
+test('an anomaly flag next to an ordinary reason adds nothing to the explanation', () => {
+  const plain = decide({ ...strong, externalFlags: ['duplicate_claim_this_month'] }, ctx);
+  const both = decide({ ...strong, externalFlags: ['anomaly:shared_payout', 'duplicate_claim_this_month'] }, ctx);
+  assert.equal(both.explanationEn, plain.explanationEn);
+  assert.equal(both.explanationUr, plain.explanationUr);
+  assert.deepEqual(both.hardFlags, ['anomaly:shared_payout', 'duplicate_claim_this_month']);
+
+  const facts = { ...zainabFacts, household: { ...zainabFacts.household!, monthlyIncomePkr: 55_000 } };
+  const ineligible = decide({ ...strong, facts }, ctx);
+  const flagged = decide({ ...strong, facts, externalFlags: ['anomaly:helper_velocity'] }, ctx);
+  assert.equal(flagged.explanationEn, ineligible.explanationEn);
+  assert.equal(flagged.explanationUr, ineligible.explanationUr);
+});
+
+test('a clean claim with no anomaly signal is decided exactly as before', () => {
+  const d = decide(strong, ctx);
+  assert.equal(d.lane, 'AUTO_APPROVE');
+  assert.deepEqual(d.hardFlags, []);
+  assert.equal(d.eligible, true);
+  assert.equal(d.confidence, confidenceScore(strong.evidence));
+  assert.equal(
+    d.explanationEn,
+    `Approved because: ${SAHARA_V1.clauses.map((c) => c.textEn).join('; ')}.`,
+  );
+  assert.equal(
+    d.explanationUr,
+    `آپ کی درخواست منظور ہو گئی کیونکہ: ${SAHARA_V1.clauses.map((c) => c.textUr).join('، ')}۔`,
+  );
 });
 
 test('missing consent → ASK_MORE with a plain explanation', () => {

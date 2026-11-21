@@ -7,7 +7,7 @@ export const ANOMALY_WINDOWS = {
 
 export const DEFAULT_ANOMALY_THRESHOLDS = {
   sharedPayoutPeople: 2,
-  helperClaimsPerHour: 5,
+  helperClaimsPerHour: 10,
   householdPatternPeople: 5,
   identityCorroboratingDetails: 2,
 } as const;
@@ -15,6 +15,19 @@ export const DEFAULT_ANOMALY_THRESHOLDS = {
 export type AnomalyType =
   'shared_payout' | 'helper_velocity' | 'household_pattern' | 'identity_collision';
 export type AnomalyCandidateGroups = Partial<Record<AnomalyType, ReadonlySet<string>>>;
+export type AnomalyFlag = `anomaly:${AnomalyType}`;
+
+export function isAnomalyFlag(flag: string): flag is AnomalyFlag {
+  return flag.startsWith('anomaly:');
+}
+
+/**
+ * Anomaly flags are for officers and auditors only. A citizen or helper who could see them would
+ * learn which fraud check fired, so every non-staff view passes its flags through this.
+ */
+export function flagsVisibleTo(flags: readonly string[], staff: boolean): string[] {
+  return staff ? [...flags] : flags.filter((flag) => !isAnomalyFlag(flag));
+}
 
 export interface AnomalyObservation {
   tenantId: string;
@@ -106,7 +119,8 @@ export function detectAnomalies(
   for (const [key, items] of helperGroups) {
     if (!isCandidate('helper_velocity', key)) continue;
     const scoped = within(items, now, ANOMALY_WINDOWS.helperVelocityMs);
-    const count = new Set(scoped.map((row) => row.caseId)).size;
+    // Distinct people, not claims: a helper who retries or re-files for the same family is not a ring.
+    const count = distinctPeople(scoped).size;
     if (count > thresholds.helperClaimsPerHour) {
       results.push(
         signal(
@@ -186,6 +200,24 @@ export function detectAnomalies(
 
   return results.sort(
     (a, b) => a.type.localeCompare(b.type) || a.groupKey.localeCompare(b.groupKey),
+  );
+}
+
+/**
+ * Submit-path check for one claim. `observations` are only the rows that share a key with the claim
+ * (same payout key, helper, district + household size, or name + district), fetched with indexed
+ * lookups, so every group the claim belongs to is complete and nothing else has to be scanned.
+ */
+export function detectAnomaliesForCase(
+  tenantId: string,
+  caseId: string,
+  observations: AnomalyObservation[],
+  now: Date,
+  thresholds: AnomalyThresholds = DEFAULT_ANOMALY_THRESHOLDS,
+): AnomalySignal[] {
+  const unique = [...new Map(observations.map((row) => [row.caseId, row])).values()];
+  return detectAnomalies(tenantId, unique, now, thresholds).filter((found) =>
+    found.evidenceCaseIds.includes(caseId),
   );
 }
 

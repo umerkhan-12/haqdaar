@@ -1,6 +1,7 @@
 import { autoApproveThreshold, type CostSettings, type Lane } from '@haqdaar/shared';
 import { evaluateRules, type Clause, type ClauseResult, type Facts } from './rules';
 import { ACTIVE_CALIBRATION, sigmoid, type PlattParams } from './calibration';
+import { isAnomalyFlag, type AnomalyFlag } from './anomaly';
 
 /** Evidence quality signals that feed the confidence score. */
 export interface Evidence {
@@ -21,10 +22,7 @@ export type HardFlag =
   | 'duplicate_claim_this_month'
   | 'household_not_found'
   | 'verification_unavailable'
-  | 'anomaly:shared_payout'
-  | 'anomaly:helper_velocity'
-  | 'anomaly:household_pattern'
-  | 'anomaly:identity_collision';
+  | AnomalyFlag;
 
 /** Snapshot stored with every decision so the Digital Twin can replay it under another rule. */
 export interface DecisionInputs {
@@ -155,7 +153,11 @@ const MISSING_TEXT: Record<string, [string, string]> = {
   cnic: ['آپ کا شناختی کارڈ نمبر', 'your CNIC number'],
 };
 
-const FLAG_TEXT: Record<HardFlag, [string, string]> = {
+/**
+ * Text the claimant reads. Anomaly (fraud-ring) flags have no entry on purpose: naming the check
+ * that fired would tell a fraudster what to change. Officers see those flags and their evidence.
+ */
+const FLAG_TEXT: Record<Exclude<HardFlag, AnomalyFlag>, [string, string]> = {
   deceased: ['شناختی ریکارڈ میں یہ شخص وفات شدہ درج ہے', 'the identity record lists this person as deceased'],
   identity_not_found: ['شناختی کارڈ نمبر ریکارڈ میں نہیں ملا', 'the CNIC was not found in the identity record'],
   name_mismatch: ['نام شناختی ریکارڈ سے پوری طرح نہیں ملتا', 'the name does not fully match the identity record'],
@@ -165,10 +167,6 @@ const FLAG_TEXT: Record<HardFlag, [string, string]> = {
   ],
   household_not_found: ['گھریلو ریکارڈ نہیں ملا', 'no household record was found'],
   verification_unavailable: ['تصدیقی نظام ابھی دستیاب نہیں', 'verification systems are unavailable right now'],
-  'anomaly:shared_payout': ['ایک ہی ادائیگی کا اکاؤنٹ مختلف دعووں میں استعمال ہوا ہے', 'the same payout destination appears on claims from multiple people'],
-  'anomaly:helper_velocity': ['ایک مددگار نے مختصر وقت میں کئی دعوے جمع کرائے ہیں', 'one helper submitted an unusually high number of claims in one hour'],
-  'anomaly:household_pattern': ['ایک ضلع میں ایک جیسے گھرانے کے اعداد کئی دعووں میں ملے ہیں', 'the same household size appears across many claims in one district'],
-  'anomaly:identity_collision': ['ملتے جلتے شناختی کوائف والے مختلف افراد کی مزید جانچ ضروری ہے', 'different identities share a name and corroborating claim details'],
 };
 
 const REASON_TEXT = {
@@ -205,15 +203,18 @@ function explainReview(
   reason: keyof typeof REASON_TEXT | null,
 ) {
   const failed = clauseTexts(results, clauses, false);
+  const shown = flags.filter((f): f is Exclude<HardFlag, AnomalyFlag> => !isAnomalyFlag(f));
+  // Only an anomaly flag sent this to a human: say what any uncertain claim is told, nothing more.
+  const why = reason ?? (shown.length === 0 && failed.en.length === 0 ? 'low_confidence' : null);
   const ur = [
-    ...flags.map((f) => FLAG_TEXT[f][0]),
+    ...shown.map((f) => FLAG_TEXT[f][0]),
     ...failed.ur.map((t) => `یہ شرط پوری نہیں ہوئی: ${t}`),
-    ...(reason ? [REASON_TEXT[reason][0]] : []),
+    ...(why ? [REASON_TEXT[why][0]] : []),
   ];
   const en = [
-    ...flags.map((f) => FLAG_TEXT[f][1]),
+    ...shown.map((f) => FLAG_TEXT[f][1]),
     ...failed.en.map((t) => `not met: ${t}`),
-    ...(reason ? [REASON_TEXT[reason][1]] : []),
+    ...(why ? [REASON_TEXT[why][1]] : []),
   ];
   return {
     explanationUr: `ایک افسر آپ کی درخواست دیکھے گا۔ ${ur.join('۔ ')}۔`,
