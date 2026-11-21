@@ -9,7 +9,8 @@ if [ -n "$DATABASE_URL" ]; then
     identity|cases|payments|audit)
       var="$(echo "$SERVICE" | tr '[:lower:]' '[:upper:]')_DATABASE_URL"
       eval "current=\${$var:-}"
-      [ -n "$current" ] || export "$var=${DATABASE_URL}?schema=${SERVICE}"
+      case "$DATABASE_URL" in *\?*) sep='&' ;; *) sep='?' ;; esac
+      [ -n "$current" ] || export "$var=${DATABASE_URL}${sep}schema=${SERVICE}"
       ;;
   esac
 fi
