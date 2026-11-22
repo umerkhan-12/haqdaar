@@ -26,6 +26,8 @@ const STAFF_NAV: Partial<Record<Role, { href: string; label: string }[]>> = {
     { href: '/admin/scams', label: 'Scam Map' },
   ],
   admin: [
+    { href: '/officer', label: 'Queue' },
+    { href: '/officer/payments', label: 'Payments' },
     { href: '/admin', label: 'Rules' },
     { href: '/admin/ai', label: 'AI' },
     { href: '/admin/money', label: 'Money' },

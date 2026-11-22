@@ -15,8 +15,8 @@ import { api, type AiStatus } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
 const PROFILES: { id: AiStatus['profile']; label: string; note: string }[] = [
-  { id: 'dev', label: 'Build (dev)', note: 'Free Groq first, free Gemini fallback' },
-  { id: 'demo', label: 'Judging (demo)', note: 'Paid Gemini first — judging day only' },
+  { id: 'dev', label: 'Low cost', note: 'Free Groq models first, Gemini as fallback' },
+  { id: 'demo', label: 'Best quality', note: 'Paid Gemini models first, Groq as fallback' },
   { id: 'offline', label: 'Offline', note: 'No external AI; uncertain cases go to people' },
 ];
 

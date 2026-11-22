@@ -613,6 +613,28 @@ export const api = {
   /** Is the texted code right? Asked as soon as it is typed, before name and PIN. */
   signupCheck: (body: { phone: string; code: string }) =>
     request<{ ok: true }>('POST', '/auth/signup/check', { body, auth: false }),
+  /** Her sealed Haq Receipt for a paid claim (same text and Haqdaar code as the SMS). */
+  myReceipt: (caseId: string) =>
+    request<{
+      amount: number;
+      ref: string | null;
+      paidAt: string | null;
+      sealed: string;
+      code: string;
+    }>('GET', `/payments/mine/receipt?caseId=${caseId}`),
+  /** Forgotten PIN: text a code to a registered citizen, then set a new PIN with it. */
+  pinResetStart: (phone: string) =>
+    request<{ sent: true }>('POST', '/auth/pin-reset/start', { body: { phone }, auth: false }),
+  pinResetVerify: (body: { phone: string; code: string; pin: string }) =>
+    request<Tokens>('POST', '/auth/pin-reset/verify', { body, auth: false }),
+  /** A citizen lets a registered helper act for her, with a family PIN she chooses. */
+  linkHelper: (helperPhone: string, pin: string) =>
+    request<{ linked: true }>('POST', '/auth/helper-links', { body: { helperPhone, pin } }),
+  /** "My information is wrong" requests from citizens (officer, admin, auditor). */
+  correctionRequests: () =>
+    request<
+      { id: string; at: string; personId: string | null; field: string; note: string | null }[]
+    >('GET', '/audit/correction-requests'),
   signupVerify: (body: { phone: string; code: string; fullName: string; pin: string }) =>
     request<Tokens>('POST', '/auth/signup/verify', { body, auth: false }),
   /** PROTOTYPE: the simulated sign-up SMS, shown on the sign-up screen (there is no real phone). */
@@ -695,8 +717,10 @@ export const api = {
       'GET',
       `/payments?${new URLSearchParams({ ...(state ? { state } : {}), ...(caseId ? { caseId } : {}) })}`,
     ),
-  release: (id: string, note: string) =>
-    request<Payment>('POST', `/payments/${id}/release`, { body: { note } }),
+  release: (id: string, note: string, alias?: string) =>
+    request<Payment>('POST', `/payments/${id}/release`, {
+      body: alias ? { note, alias } : { note },
+    }),
   approvePayment: (id: string) => request<Payment>('POST', `/payments/${id}/approve`, { body: {} }),
   balances: () =>
     request<{

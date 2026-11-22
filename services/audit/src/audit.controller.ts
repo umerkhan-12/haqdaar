@@ -47,6 +47,13 @@ export class AuditController {
     return this.audit.verify(b.fromSeq);
   }
 
+  /** "My information is wrong" requests from citizens, newest first, for the caller's program. */
+  @Roles('officer', 'admin', 'auditor')
+  @Get('correction-requests')
+  correctionRequests(@CurrentUser() user: AuthUser) {
+    return this.audit.correctionRequests(user.tenantId);
+  }
+
   /** Scam patterns by type, district and time for the caller's program. No message text. */
   @Roles('admin', 'officer', 'auditor')
   @Get('scam-map')

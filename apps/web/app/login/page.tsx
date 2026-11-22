@@ -98,6 +98,13 @@ export default function LoginPage() {
       >
         {t('signupTitle')}
       </Link>
+      <Link
+        replace
+        href="/forgot-pin"
+        className="mt-2 flex min-h-12 w-full items-center justify-center text-lg text-brand underline"
+      >
+        {t('resetTitle')}
+      </Link>
 
       <section
         className="latin mt-6 rounded-2xl border border-dashed border-slate-300 p-4"

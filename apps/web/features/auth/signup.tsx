@@ -31,7 +31,7 @@ const SAY: Record<Screen, MessageKey> = {
 const STEP: Record<Screen, number> = { phone: 0, code: 1, name: 1, pin: 2, pinAgain: 2 };
 
 /** Citizen self sign-up: phone → SMS code + name → 4-digit PIN (twice) → logged in. */
-export function Signup() {
+export function Signup({ reset = false }: { reset?: boolean }) {
   const { t, toggle, speak, lang } = useI18n();
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>('phone');
@@ -53,7 +53,8 @@ export function Signup() {
 
   // PROTOTYPE: there is no real SMS, so show the simulated message here while the code is awaited.
   useEffect(() => {
-    if (screen !== 'code') return;
+    // A PIN-reset code is not shown here: anyone could type her number. It is on the Mock phone screen.
+    if (screen !== 'code' || reset) return;
     let live = true;
     const load = () =>
       api
@@ -85,7 +86,7 @@ export function Signup() {
     setProblem(null);
     setError(null);
     try {
-      await api.signupStart(phone);
+      await (reset ? api.pinResetStart(phone) : api.signupStart(phone));
       setCode('');
       setSms(null);
       if (screen === 'code') speak(t('signupCodeSay'));
@@ -104,7 +105,7 @@ export function Signup() {
     setError(null);
     try {
       await api.signupCheck({ phone, code });
-      go('name');
+      go(reset ? 'pin' : 'name');
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0;
       setCode('');
@@ -122,7 +123,9 @@ export function Signup() {
     setError(null);
     try {
       const s = sessionFrom(
-        await api.signupVerify({ phone, code, fullName: fullName.trim(), pin }),
+        reset
+          ? await api.pinResetVerify({ phone, code, pin })
+          : await api.signupVerify({ phone, code, fullName: fullName.trim(), pin }),
       );
       saveHelperSession(null);
       saveSession(s);
@@ -164,7 +167,7 @@ export function Signup() {
         {t('prototype')}
       </p>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-brand">{t('signupTitle')}</h1>
+        <h1 className="text-3xl font-bold text-brand">{t(reset ? 'resetTitle' : 'signupTitle')}</h1>
         <button onClick={toggle} className="min-h-12 rounded-lg px-3 text-sm text-brand underline">
           {t('switchLang')}
         </button>
@@ -220,7 +223,7 @@ export function Signup() {
             >
               <p className="text-xs font-bold text-amber-900">{t('signupSmsSimulated')}</p>
               <p className="mt-1 whitespace-pre-line text-base" dir="auto">
-                {sms ?? t('signupSmsWaiting')}
+                {reset ? t('resetSmsNote') : (sms ?? t('signupSmsWaiting'))}
               </p>
             </div>
             <PinPad length={6} value={code} onChange={setCode} label={t('signupCodeLabel')} />
@@ -235,11 +238,7 @@ export function Signup() {
               {busy ? t('loading') : t('signupResend')}
             </Button>
             <p className="latin text-center text-xs text-muted" dir="ltr">
-              Prototype: no real SMS is sent. The code appears above and on the{' '}
-              <Link replace href="/phone" className="underline">
-                Mock phone screen
-              </Link>{' '}
-              (admin login).
+              Prototype: no real SMS is sent. The code appears above. (admin login).
             </p>
           </div>
         )}
@@ -291,7 +290,7 @@ export function Signup() {
           <div className="space-y-5">
             <PinPad value={pin2} onChange={pinAgain} label={t('signupPinLabel')} />
             <Button disabled={busy || pin2 !== pin} onClick={create} className="min-h-16 w-full">
-              {busy ? t('loading') : t('signupCreate')}
+              {busy ? t('loading') : t(reset ? 'resetSave' : 'signupCreate')}
             </Button>
           </div>
         )}
@@ -305,7 +304,16 @@ export function Signup() {
             onClick={() => {
               setPin('');
               setPin2('');
-              go(({ code: 'phone', name: 'code', pin: 'name', pinAgain: 'pin' } as const)[screen]);
+              go(
+                (
+                  {
+                    code: 'phone',
+                    name: 'code',
+                    pin: reset ? 'code' : 'name',
+                    pinAgain: 'pin',
+                  } as const
+                )[screen],
+              );
             }}
           >
             {t('back')}

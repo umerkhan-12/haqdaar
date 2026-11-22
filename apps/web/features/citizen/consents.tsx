@@ -15,6 +15,7 @@ import {
 import { AudioButton, Button, ErrorState, Skeleton, StatusCard } from '@/components/ui';
 import { api, type Consent, type CorrectionField } from '@/lib/api';
 import { useAsync, useSession } from '@/lib/hooks';
+import { HelperLinkCard } from './helper-link';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { purposeText, REQUIRED_PURPOSES } from './consent-purposes';
 
@@ -323,6 +324,7 @@ export function MyConsents() {
             />
           ))}
           <CorrectionForm />
+          <HelperLinkCard />
         </div>
       )}
     </CitizenShell>

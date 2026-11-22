@@ -50,11 +50,11 @@ const DIALOG: Record<
     call: (id, text) => api.requestInfo(id, text),
   },
   escalate: {
-    title: 'Escalate to a supervisor',
+    title: 'Escalate for a second look',
     confirm: 'Escalate',
-    prompt: 'Why a supervisor should look (required, shown on the case)',
+    prompt: 'Why a senior officer or the admin should look (required, shown on the case)',
     minChars: 5,
-    done: 'Escalated. The case moved to the top of the queue for a supervisor.',
+    done: 'Escalated. The case moved to the top of the queue for a second look.',
     call: (id, text) => api.escalate(id, text),
   },
   close: {
@@ -143,7 +143,7 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
         </dl>
         {c.escalated && (
           <p className="mt-2 rounded-lg border border-red-700 bg-red-50 p-2 text-sm text-red-900">
-            Escalated to a supervisor
+            Escalated for a second look
             {c.escalatedAt ? ` on ${new Date(c.escalatedAt).toLocaleString('en-PK')}` : ''}
             {c.escalationReason ? `: “${c.escalationReason}”` : '.'}
           </p>

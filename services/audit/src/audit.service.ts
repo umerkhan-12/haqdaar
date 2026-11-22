@@ -102,6 +102,25 @@ export class AuditService implements OnModuleInit {
     return { items: page, nextCursor: rows.length > q.limit ? page.at(-1)!.seq : null };
   }
 
+  /** What citizens reported as wrong (field and their note), so an officer can ask them through the claim. */
+  async correctionRequests(tenantId: string) {
+    const rows = await this.prisma.auditLog.findMany({
+      where: { type: 'identity.correction.requested', tenantId },
+      orderBy: { seq: 'desc' },
+      take: 30,
+    });
+    return rows.map((r) => {
+      const p = (r.payload ?? {}) as { personId?: string; field?: string; note?: string | null };
+      return {
+        id: r.eventId,
+        at: r.occurredAt,
+        personId: p.personId ?? null,
+        field: p.field ?? 'unknown',
+        note: p.note ?? null,
+      };
+    });
+  }
+
   async get(eventId: string, ownTenantId: string) {
     const row = await this.prisma.auditLog.findUnique({ where: { eventId } });
     if (!row || (row.tenantId && row.tenantId !== ownTenantId))

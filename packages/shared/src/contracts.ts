@@ -37,6 +37,16 @@ export const SignupVerifyRequest = SignupStartRequest.extend({
 });
 export type SignupVerifyRequest = z.infer<typeof SignupVerifyRequest>;
 
+/** Forgotten PIN: the code texted to her phone and the new 4-digit PIN. */
+export const PinResetRequest = SignupStartRequest.extend({
+  code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
+  pin: z
+    .string()
+    .regex(/^\d{4}$/, 'PIN must be 4 digits')
+    .refine((p) => !isWeakPin(p), 'PIN is too easy to guess'),
+});
+export type PinResetRequest = z.infer<typeof PinResetRequest>;
+
 export const RefreshRequest = z.object({ refreshToken: z.string().min(20) });
 
 export const TokenPair = z.object({

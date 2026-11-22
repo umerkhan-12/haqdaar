@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import QRCode from 'qrcode';
 import { useEffect, useRef, useState } from 'react';
 import { CitizenShell } from '@/components/citizen-shell';
 import {
@@ -114,9 +115,24 @@ function useAmountText(amount: number) {
 }
 
 /** Haq Receipt: the exact amount, big, spoken, so nobody can quietly keep part of it. */
-function HaqReceipt({ amount }: { amount: number }) {
+function HaqReceipt({ amount, caseId }: { amount: number; caseId: string }) {
   const { t } = useI18n();
   const { digits, words, spoken } = useAmountText(amount);
+  // The seal and its QR: proof that this receipt is genuine. Missing offline; the amount still shows.
+  const [seal, setSeal] = useState<{ code: string; ref: string | null; qr: string } | null>(null);
+  useEffect(() => {
+    let live = true;
+    api
+      .myReceipt(caseId)
+      .then(async (r) => {
+        const qr = await QRCode.toDataURL(r.sealed, { margin: 1, width: 220 });
+        if (live) setSeal({ code: r.code, ref: r.ref, qr });
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [caseId]);
   return (
     <div className="rounded-2xl border-4 border-green-700 bg-green-50 p-5 text-center text-green-900">
       <p className="text-lg font-semibold">{t('receiptTitle')}</p>
@@ -132,6 +148,28 @@ function HaqReceipt({ amount }: { amount: number }) {
         </p>
       )}
       <p>{t('receiptLine')}</p>
+      {seal && (
+        <div className="mt-4 rounded-xl border-2 border-green-700 bg-white p-3">
+          <p className="text-lg font-bold">{t('receiptSeal')}</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={seal.qr}
+            alt={t('receiptSeal')}
+            width={176}
+            height={176}
+            className="mx-auto my-2"
+          />
+          <p className="latin break-all font-mono text-base font-semibold" dir="ltr">
+            {seal.code}
+          </p>
+          {seal.ref && (
+            <p className="latin text-sm text-slate-600" dir="ltr">
+              Ref: {seal.ref}
+            </p>
+          )}
+          <p className="mt-2 text-base">{t('receiptSealHint')}</p>
+        </div>
+      )}
       <div className="mt-3 flex justify-center">
         <AudioButton
           text={`${t('receiptTitle')}. ${spoken}. ${t('receiptLine')}`}
@@ -270,7 +308,7 @@ function CaseCard({ id }: { id: string }) {
           <AudioButton text={[t('payProblemTitle'), t(payProblem)]} className="text-brand" />
         </div>
       )}
-      {paid != null && <HaqReceipt amount={paid} />}
+      {paid != null && <HaqReceipt amount={paid} caseId={c.id} />}
       {c.status === 'IN_REVIEW' && <StatusCard tone="info" title={t('waitingOfficer')} />}
       {c.status === 'NEEDS_INFO' && <NeedsInfo c={c} onResent={reload} />}
       <Timeline events={timelineRows(c.timeline, t)} />

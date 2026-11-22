@@ -6,6 +6,7 @@ import { Skeleton, StatusPill, laneTone, staffError } from '@/components/ui';
 import { api, type QueueCase } from '@/lib/api';
 import { useAsync, useSession } from '@/lib/hooks';
 import { CasePanel } from './case-panel';
+import { CorrectionRequests } from './correction-requests';
 import { FraudScan } from './fraud-signals';
 import { flagLabel, laneLabel, staffName } from './labels';
 
@@ -53,6 +54,7 @@ export function OfficerQueue() {
     <Shell roles={['officer', 'admin']} wide>
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
         <section aria-labelledby="queue-h" className={open ? 'hidden lg:block' : ''}>
+          <CorrectionRequests />
           <div className="mb-2 flex items-center justify-between">
             <h1 id="queue-h" className="text-xl font-bold">
               Review queue {data && <span className="text-muted">({data.length})</span>}

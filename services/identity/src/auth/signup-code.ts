@@ -35,7 +35,12 @@ export function checkCode(row: CodeRow | null, codeHash: string, now = new Date(
   return safeEqual(row.codeHash, codeHash) ? 'ok' : 'wrong';
 }
 
+/** Sender of PIN-reset codes. Not the sign-up sender, so the public sign-up preview never shows them. */
+export const RESET_SENDER = 'HAQDAAR-PIN';
+
 export const signupSms = {
+  resetCode: (code: string) =>
+    `Haqdaar: PIN badalne ka code ${code} hai. Agar aap ne yeh nahin manga to kisi ko na batayein.\nپن بدلنے کا کوڈ ${code} ہے۔ یہ کوڈ کسی کو نہ بتائیں۔`,
   code: (code: string) =>
     `Haqdaar: aap ka code ${code} hai. Yeh ${CODE_TTL_MINUTES} minute tak chalega. Yeh code kisi ko na batayein.\nآپ کا کوڈ ${code} ہے۔ یہ کوڈ کسی کو نہ بتائیں۔`,
   alreadyRegistered: () =>

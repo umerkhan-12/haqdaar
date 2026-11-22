@@ -1,6 +1,7 @@
 import {
   Controller,
   ForbiddenException,
+  NotFoundException,
   Get,
   HttpCode,
   Param,
@@ -8,7 +9,9 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, Roles, ZBody, ZQuery, type AuthUser } from '@haqdaar/nest-kit';
+import { CurrentUser, Roles, sealMessage, ZBody, ZQuery, type AuthUser } from '@haqdaar/nest-kit';
+import { env } from '../env';
+import { receiptText } from '../receipts/receipt';
 import { PaymentState } from '@haqdaar/shared';
 import { z } from 'zod';
 import { PrismaService } from '../prisma.service';
@@ -32,7 +35,18 @@ const ListQuery = z.object({
   take: z.coerce.number().int().min(1).max(200).default(50),
 });
 const MineQuery = z.object({ caseId: z.string().uuid().optional() });
+const ReceiptQuery = z.object({ caseId: z.string().uuid() });
 const NoteBody = z.object({ note: z.string().max(300).optional() }).default({});
+/** Release a hold; with `alias`, to a corrected mobile account number from the claimant. */
+const ReleaseBody = z
+  .object({
+    note: z.string().max(300).optional(),
+    alias: z
+      .string()
+      .regex(/^03\d{9}$/, 'Mobile number must look like 03XXXXXXXXX')
+      .optional(),
+  })
+  .default({});
 const ReversalBody = z.object({ reason: z.string().min(5).max(300) });
 
 @ApiTags('payments')
@@ -71,6 +85,41 @@ export class PaymentsController {
    * the token, never from the request, so nobody can read another person's payments. Only what she needs
    * to hear: amount, state and dates; no account numbers, no officer ids.
    */
+  /**
+   * Her Haq Receipt for one paid claim, sealed: the same text and Haqdaar code as the SMS, so she
+   * (or anyone she shows it to) can prove it is genuine in "Is this message real?".
+   */
+  @Roles('citizen', 'helper')
+  @Get('mine/receipt')
+  async myReceipt(
+    @CurrentUser() user: AuthUser,
+    @ZQuery(ReceiptQuery) q: z.infer<typeof ReceiptQuery>,
+  ) {
+    if (!user.onBehalfOf) throw new ForbiddenException('No person linked');
+    const p = await this.prisma.payment.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        personId: user.onBehalfOf,
+        caseId: q.caseId,
+        state: 'SUCCESS',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!p) throw new NotFoundException('No paid payout for this claim');
+    const sealed = sealMessage(
+      receiptText(p.amount, p.providerRef),
+      env.SEAL_SECRET,
+      new Date(Date.now() + 30 * 86_400_000),
+    );
+    return {
+      amount: p.amount,
+      ref: p.providerRef,
+      paidAt: p.settledAt,
+      sealed,
+      code: sealed.split('\n').at(-1)!.replace('Haqdaar code: ', ''),
+    };
+  }
+
   @Roles('citizen', 'helper')
   @Get('mine')
   async mine(@CurrentUser() user: AuthUser, @ZQuery(MineQuery) q: z.infer<typeof MineQuery>) {
@@ -116,9 +165,9 @@ export class PaymentsController {
   release(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
-    @ZBody(NoteBody) b: z.infer<typeof NoteBody>,
+    @ZBody(ReleaseBody) b: z.infer<typeof ReleaseBody>,
   ) {
-    return this.payouts.release(id, user, b.note);
+    return this.payouts.release(id, user, b.note, b.alias);
   }
 
   /** Checker approval; must be a different person from the maker. Sends the payout. */

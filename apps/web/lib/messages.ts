@@ -176,6 +176,30 @@ export const M = {
   ],
   signupPinAgainSay: ['وہی پن ایک بار پھر درج کریں۔', 'Enter the same PIN once more.'],
   signupPinLabel: ['چار ہندسوں کا پن', '4-digit PIN'],
+  receiptSeal: ['حقدار مہر', 'Haqdaar Seal'],
+  receiptSealHint: [
+    'یہ مہر ثابت کرتی ہے کہ رسید اصلی ہے۔ کوئی بھی اس کوڈ کو اسکین کر کے "کیا یہ پیغام اصلی ہے؟" میں جانچ سکتا ہے۔',
+    'This seal proves the receipt is genuine. Anyone can scan the code and check it in “Is this message real?”.',
+  ],
+  resetTitle: ['پن بھول گئے؟', 'Forgot your PIN?'],
+  resetSmsNote: [
+    'نمونہ: پن بدلنے کا کوڈ یہاں نہیں دکھایا جاتا۔ وہ ایڈمن کی "Mock phone" اسکرین پر اس نمبر کے پیغامات میں ملے گا۔',
+    'Prototype: the PIN-reset code is not shown here. It is in this number’s messages on the admin “Mock phone” screen.',
+  ],
+  resetSave: ['نیا پن محفوظ کریں', 'Save the new PIN'],
+  helperLinkTitle: ['مددگار کو اجازت دیں', 'Let a helper act for you'],
+  helperLinkHint: [
+    'اپنے بھروسے کے مددگار کا موبائل نمبر لکھیں اور چار ہندسوں کا خاندانی پن چنیں۔ مددگار کو ہر بار یہ پن آپ سے پوچھنا ہوگا۔',
+    'Type the mobile number of a helper you trust and choose a 4-digit family PIN. The helper must ask you for this PIN every time.',
+  ],
+  helperLinkPhone: ['مددگار کا موبائل نمبر', 'Helper’s mobile number'],
+  helperLinkPin: ['خاندانی پن (چار ہندسے)', 'Family PIN (4 digits)'],
+  helperLinkSave: ['اجازت دیں', 'Allow this helper'],
+  helperLinkDone: [
+    'مددگار کو اجازت مل گئی۔ پن صرف اپنے پاس رکھیں۔',
+    'The helper can now act for you. Keep the PIN to yourself.',
+  ],
+  helperLinkNotFound: ['اس نمبر کا کوئی مددگار نہیں ملا۔', 'No helper was found with this number.'],
   signupPinWeak: [
     'یہ پن بہت آسان ہے۔ کوئی اور پن چنیں۔',
     'That PIN is too easy to guess. Choose another one.',
@@ -418,8 +442,8 @@ export const M = {
   // scam check: hand a doubtful message to a person
   scamShowOfficer: ['یہ پیغام افسر کو دکھائیں', 'Show this message to an officer'],
   scamSentOfficer: [
-    'آپ کا پیغام افسر کو بھیج دیا گیا ہے، وہ اس سے دوسروں کو خبردار کرے گا۔ اگر کسی پیغام پر شک ہو تو اس پر عمل نہ کریں۔',
-    'Your message was sent to an officer, who will use it to warn others. If you are not sure about a message, do not act on it.',
+    'آپ کا پیغام افسر کو بھیج دیا گیا ہے، وہ اسے جانچے گا۔ اگر کسی پیغام پر شک ہو تو اس پر عمل نہ کریں۔',
+    'Your message was sent to an officer, who will check it. If you are not sure about a message, do not act on it.',
   ],
 } as const;
 

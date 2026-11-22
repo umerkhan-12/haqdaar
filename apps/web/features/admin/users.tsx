@@ -206,7 +206,7 @@ export function UsersPage() {
               className="mt-4 rounded-xl border-2 border-amber-700 bg-amber-50 p-3 text-amber-900"
               role="status"
             >
-              <p className="font-semibold">Temporary password for {created.name}</p>
+              <p className="font-semibold">Password for {created.name}</p>
               <p className="my-2 select-all rounded bg-white p-2 font-mono text-lg">
                 {created.password}
               </p>

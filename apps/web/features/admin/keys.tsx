@@ -14,10 +14,7 @@ import {
 import { api } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
-const SCOPES = [
-  { id: 'scam:check', label: 'Check messages for scams (telcos, banks)' },
-  { id: 'cases:status', label: 'Read claim status' },
-];
+const SCOPES = [{ id: 'scam:check', label: 'Check messages for scams (telcos, banks)' }];
 
 /** Partner API keys: shown once, stored hashed, scoped, revocable. */
 export function AdminKeys() {

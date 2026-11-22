@@ -58,7 +58,7 @@ export function AdminMoney() {
         <Card>
           <h2 className="text-lg font-bold">Reconciliation</h2>
           <p className="text-sm text-muted">
-            Matches every settled payout with the bank statement by end-to-end id.
+            Matches every settled payout with the (simulated) bank statement by end-to-end id.
           </p>
           <Button
             className="mt-3"

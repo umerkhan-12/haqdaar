@@ -3,13 +3,22 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser, Public, Roles, ZBody, type AuthUser } from '@haqdaar/nest-kit';
 import {
+  isWeakPin,
   LoginRequest,
+  PinResetRequest,
   RefreshRequest,
   SignupStartRequest,
   SignupVerifyRequest,
 } from '@haqdaar/shared';
 import { z } from 'zod';
 
+const LinkHelperBody = z.object({
+  helperPhone: z.string().regex(/^03\d{9}$/, 'Mobile number must look like 03XXXXXXXXX'),
+  pin: z
+    .string()
+    .regex(/^\d{4}$/, 'PIN must be 4 digits')
+    .refine((p) => !isWeakPin(p), 'PIN is too easy to guess'),
+});
 const ActForBody = z.object({ personId: z.string().uuid(), pin: z.string().regex(/^\d{4,6}$/) });
 import { AuthService } from './auth.service';
 import { env } from '../env';
@@ -93,6 +102,40 @@ export class AuthController {
   @Get('families')
   families(@CurrentUser() user: AuthUser) {
     return this.auth.families(user);
+  }
+
+  /** Forgotten PIN, step 1: always answers { sent: true }. */
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('pin-reset/start')
+  @HttpCode(200)
+  pinResetStart(@ZBody(SignupStartRequest) body: z.infer<typeof SignupStartRequest>) {
+    return this.auth.pinResetStart(body.phone);
+  }
+
+  /** Forgotten PIN, step 2: code + new PIN → signed in; every earlier session is ended. */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('pin-reset/verify')
+  @HttpCode(200)
+  pinResetVerify(
+    @ZBody(PinResetRequest) body: z.infer<typeof PinResetRequest>,
+    @Headers('user-agent') ua?: string,
+  ) {
+    return this.auth.pinResetVerify(body, ua);
+  }
+
+  /** A citizen lets a registered helper act for her, with a family PIN she chooses. */
+  @ApiBearerAuth()
+  @Roles('citizen')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('helper-links')
+  @HttpCode(200)
+  linkHelper(
+    @CurrentUser() user: AuthUser,
+    @ZBody(LinkHelperBody) body: z.infer<typeof LinkHelperBody>,
+  ) {
+    return this.auth.linkHelper(user, body.helperPhone, body.pin);
   }
 
   @ApiBearerAuth()

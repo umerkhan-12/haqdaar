@@ -148,15 +148,43 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
   // ---------- human actions (maker-checker) ----------
 
   /** Officer clears a hold after checking it. They become the maker; someone else must approve. */
-  async release(id: string, user: AuthUser, note?: string) {
+  async release(id: string, user: AuthUser, note?: string, correctedAlias?: string) {
     const p = await this.sm.get(id, user.tenantId);
+    // A payout held because the account was not found or is in another name can be released to a
+    // corrected number the claimant gave, but only if that account is in the claimant's own name.
+    // A second officer must still approve it.
+    let corrected: Record<string, unknown> = {};
+    if (correctedAlias && correctedAlias !== p.creditorAlias) {
+      if (p.state !== 'HELD') throw new ConflictException(`Payment is ${p.state}, not held`);
+      const title = await this.rails.titleFetch({ alias: correctedAlias }).catch(() => null);
+      if (!title) throw new ConflictException('The bank could not be reached. Try again shortly.');
+      if (!title.found || !title.accountTitle)
+        throw new ConflictException('The bank has no account for that mobile number either.');
+      const score = nameMatchScore(p.creditorName, title.accountTitle);
+      if (score < TITLE_MATCH_THRESHOLD)
+        throw new ConflictException(
+          'That account is in a different name than the claimant. The payout stays held.',
+        );
+      corrected = {
+        creditorAlias: correctedAlias,
+        creditorIban: title.iban ?? null,
+        titleFetched: title.accountTitle,
+        titleMatchScore: score,
+      };
+    }
+    const why = correctedAlias && Object.keys(corrected).length ? 'PAYOUT_NUMBER_CORRECTED' : '';
     await this.prisma.approval.create({
-      data: { paymentId: id, action: 'RELEASE', actorId: user.id, note },
+      data: {
+        paymentId: id,
+        action: 'RELEASE',
+        actorId: user.id,
+        note: [why, note].filter(Boolean).join(': ') || undefined,
+      },
     });
     return this.sm.transition(p, 'AWAITING_APPROVAL', {
       by: user,
-      reason: `RELEASED: ${note ?? p.holdReason ?? ''}`.trim(),
-      patch: { makerId: user.id, holdReason: null },
+      reason: `RELEASED: ${why || note || p.holdReason || ''}`.trim(),
+      patch: { makerId: user.id, holdReason: null, ...corrected },
     });
   }
 

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import argon2 from 'argon2';
@@ -30,6 +31,7 @@ import {
   hashCode,
   MAX_CODE_TRIES,
   newCode,
+  RESET_SENDER,
   SIGNUP_SENDER,
   signupSms,
 } from './signup-code';
@@ -151,6 +153,99 @@ export class AuthService {
    * The PIN is stored like a password (argon2id), so the normal login works with it.
    * The new person id is only reserved here: cases creates the person record on the first claim.
    */
+  /**
+   * Forgotten PIN, step 1: text a code to a registered citizen's phone. The answer is always the
+   * same, so nobody learns which numbers have an account. Staff accounts are not reset this way.
+   */
+  async pinResetStart(phone: string): Promise<{ sent: true }> {
+    const normalized = normalizePhone(phone);
+    const phoneHash = lookupHash(normalized, env.PII_HASH_KEY);
+    const user = await this.prisma.user.findUnique({
+      where: { phoneHash },
+      select: { role: true, active: true },
+    });
+    if (user?.role === 'citizen' && user.active !== false) {
+      const code = newCode();
+      const data = {
+        codeHash: hashCode(normalized, code, env.PII_HASH_KEY),
+        expiresAt: new Date(Date.now() + CODE_TTL_MINUTES * 60_000),
+        attempts: 0,
+        usedAt: null,
+      };
+      await this.prisma.signupCode.upsert({
+        where: { phoneHash },
+        update: data,
+        create: { phoneHash, ...data },
+      });
+      await this.client.call('rails-mock', '/mock/sms/send', {
+        method: 'POST',
+        body: { to: phone, body: signupSms.resetCode(code), from: RESET_SENDER },
+        retries: 0,
+      });
+    }
+    return { sent: true };
+  }
+
+  /** Forgotten PIN, step 2: the code proves the phone is hers; the new PIN replaces the old one. */
+  async pinResetVerify(
+    b: { phone: string; code: string; pin: string },
+    userAgent?: string,
+  ): Promise<TokenPair> {
+    const phone = normalizePhone(b.phone);
+    const phoneHash = lookupHash(phone, env.PII_HASH_KEY);
+    await this.prisma.signupCode.updateMany({
+      where: { phoneHash, usedAt: null, attempts: { lte: MAX_CODE_TRIES } },
+      data: { attempts: { increment: 1 } },
+    });
+    const row = await this.prisma.signupCode.findUnique({ where: { phoneHash } });
+    const verdict = checkCode(row, hashCode(phone, b.code, env.PII_HASH_KEY));
+    if (verdict === 'locked')
+      throw new ForbiddenException('Too many wrong codes. Ask for a new code.');
+    if (verdict !== 'ok') throw new BadRequestException('Wrong or expired code');
+    const passwordHash = await argon2.hash(b.pin, { type: argon2.argon2id });
+    const pair = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.signupCode.updateMany({
+        where: { phoneHash, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      if (claimed.count === 0) throw new BadRequestException('Wrong or expired code');
+      const existing = await tx.user.findUnique({ where: { phoneHash } });
+      if (!existing || existing.role !== 'citizen')
+        throw new BadRequestException('Wrong or expired code');
+      const user = await tx.user.update({ where: { id: existing.id }, data: { passwordHash } });
+      // Every earlier session ends: whoever knew the old PIN is signed out.
+      await tx.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return this.issue(tx, user, randomUUID(), undefined, userAgent);
+    });
+    this.bus.kick();
+    return pair;
+  }
+
+  /**
+   * A citizen lets a registered helper act for her and chooses the family PIN he must ask her for
+   * each time. Linking again replaces the PIN and clears any lock.
+   */
+  async linkHelper(user: AuthUser, helperPhone: string, pin: string): Promise<{ linked: true }> {
+    const me = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    if (me.role !== 'citizen' || !me.personId)
+      throw new ForbiddenException('Only a citizen can link a helper');
+    const helper = await this.prisma.user.findUnique({
+      where: { phoneHash: lookupHash(normalizePhone(helperPhone), env.PII_HASH_KEY) },
+    });
+    if (!helper || helper.role !== 'helper' || helper.tenantId !== me.tenantId)
+      throw new NotFoundException('No helper was found with this number');
+    const pinHash = await argon2.hash(pin);
+    await this.prisma.helperLink.upsert({
+      where: { helperId_personId: { helperId: helper.id, personId: me.personId } },
+      update: { pinHash, failedPins: 0, lockedUntil: null, label: me.name },
+      create: { helperId: helper.id, personId: me.personId, label: me.name, pinHash },
+    });
+    return { linked: true };
+  }
+
   /**
    * Checks the texted code as soon as it is typed, before the name and PIN are asked, so a wrong
    * code is refused at once. It counts as a try (same limit as the final step) and does not use

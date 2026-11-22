@@ -147,7 +147,10 @@ export function OfficerPayments() {
                     variant="ghost"
                     className="min-h-10 text-sm"
                     disabled={busy}
-                    onClick={() => setReleasing(p)}
+                    onClick={() => {
+                      setNewAlias('');
+                      setReleasing(p);
+                    }}
                   >
                     Release…
                   </Button>
@@ -197,13 +200,15 @@ export function OfficerPayments() {
         open={!!releasing}
         title="Release a held payout"
         confirmLabel="Release (needs a second officer to approve)"
-        busy={busy || note.trim().length < 5}
+        busy={busy || note.trim().length < 5 || (newAlias !== '' && !/^03\d{9}$/.test(newAlias))}
         onClose={() => setReleasing(null)}
         onConfirm={() =>
           releasing &&
           act(
-            () => api.release(releasing.id, note.trim()),
-            'Released. A different officer must now approve it.',
+            () => api.release(releasing.id, note.trim(), newAlias || undefined),
+            newAlias
+              ? 'Released to the corrected number (the account is in the claimant’s name). A different officer must now approve it.'
+              : 'Released. A different officer must now approve it.',
           )
         }
       >
@@ -216,6 +221,20 @@ export function OfficerPayments() {
             className="w-full rounded-xl border-2 border-slate-400 p-2"
           />
         </label>
+        <label className="mt-3 block text-sm font-semibold">
+          Corrected mobile account number from the claimant (optional)
+          <input
+            value={newAlias}
+            onChange={(e) => setNewAlias(e.target.value.replace(/\D/g, '').slice(0, 11))}
+            inputMode="numeric"
+            placeholder="03XXXXXXXXX"
+            className="mt-1 w-full rounded-xl border-2 border-slate-400 p-2 font-normal"
+          />
+        </label>
+        <p className="mt-1 text-xs text-muted">
+          Use this when the hold is “account not found” or “name does not match”. The new number is
+          accepted only if the bank’s account on it is in the claimant’s own name.
+        </p>
       </ConfirmDialog>
       <ConfirmDialog
         open={!!retrying}
