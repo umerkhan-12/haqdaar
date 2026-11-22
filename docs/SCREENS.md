@@ -291,3 +291,18 @@ Code: `components/shell.tsx`, `components/citizen-shell.tsx`, `components/ui.tsx
 | -------------------- | ------------------------------------------------ | --------------------------------- |
 | Listen               | Speaks the offline message from recorded audio.  | She hears that her claim is safe. |
 | Go to the first page | Link to /citizen (cached by the service worker). | A way forward with no network.    |
+
+## Added in the last build
+
+| Screen                | Control                                         | What it does                                                                 | Why it is there                                                   |
+| --------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| /login                | "Forgot your PIN?"                              | Opens /forgot-pin: phone, texted code, new PIN                               | A citizen who forgets her PIN is not locked out                   |
+| /forgot-pin           | Phone, code and PIN pads                        | Sends a reset code, checks it, saves the new PIN and signs her in            | Only the holder of the phone can change the PIN; old sessions end |
+| /citizen/status       | "Correct your details" (microphone, name, CNIC) | Sends a corrected name or CNIC when an officer asked for information         | A wrong number is fixed by her, checked by an officer             |
+| /citizen/status       | Haqdaar Seal with QR on the receipt             | Shows the sealed receipt code and a QR of the sealed text                    | Anyone can prove the receipt is genuine                           |
+| /citizen/status       | "The money has not reached you yet" card        | Explains a held, failed or unconfirmed payout                                | She knows what is happening and what to do                        |
+| /citizen/consents     | "Let a helper act for you"                      | Links a registered helper to her with a PIN she chooses                      | The family, not the helper, decides who may act for it            |
+| /officer              | "Citizens say their information is wrong"       | Lists correction requests with field and note                                | Requests reach an officer, who asks through the claim             |
+| /officer              | "Back to the queue" (phones)                    | Closes the open case and shows the list again                                | On a phone the case opens in place of the list                    |
+| /officer/payments     | Corrected number in Release and Retry           | Releases or resends to a new number if the account is in the claimant's name | A wrong payout number is fixed without paying a stranger          |
+| Admin side navigation | Queue, Payments                                 | Opens the officer screens for the admin                                      | Judge Mode steps that say "officer > Payments" are reachable      |

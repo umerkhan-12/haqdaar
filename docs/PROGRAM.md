@@ -99,9 +99,10 @@ Notes for testing:
 
 ## 7. Complaints, corrections and appeals
 
-- **Wrong data:** she can ask for a correction of name, CNIC, district or household size; an officer decides.
+- **Wrong data:** she reports what is wrong ("My information is wrong"); officers see the request on their queue and ask her through the claim. She then says or types the corrected name or CNIC, and the officer decides. After an officer has approved her identity, only an officer can change the CNIC.
+- **Forgotten PIN:** a code is texted to her phone and she chooses a new PIN; all earlier sessions end.
 - **Rejected:** the reason is given in plain words and she may claim again with corrected details or ask an officer to look again.
-- **Payment not received:** Status shows where the money is. If the bank has no account on her number, the officer asks her for the correct number and sends it again; it is paid only if that account is in her own name.
+- **Payment not received:** Status shows where the money is. Her status screen says plainly when a payout is held or failed. If the bank has no account on her number, or the account is in another name, the officer asks her for the correct number and releases or resends the payout to it; it is paid only if that account is in her own name.
 - **Suspicious message:** "Is this message real?" checks it and can send it to an officer; reports appear on the Scam Map.
 
 ## 8. People with no bank account or mobile wallet
