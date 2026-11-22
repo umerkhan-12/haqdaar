@@ -39,7 +39,9 @@ const CONFUSED: Record<string, string> = {
   B: '8',
   Z: '2',
 };
-const NUMBERISH = /[\dOoDIl|SBZ]{5}\s?[-–—~]\s?[\dOoDIl|SBZ]{7}\s?[-–—~]\s?[\dOoDIl|SBZ]/g;
+// OCR also reads the hyphens of a photographed card as dots, commas or underscores.
+const NUMBERISH =
+  /[\dOoDIl|SBZ]{5}\s?[-–—~.,_]\s?[\dOoDIl|SBZ]{7}\s?[-–—~.,_]\s?[\dOoDIl|SBZ](?![\dA-Za-z])/g;
 const DATE = /\b(\d{2})[.\-/](\d{2})[.\-/](\d{4})\b/g;
 const PERSON_NAME = /^[A-Za-z][A-Za-z.'-]*(?: [A-Za-z][A-Za-z.'-]*)*/;
 
@@ -51,7 +53,7 @@ export function parseCardText(lines: string[]): CardFields {
   const clean = lines.map((l) => l.trim()).filter(Boolean);
   const text = clean.join('\n');
   const numberish = (text.match(NUMBERISH) ?? []).map((t) =>
-    t.replace(/[OoDIl|SBZ]/g, (c) => CONFUSED[c]!),
+    t.replace(/[OoDIl|SBZ]/g, (c) => CONFUSED[c]!).replace(/\s?[–—~.,_]\s?/g, '-'),
   );
   const cnic = findCnic(text) ?? numberish.map(findCnic).find(Boolean) ?? null;
 

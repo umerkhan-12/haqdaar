@@ -43,6 +43,25 @@ export interface Prepared {
   ocrPng: Buffer;
 }
 
+/** Turns tried, in order, when the first OCR pass finds no card number: a phone photo is often sideways. */
+export const OCR_RETRY_TURNS = [0, 90, 270, 180] as const;
+
+/**
+ * A second look for OCR at a real phone photo: more pixels than the analysis copy (the card may fill
+ * only part of the frame), contrast stretched, sharpened, and optionally turned.
+ */
+export async function ocrRetryImage(buf: Buffer, turn: number): Promise<Buffer> {
+  const png = await decoder(buf)
+    .rotate()
+    .resize({ width: 2600, height: 2600, fit: 'inside', withoutEnlargement: true })
+    .greyscale()
+    .normalise()
+    .sharpen({ sigma: 1.2 })
+    .png()
+    .toBuffer();
+  return turn ? sharp(png).rotate(turn).png().toBuffer() : png;
+}
+
 export async function prepare(buf: Buffer): Promise<Prepared> {
   const sanitized = await decoder(buf)
     .rotate()

@@ -1,5 +1,5 @@
 import { blurScore, BLUR_RETAKE, editorTag, errorLevel, type Region } from './forensics';
-import { prepare, sniff } from './image';
+import { OCR_RETRY_TURNS, ocrRetryImage, prepare, sniff } from './image';
 import { findCnic, parseCardText, readQr, type CardFields } from './readers';
 
 export type CheckId =
@@ -42,6 +42,9 @@ export interface DocumentCheckDeps {
 }
 
 export class UnsupportedImageError extends Error {}
+
+/** Extra OCR passes stop starting after this long, so the citizen is never left waiting. */
+const OCR_RETRY_BUDGET_MS = 14_000;
 
 /** What a failed check means for the citizen, in plain words. */
 const SAY: Record<CheckId, { ur: string; en: string }> = {
@@ -91,7 +94,18 @@ export async function documentCheck(
   ]);
   const blur = blurScore(img.gray);
   const qrText = readQr(img.rgba);
-  const parsed = lines ? parseCardText(lines) : null;
+  let parsed = lines ? parseCardText(lines) : null;
+  // A real phone photo (card small in the frame, dim, or sideways) often defeats the first pass:
+  // look again at a larger, contrast-stretched copy, turning it if needed. Bounded in time.
+  const retryUntil = Date.now() + OCR_RETRY_BUDGET_MS;
+  for (const turn of OCR_RETRY_TURNS) {
+    if (!lines || parsed?.cnic || Date.now() > retryUntil) break;
+    const again = await ocrRetryImage(file, turn)
+      .then((png) => deps.ocr(png))
+      .catch(() => null);
+    const next = again ? parseCardText(again) : null;
+    if (next?.cnic) parsed = { ...next, name: next.name ?? parsed?.name ?? null };
+  }
   const cnicFromOcr = parsed?.cnic ?? null;
   const cnicFromQr = qrText ? findCnic(qrText) : null;
 
