@@ -126,7 +126,7 @@ The pre-staged case in the queue belongs to Kaneez Fatima.
 ### 10. Judge Mode: break it yourself (6:00, 30 s) — P3 hands over the laptop
 
 1. Admin > **Judge Mode**.
-   **Say:** "One button for each of your eight challenges, plus five payment failures. Each one drives the real system through the public API and prints every step. Please pick one."
+   **Say:** "One button for each of your nine challenges, plus five payment failures. Each one drives the real system through the public API and prints every step. Please pick one."
 2. If they do not pick: under "Bank-grade payouts" run **"Raast times out after taking the money"**. Read the steps: UNKNOWN → status inquiry → SUCCESS, paid once.
 3. Point at **"Break a public rail"**: "You can also break the mock Raast yourself and then pay a claim."
 
