@@ -118,6 +118,17 @@ export const M = {
   ev_approved: ['افسر نے منظور کیا', 'Approved by an officer'],
   ev_rejected: ['افسر نے منظور نہیں کیا', 'Not approved by an officer'],
   ev_paid: ['رقم بھیج دی گئی', 'Money sent'],
+  ev_info_provided: ['آپ نے اپنی معلومات درست کیں', 'You corrected your details'],
+  redoTitle: ['اپنی معلومات درست کریں', 'Correct your details'],
+  redoHint: [
+    'اگر نام یا شناختی کارڈ نمبر غلط تھا تو یہاں درست کریں، بول کر یا لکھ کر۔ جو خانہ خالی چھوڑیں وہ ویسا ہی رہے گا۔',
+    'If your name or CNIC number was wrong, correct it here by speaking or typing. A box you leave empty stays as it was.',
+  ],
+  redoSpeak: ['بول کر بتائیں', 'Say it'],
+  redoListening: ['سن رہے ہیں… بات ختم ہو تو دوبارہ دبائیں', 'Listening… tap again when you finish'],
+  redoCnic: ['شناختی کارڈ نمبر', 'CNIC number'],
+  redoCnicBad: ['شناختی کارڈ نمبر تیرہ ہندسوں کا ہوتا ہے۔', 'A CNIC number has 13 digits.'],
+  redoSend: ['درست معلومات بھیجیں', 'Send the corrected details'],
   ev_info_requested: ['مزید معلومات مانگی گئیں', 'More information requested'],
   ev_consent_withdrawn: ['آپ نے اجازت واپس لی', 'You withdrew permission'],
 

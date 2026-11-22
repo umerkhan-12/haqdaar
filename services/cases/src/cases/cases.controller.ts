@@ -23,6 +23,7 @@ import {
   ListQuery,
   RejectBody,
   RequestInfoBody,
+  ResubmitBody,
 } from './cases.schemas';
 
 @ApiTags('cases')
@@ -49,9 +50,10 @@ export class CasesController {
   resubmit(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
+    @ZBody(ResubmitBody) b: ResubmitBody,
     @Req() req: FastifyRequest,
   ) {
-    return this.cases.resubmit(requireUser(user), id, req.id);
+    return this.cases.resubmit(requireUser(user), id, req.id, b);
   }
 
   /** Citizens and helpers see only their (selected) person's cases; staff see the tenant's. */

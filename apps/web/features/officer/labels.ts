@@ -178,6 +178,7 @@ const TIMELINE: Record<string, string> = {
   approved: 'Approved by an officer',
   rejected: 'Rejected by an officer',
   info_requested: 'Officer asked the citizen for information',
+  info_provided: 'Citizen corrected their details',
   assigned: 'Assigned to an officer',
   escalated: 'Escalated to a supervisor',
   closed: 'Case closed',

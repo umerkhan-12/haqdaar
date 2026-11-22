@@ -648,7 +648,9 @@ export const api = {
       body: claim,
       headers: { 'idempotency-key': idempotencyKey },
     }),
-  resubmit: (id: string) => request<CaseDetail>('POST', `/cases/${id}/resubmit`),
+  /** Send a NEEDS_INFO claim again; with `fix`, with the name or CNIC she corrected. */
+  resubmit: (id: string, fix?: { fullName?: string; cnic?: string }) =>
+    request<CaseDetail>('POST', `/cases/${id}/resubmit`, { body: fix ?? {} }),
   cases: () => request<CaseSummary[]>('GET', '/cases'),
   case: (id: string) => request<CaseDetail>('GET', `/cases/${id}`),
   queue: () => request<CaseSummary[]>('GET', '/queue'),

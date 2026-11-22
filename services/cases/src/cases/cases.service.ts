@@ -202,11 +202,72 @@ export class CasesService {
   }
 
   /** Re-run the decision after the citizen added consent or information. */
-  async resubmit(user: AuthUser, id: string, requestId?: string) {
+  async resubmit(
+    user: AuthUser,
+    id: string,
+    requestId?: string,
+    fix?: { fullName?: string; cnic?: string },
+  ) {
     const c = await this.ownCase(user, id);
     if (c.status !== 'NEEDS_INFO') throw new ConflictException(`Case is ${c.status}`);
+    if (fix?.fullName || fix?.cnic) await this.correctDetails(c, user, fix);
     await this.process(c.id, user, requestId);
     return this.view(user, c.id);
+  }
+
+  /**
+   * The officer asked her to correct her details and she sends them again. The name can always be
+   * corrected. The CNIC only while no officer has ever approved a claim for this person: after
+   * that the identity is confirmed and changing it needs an officer. A CNIC that belongs to someone
+   * else is refused. The timeline records which fields changed, never the values.
+   */
+  private async correctDetails(
+    c: { id: string; personId: string; tenantId: string },
+    user: AuthUser,
+    fix: { fullName?: string; cnic?: string },
+  ) {
+    const person = await this.prisma.person.findUniqueOrThrow({ where: { id: c.personId } });
+    const data: Prisma.PersonUpdateInput = {};
+    const changed: string[] = [];
+    if (fix.cnic) {
+      const cnicHash = lookupHash(fix.cnic, env.PII_HASH_KEY);
+      if (cnicHash !== person.cnicHash) {
+        const confirmed = await this.prisma.case.count({
+          where: { personId: c.personId, status: { in: ['APPROVED', 'PAID', 'CLOSED'] } },
+        });
+        if (confirmed > 0)
+          throw new ForbiddenException(
+            'Your identity is already confirmed. An officer must change the CNIC.',
+          );
+        const other = await this.prisma.person.findUnique({
+          where: { tenantId_cnicHash: { tenantId: c.tenantId, cnicHash } },
+        });
+        if (other) throw new ForbiddenException('This CNIC belongs to another person');
+        data.cnicHash = cnicHash;
+        data.cnicEnc = encryptField(fix.cnic, env.PII_ENC_KEY);
+        changed.push('cnic');
+      }
+    }
+    if (fix.fullName && normalizeName(fix.fullName) !== person.nameNormalized) {
+      data.fullName = fix.fullName;
+      data.nameNormalized = normalizeName(fix.fullName);
+      changed.push('name');
+    }
+    if (changed.length === 0) return;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.person.update({ where: { id: c.personId }, data });
+      await tx.case.update({
+        where: { id: c.id },
+        data: {
+          ...(data.nameNormalized ? { nameNormalizedSnapshot: String(data.nameNormalized) } : {}),
+          // The earlier card photo was checked against the old number: it no longer counts.
+          ...(changed.includes('cnic')
+            ? { documentCheck: PHOTO_SKIPPED as Prisma.InputJsonValue }
+            : {}),
+          events: { create: { type: 'info_provided', actor: user.id, data: { fields: changed } } },
+        },
+      });
+    });
   }
 
   private async resolvePerson(

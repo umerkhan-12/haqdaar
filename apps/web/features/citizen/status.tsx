@@ -18,6 +18,7 @@ import { useAsync, useSession } from '@/lib/hooks';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { urduNumberWords } from '@/lib/urdu-number';
 import { missingPurposes, purposeText } from './consent-purposes';
+import { CorrectDetails, correctionReady, sendableCorrection } from './correct-details';
 import { SimpleWordsLabel, useSimpleExplanation } from './simple-explanation';
 
 const STATUS_TONE: Partial<Record<CaseStatus, 'ok' | 'bad' | 'warn' | 'info'>> = {
@@ -58,6 +59,7 @@ const EVENT_KEY: Record<string, MessageKey> = {
   approved: 'ev_approved',
   rejected: 'ev_rejected',
   info_requested: 'ev_info_requested',
+  info_provided: 'ev_info_provided',
   assigned: 'ev_assigned',
   consent_withdrawn: 'ev_consent_withdrawn',
   escalated: 'ev_escalated',
@@ -150,6 +152,8 @@ function NeedsInfo({ c, onResent }: { c: CaseDetail; onResent: () => void }) {
   const consents = useAsync(() => api.consents(), [c.id]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [fix, setFix] = useState({ fullName: '', cnic: '' });
+  const fixTouched = fix.fullName.trim() !== '' || fix.cnic !== '';
 
   const asked = c.timeline.filter((e) => e.type === 'info_requested').at(-1);
   const message = asked ? dataField(asked, 'message') : null;
@@ -163,7 +167,7 @@ function NeedsInfo({ c, onResent }: { c: CaseDetail; onResent: () => void }) {
     setError(null);
     try {
       for (const purpose of missing) await api.grantConsent(personId, purpose);
-      await api.resubmit(c.id);
+      await api.resubmit(c.id, sendableCorrection(fix));
       speak(t('resent'));
       onResent();
     } catch (e) {
@@ -195,9 +199,14 @@ function NeedsInfo({ c, onResent }: { c: CaseDetail; onResent: () => void }) {
           <p>{t('consentNote')}</p>
         </div>
       )}
+      <CorrectDetails value={fix} onChange={setFix} />
       {error ? <ErrorState error={error} /> : null}
-      <Button className="w-full" disabled={busy} onClick={resend}>
-        {t(missing.length > 0 ? 'resubmit' : 'resendOnly')}
+      <Button
+        className="w-full"
+        disabled={busy || (fixTouched && !correctionReady(fix))}
+        onClick={resend}
+      >
+        {t(fixTouched ? 'redoSend' : missing.length > 0 ? 'resubmit' : 'resendOnly')}
       </Button>
     </div>
   );

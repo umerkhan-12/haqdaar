@@ -35,6 +35,19 @@ export const CreateCase = z.object({
 });
 export type CreateCaseBody = z.infer<typeof CreateCase>;
 
+/** The citizen's answer to "please correct this": only the fields she is correcting. */
+export const ResubmitBody = z.preprocess(
+  (v) => v ?? {},
+  z.object({
+    fullName: plain(80).pipe(z.string().min(2)).optional(),
+    cnic: z
+      .string()
+      .regex(/^\d{5}-\d{7}-\d$/, 'CNIC format: 12345-1234567-1')
+      .optional(),
+  }),
+);
+export type ResubmitBody = { fullName?: string; cnic?: string };
+
 export const ListQuery = z.object({ status: CaseStatus.optional() });
 export const ApproveBody = z.object({ note: z.string().trim().max(300).optional() });
 export const RejectBody = z.object({ reason: z.string().trim().min(5).max(500) });
