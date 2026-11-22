@@ -85,6 +85,8 @@ const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 interface Draft {
   details: Details;
   step: Step;
+  /** Whether the card step was already passed, so a resumed claim does not ask for the photo twice. */
+  cardSeen?: boolean;
   savedAt: number;
 }
 /** What the AI heard, sent with the claim so an officer sees the notes behind every handoff. */
@@ -137,6 +139,9 @@ export function ClaimFlow() {
     const draft = loadDraft(personId);
     if (draft) {
       setDetails(draft.details);
+      setCardSeen(!!draft.cardSeen);
+      // Mid-conversation: pick up at the next thing we still need instead of starting the questions over.
+      if (draft.step === 'speak') setAsking(firstMissing(draft.details));
       setStep(draft.step);
       setRestored(true);
     } else if (session?.role === 'citizen' && isValid.alias(ownPhone())) {
@@ -146,12 +151,14 @@ export function ClaimFlow() {
   }, [personId, session?.role]);
 
   useEffect(() => {
-    if (!personId || step === 'done' || step === 'speak') return;
+    // Nothing worth keeping until she has told us something beyond the phone number we already knew.
+    const told = details.fullName || details.cnic || details.district || details.householdSize;
+    if (!personId || step === 'done' || !told) return;
     localStorage.setItem(
       draftKey(personId),
-      JSON.stringify({ details, step, savedAt: Date.now() } satisfies Draft),
+      JSON.stringify({ details, step, cardSeen, savedAt: Date.now() } satisfies Draft),
     );
-  }, [personId, details, step]);
+  }, [personId, details, step, cardSeen]);
 
   const value = useCallback(
     (f: FieldName, d: Details): string =>

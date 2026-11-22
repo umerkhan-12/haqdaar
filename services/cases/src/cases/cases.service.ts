@@ -186,6 +186,29 @@ export class CasesService {
     });
   }
 
+  /**
+   * True when this claim created the person record (it did not exist before the claim) and no earlier
+   * claim of theirs was ever approved. People enrolled by the program (seeded, or already approved once
+   * by an officer) are known; a record born in the same moment as its first claim is not.
+   */
+  private async isFirstClaimOfNewPerson(c: {
+    id: string;
+    personId: string;
+    createdAt: Date;
+    person: { createdAt: Date };
+  }) {
+    const bornWithClaim = c.createdAt.getTime() - c.person.createdAt.getTime() < 60_000;
+    if (!bornWithClaim) return false;
+    const approvedBefore = await this.prisma.case.count({
+      where: {
+        personId: c.personId,
+        id: { not: c.id },
+        status: { in: ['APPROVED', 'PAID', 'CLOSED'] },
+      },
+    });
+    return approvedBefore === 0;
+  }
+
   // ---------- decision pipeline ----------
 
   /**
@@ -212,6 +235,11 @@ export class CasesService {
       storedExtraction(c.extraction),
       storedDocumentCheck(c.documentCheck),
     );
+    // Anyone can sign up and type any CNIC. Knowing a number proves nothing, and every proof the phone
+    // sends (photo check, AI notes) is the client's word. So the first claim that ties a CNIC to a
+    // self-registered account is never decided by the machine: an officer confirms the person once.
+    if (actor.role === 'citizen' && (await this.isFirstClaimOfNewPerson(c)))
+      soft.push('identity_first_claim');
     const outcome = applyCaution(engine, soft);
     const flags = [...outcome.hardFlags, ...soft];
 

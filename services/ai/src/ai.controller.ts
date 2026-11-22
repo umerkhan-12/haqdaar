@@ -16,6 +16,7 @@ import { CurrentPrincipal, PartnerScope, Roles, ZBody, type Principal } from '@h
 import { ScamCheckRequest } from '@haqdaar/shared';
 import { z } from 'zod';
 import { AiService } from './ai.service';
+import { ExplainRequest } from './tasks/explain';
 
 const ProfileBody = z.object({ profile: z.enum(['dev', 'demo', 'offline']) });
 const KillBody = z.object({ killed: z.boolean() });
@@ -85,6 +86,17 @@ export class AiController {
     return this.ai.extractClaim(b.transcript);
   }
 
+  /**
+   * Decision → one or two warm sentences she can understand by ear. Guardrails: no number that the
+   * engine did not give, no wording that contradicts the lane; otherwise the engine's template comes back.
+   */
+  @Roles('citizen', 'helper', 'officer')
+  @Post('explain')
+  @HttpCode(200)
+  explain(@ZBody(ExplainRequest) b: z.infer<typeof ExplainRequest>) {
+    return this.ai.explain(b);
+  }
+
   @Roles('citizen', 'helper', 'officer', 'admin', 'auditor')
   @PartnerScope('scam:check')
   @Post('scam-check')
@@ -113,6 +125,8 @@ export class AiController {
   @Post('transcribe')
   @HttpCode(200)
   async transcribe(@Req() req: FastifyRequest) {
+    if (!req.isMultipart())
+      throw new BadRequestException('Send the audio as multipart/form-data (field "file")');
     const file = await req.file();
     if (!file) throw new BadRequestException('Audio file is required (field "file")');
     const mime = file.mimetype.split(';')[0]!;
@@ -133,6 +147,8 @@ export class AiController {
   async documentCheck(@Req() req: FastifyRequest) {
     let image: Buffer | undefined;
     let typed: string | undefined;
+    if (!req.isMultipart())
+      throw new BadRequestException('Send the photo as multipart/form-data (field "file")');
     for await (const part of req.parts()) {
       if (part.type === 'file') {
         const buf = await readLimited(part, 'Image');

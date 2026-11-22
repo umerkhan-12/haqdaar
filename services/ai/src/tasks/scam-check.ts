@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { verifySeal } from '@haqdaar/nest-kit';
 import type { ScamVerdict } from '@haqdaar/shared';
 import type { AiRouter } from '../router/ai-router';
-import { normalizeDigits } from './pii';
+import { normalizeDigits, redactPii } from './pii';
 import { structured, type AiMeta } from './structured';
 
 export const SCAM_TASK = 'scam_check@v1';
@@ -133,7 +133,7 @@ export async function scamCheck(
   const llm = await structured(router, LlmVerdict, {
     task: SCAM_TASK,
     system: SYSTEM,
-    messages: [{ role: 'user', content: normalized.slice(0, 1500) }],
+    messages: [{ role: 'user', content: redactPii(normalized).text.slice(0, 1500) }],
     temperature: 0,
     maxTokens: 150,
     timeoutMs: 10_000,

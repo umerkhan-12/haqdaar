@@ -2,11 +2,19 @@ import { z } from 'zod';
 import { CaseStatus, CaseType } from '@haqdaar/shared';
 import { DocumentCheckNotes, ExtractionNotes } from './ai-notes';
 
+/** Text a person can type or say: no control characters (a NUL byte cannot even be stored). */
+const plain = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .regex(/^[^\u0000-\u001f\u007f]*$/, 'Control characters are not allowed');
+
 export const CreateCase = z.object({
   type: CaseType.default('relief_claim'),
-  fullName: z.string().trim().min(2).max(80),
+  fullName: plain(80).pipe(z.string().min(2)),
   cnic: z.string().regex(/^\d{5}-\d{7}-\d$/, 'CNIC format: 12345-1234567-1'),
-  district: z.string().trim().max(60).optional(),
+  district: plain(60).optional(),
   householdSize: z.number().int().min(1).max(30).optional(),
   payout: z
     .object({

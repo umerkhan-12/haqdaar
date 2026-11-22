@@ -88,6 +88,11 @@ export const SOFT_FLAGS = {
     ur: 'کارڈ کی تصویر والا نمبر لکھے ہوئے نمبر سے مختلف ہے',
     en: 'the CNIC on the photographed card differs from the CNIC on the claim',
   },
+  identity_first_claim: {
+    level: 'review',
+    ur: 'یہ اس شناختی کارڈ پر نئے اکاؤنٹ کی پہلی درخواست ہے، اس لیے ایک افسر شناخت کی تصدیق کرے گا',
+    en: 'first claim on this CNIC from a newly registered account: an officer must confirm the identity once',
+  },
   ai_missing_fields: {
     level: 'note',
     ur: 'کچھ معلومات آواز سے نہیں ملیں',

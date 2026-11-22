@@ -49,7 +49,8 @@ export function rng(seed) {
   };
 }
 
-export const percentile = (sorted, p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : 0);
+export const percentile = (sorted, p) =>
+  sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : 0;
 
 // ---------- hostile inputs ----------
 
@@ -86,8 +87,15 @@ export const HOSTILE = [
 
 export const fuzzCnic = (r) => `99999-${r.digits(7)}-${r.int(10)}`;
 export const fuzzPhone = (r) => `0399${r.digits(7)}`;
-const FUZZ_NAMES = ['Zainab Bibi', 'Rashida Begum', 'Kaneez Fatima', 'Nasreen Khatoon', 'Muhammad Aslam', 'Shazia Bibi'];
-export const fuzzName = (r) => `Fuzz ${r.pick(FUZZ_NAMES)}`;
+/**
+ * "Fuzz Qzvrtk Xwpdm": made-up words only. A name that resembled a real one ("Fuzz Muhammad Aslam") would
+ * stay in the person table and could flag a genuine citizen of that name as a possible duplicate.
+ */
+export function fuzzName(r) {
+  const word = (n) => Array.from({ length: n }, () => r.pick([...'bcdfghjklmnpqrstvwxz'])).join('');
+  const cap = (w) => w[0].toUpperCase() + w.slice(1);
+  return `Fuzz ${cap(word(6))} ${cap(word(5))}`;
+}
 
 // ---------- HTTP client: paced, measured, and every response is checked ----------
 
@@ -123,40 +131,82 @@ export function makeClient({ gateway, rps, verbose }) {
   function checkResponse(res, ctx) {
     const { status, body, text } = res;
     const where = `${ctx.method} ${ctx.route ?? ctx.path} → ${status}`;
-    const sample = { request: ctx.sample, status, body: typeof text === 'string' ? text.slice(0, 300) : text };
-    if (status === 0) return violation('no-response', `${ctx.method} ${ctx.route ?? ctx.path}`, sample);
+    const sample = {
+      request: ctx.sample,
+      status,
+      body: typeof text === 'string' ? text.slice(0, 300) : text,
+    };
+    if (status === 0)
+      return ctx.allowReset
+        ? undefined
+        : violation('no-response', `${ctx.method} ${ctx.route ?? ctx.path}`, sample);
     if (status >= 500 && !ctx.allow5xx) violation('5xx', where, sample);
     if (status >= 400) {
       const ok =
-        body && typeof body === 'object' && body.statusCode === status && typeof body.error === 'string' &&
-        typeof body.message === 'string' && typeof body.requestId === 'string' && body.requestId.length > 0;
+        body &&
+        typeof body === 'object' &&
+        body.statusCode === status &&
+        typeof body.error === 'string' &&
+        typeof body.message === 'string' &&
+        typeof body.requestId === 'string' &&
+        body.requestId.length > 0;
       if (!ok) violation(status === 429 ? '429-shape' : 'error-shape', where, sample);
-      if (/\bat [\w.<> ]+\(?[^)\n]*\.(js|ts):\d+|prisma\.|PrismaClient|\bSELECT\b.*\bFROM\b|\bINSERT INTO\b|node_modules/i.test(text ?? '')) {
+      if (
+        /\bat [\w.<> ]+\(?[^)\n]*\.(js|ts):\d+|prisma\.|PrismaClient|\bSELECT\b.*\bFROM\b|\bINSERT INTO\b|node_modules/i.test(
+          text ?? '',
+        )
+      ) {
         violation('leak', where, sample);
       }
     }
-    if (!res.headers?.get?.('x-request-id') && status !== 0) violation('no-request-id-header', where, sample);
+    if (!res.headers?.get?.('x-request-id') && status !== 0)
+      violation('no-request-id-header', where, sample);
   }
 
   /**
    * @param opts.suite    name used for latency and counts
    * @param opts.route    route template (for de-duplicated reporting)
    * @param opts.expect429 the caller WANTS to see the 429 (rate-limit probe): do not wait and retry
+   * @param opts.allowReset a dropped connection is an acceptable answer (a server may hang up on a huge upload)
    */
   async function call(method, path, opts = {}) {
-    const { token, body, raw, headers = {}, suite = 'misc', route, expect429 = false, allow5xx = false, timeoutMs = 30_000 } = opts;
+    const {
+      token,
+      body,
+      raw,
+      headers = {},
+      suite = 'misc',
+      route,
+      expect429 = false,
+      allow5xx = false,
+      allowReset = false,
+      timeoutMs = 30_000,
+    } = opts;
     const h = { ...headers };
     if (token) h.authorization = `Bearer ${token}`;
-    if (body !== undefined && raw === undefined && !Object.keys(h).some((k) => k.toLowerCase() === 'content-type')) h['content-type'] = 'application/json';
+    if (
+      body !== undefined &&
+      raw === undefined &&
+      !Object.keys(h).some((k) => k.toLowerCase() === 'content-type')
+    )
+      h['content-type'] = 'application/json';
     const payload = raw ?? (body === undefined ? undefined : JSON.stringify(body));
-    const sample = { path: path.slice(0, 200), body: typeof payload === 'string' ? payload.slice(0, 300) : payload ? '(binary)' : undefined };
+    const sample = {
+      path: path.slice(0, 200),
+      body: typeof payload === 'string' ? payload.slice(0, 300) : payload ? '(binary)' : undefined,
+    };
 
     for (let attempt = 0; ; attempt++) {
       await pace();
       const started = performance.now();
       let res;
       try {
-        const r = await fetch(`${gateway}${path}`, { method, headers: h, body: payload, signal: AbortSignal.timeout(timeoutMs) });
+        const r = await fetch(`${gateway}${path}`, {
+          method,
+          headers: h,
+          body: payload,
+          signal: AbortSignal.timeout(timeoutMs),
+        });
         const text = await r.text();
         let parsed;
         try {
@@ -166,7 +216,12 @@ export function makeClient({ gateway, rps, verbose }) {
         }
         res = { status: r.status, body: parsed, text, headers: r.headers };
       } catch (e) {
-        res = { status: 0, body: undefined, text: String(e?.cause?.code ?? e?.message ?? e), headers: null };
+        res = {
+          status: 0,
+          body: undefined,
+          text: String(e?.cause?.code ?? e?.message ?? e),
+          headers: null,
+        };
       }
       res.ms = performance.now() - started;
 
@@ -177,17 +232,24 @@ export function makeClient({ gateway, rps, verbose }) {
       s.latencies.push(res.ms);
       // The gateway's clean 503 means a service is restarting (other engineers deploy while we run):
       // wait for it instead of reporting dozens of false alarms. Still down after ~30 s → a real finding.
-      if (res.status === 503 && /temporarily unavailable/.test(res.body?.message ?? '') && attempt < 6) {
+      if (
+        res.status === 503 &&
+        /temporarily unavailable/.test(res.body?.message ?? '') &&
+        attempt < 6
+      ) {
         stats.upstreamDown++;
         stats.waitedMs += 5000;
         await sleep(5000);
         continue;
       }
-      checkResponse(res, { method, path, route, sample, allow5xx });
+      checkResponse(res, { method, path, route, sample, allow5xx, allowReset });
 
       if (res.status === 429 && !expect429 && attempt < 5) {
         const retryAfter = Number(res.headers?.get?.('retry-after'));
-        const wait = Math.min(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1), 20_000);
+        const wait = Math.min(
+          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1),
+          20_000,
+        );
         stats.retried429++;
         stats.waitedMs += wait;
         await sleep(wait);
@@ -281,9 +343,14 @@ export function enumerateRoutes(root = ROOT) {
         const verb = pending.find((d) => VERBS.some((v) => d.startsWith(`@${v}(`)));
         if (cls && verb && /^(async\s+)?\w+\s*\(/.test(line)) {
           const own = access(pending);
-          const template = `/${[cls.prefix, strArg(verb)].filter(Boolean).join('/')}`.replace(/\/+/g, '/');
-          const isPublic = own.public ?? (own.roles || own.internal ? false : (cls.public ?? false));
-          const internal = own.internal ?? (own.roles || own.public ? false : (cls.internal ?? false));
+          const template = `/${[cls.prefix, strArg(verb)].filter(Boolean).join('/')}`.replace(
+            /\/+/g,
+            '/',
+          );
+          const isPublic =
+            own.public ?? (own.roles || own.internal ? false : (cls.public ?? false));
+          const internal =
+            own.internal ?? (own.roles || own.public ? false : (cls.internal ?? false));
           routes.push({
             service,
             method: verb.slice(1, verb.indexOf('(')).toUpperCase(),
@@ -295,7 +362,8 @@ export function enumerateRoutes(root = ROOT) {
             throttled: pending.some((d) => d.startsWith('@Throttle(')),
           });
         }
-        if (line && !line.startsWith('//') && !line.startsWith('*') && !line.startsWith('/*')) pending = [];
+        if (line && !line.startsWith('//') && !line.startsWith('*') && !line.startsWith('/*'))
+          pending = [];
       }
     }
   }
@@ -306,7 +374,9 @@ export function enumerateRoutes(root = ROOT) {
 export function gatewayPrefixes(root = ROOT) {
   const text = readFileSync(join(root, 'packages/shared/src/services.ts'), 'utf8');
   const block = text.slice(text.indexOf('GATEWAY_ROUTES'));
-  return Object.fromEntries([...block.matchAll(/'(\/[a-z-]+)':\s*'([a-z-]+)'/g)].map((m) => [m[1], m[2]]));
+  return Object.fromEntries(
+    [...block.matchAll(/'(\/[a-z-]+)':\s*'([a-z-]+)'/g)].map((m) => [m[1], m[2]]),
+  );
 }
 
 // ---------- forged tokens ----------
@@ -328,15 +398,19 @@ export function forgedTokens(real, publicKey, hmac) {
     'alg:None (case trick)': `${b64({ alg: 'None', typ: 'JWT' })}.${b64(admin)}.`,
     'alg:none keeping the old signature': `${b64({ alg: 'none', typ: 'JWT' })}.${b64(admin)}.${s}`,
     'payload changed to admin, original signature': `${h}.${b64(admin)}.${s}`,
-    'HS256 signed with the public key (key confusion)': signHs({ alg: 'HS256', typ: 'JWT' }, admin, publicKey),
+    'HS256 signed with the public key (key confusion)': signHs(
+      { alg: 'HS256', typ: 'JWT' },
+      admin,
+      publicKey,
+    ),
     'HS256 signed with an empty key': signHs({ alg: 'HS256', typ: 'JWT' }, admin, ''),
     'expired (exp in the past), original signature': `${h}.${b64({ ...claims, exp: now - 3600, iat: now - 7200 })}.${s}`,
     'signature truncated': `${h}.${p}.${s.slice(0, 20)}`,
     'signature of another token shape': `${h}.${p}.${s.split('').reverse().join('')}`,
     'no signature part': `${h}.${p}`,
-    'garbage': 'not.a.jwt',
-    'empty': '',
-    'huge': 'A'.repeat(6_000),
+    garbage: 'not.a.jwt',
+    empty: '',
+    huge: 'A'.repeat(6_000),
     'SQL in the token': "' OR 1=1 --",
   };
 }
@@ -349,21 +423,26 @@ export function forgedTokens(real, publicKey, hmac) {
  * `ai: true` marks the ones that do, so the caller can cap the spend.
  */
 export function scamSet(r, sealSecret, root = ROOT) {
-  const { sealMessage } = createRequire(import.meta.url)(join(root, 'packages/nest-kit/dist/seal.js'));
+  const { sealMessage } = createRequire(import.meta.url)(
+    join(root, 'packages/nest-kit/dist/seal.js'),
+  );
   const future = new Date(Date.now() + 30 * 86_400_000);
   const amount = () => `${r.pick([12, 12, 9, 15, 25])},${r.pick(['000', '500'])}`;
   const receipt = () =>
     r.pick([
-      () => `Sahara Program: Aap ke account mein Rs ${amount()} bhej diye gaye hain.\nYeh poori raqam aap ki hai. Ref: RAAST-${r.digits(8)}`,
+      () =>
+        `Sahara Program: Aap ke account mein Rs ${amount()} bhej diye gaye hain.\nYeh poori raqam aap ki hai. Ref: RAAST-${r.digits(8)}`,
       () => `Sahara Program: Rs ${amount()} has been sent to your account. Ref ${r.digits(6)}`,
-      () => `سہارا پروگرام: آپ کے اکاؤنٹ میں ${amount()} روپے بھیج دیے گئے ہیں۔ حوالہ ${r.digits(6)}`,
+      () =>
+        `سہارا پروگرام: آپ کے اکاؤنٹ میں ${amount()} روپے بھیج دیے گئے ہیں۔ حوالہ ${r.digits(6)}`,
       () => `Sahara Program: aap ki darkhwast number ${r.digits(5)} manzoor ho gayi hai.`,
     ])();
   const mobile = () => `03${r.digits(2)}-${r.digits(7)}`;
   const set = [];
   const add = (label, kind, text, ai) => set.push({ label, kind, text, ai });
 
-  for (let i = 0; i < 16; i++) add('GENUINE', 'valid seal', sealMessage(receipt(), sealSecret, future), false);
+  for (let i = 0; i < 16; i++)
+    add('GENUINE', 'valid seal', sealMessage(receipt(), sealSecret, future), false);
 
   for (let i = 0; i < 16; i++) {
     const body = receipt();
@@ -371,24 +450,37 @@ export function scamSet(r, sealSecret, root = ROOT) {
     const code = sealed.slice(sealed.lastIndexOf('Haqdaar code:'));
     const forged = [
       () => sealed.replace(/\d/, (d) => String((Number(d) + 1) % 10)), // one digit of the amount / reference changed
-      () => `Sahara Program: Rs 500 fee ${mobile()} par bhejein aur apni raqam hasil karein.\n${code}`, // real code, scam body
+      () =>
+        `Sahara Program: Rs 500 fee ${mobile()} par bhejein aur apni raqam hasil karein.\n${code}`, // real code, scam body
       () => sealMessage(body, sealSecret, new Date(Date.now() - 3 * 86_400_000)), // expired
       () => sealMessage(body, `${sealSecret}-attacker`, future), // signed by someone else
       () => `${sealed}\nTasdeeq ke liye ${mobile()} par call karein.`, // text appended after the code
-      () => sealed.replace(/-([A-Z2-7]{10})$/, (_, sig) => `-${sig.slice(1)}${sig[0] === 'A' ? 'B' : 'A'}`), // signature edited
+      () =>
+        sealed.replace(
+          /-([A-Z2-7]{10})$/,
+          (_, sig) => `-${sig.slice(1)}${sig[0] === 'A' ? 'B' : 'A'}`,
+        ), // signature edited
     ];
     add('SCAM', 'forged seal', forged[i % forged.length](), false);
   }
 
   const scams = [
-    () => `BISP: Mubarak ho! Aap ka Rs ${amount()} inaam nikla hai. Rs 500 processing fee ${mobile()} par Easypaisa karein.`,
-    () => `Ehsaas Program: aap ka account band ho raha hai. Foran apna ATM PIN aur OTP ${mobile()} par bhejein.`,
-    () => `Sahara program se bol raha hoon. Apna code bata dein warna paise wapas chale jayenge. Abhi call karein ${mobile()}`,
-    () => `Congratulations! You won Rs ${amount()} in the Benazir lucky draw. Pay registration fee Rs 1,000 to claim: http://bisp-claim.xyz/${r.digits(4)}`,
-    () => `URGENT: Your relief payment is on hold. Verify your CNIC and PIN within 24 hours at www.sahara-verify.top`,
-    () => `Dear customer, your account will be blocked today. Share OTP with our officer on ${mobile()} to keep it active.`,
-    () => `بینظیر انکم سپورٹ: آپ کا ${amount()} روپے کا انعام نکلا ہے۔ فیس ۵۰۰ روپے اس نمبر پر جمع کرائیں ${mobile()}`,
-    () => `احساس پروگرام: فوراً اپنا پن کوڈ اور او ٹی پی بھیجیں ورنہ آپ کی رقم ضبط ہو جائے گی۔ رابطہ کریں ${mobile()}`,
+    () =>
+      `BISP: Mubarak ho! Aap ka Rs ${amount()} inaam nikla hai. Rs 500 processing fee ${mobile()} par Easypaisa karein.`,
+    () =>
+      `Ehsaas Program: aap ka account band ho raha hai. Foran apna ATM PIN aur OTP ${mobile()} par bhejein.`,
+    () =>
+      `Sahara program se bol raha hoon. Apna code bata dein warna paise wapas chale jayenge. Abhi call karein ${mobile()}`,
+    () =>
+      `Congratulations! You won Rs ${amount()} in the Benazir lucky draw. Pay registration fee Rs 1,000 to claim: http://bisp-claim.xyz/${r.digits(4)}`,
+    () =>
+      `URGENT: Your relief payment is on hold. Verify your CNIC and PIN within 24 hours at www.sahara-verify.top`,
+    () =>
+      `Dear customer, your account will be blocked today. Share OTP with our officer on ${mobile()} to keep it active.`,
+    () =>
+      `بینظیر انکم سپورٹ: آپ کا ${amount()} روپے کا انعام نکلا ہے۔ فیس ۵۰۰ روپے اس نمبر پر جمع کرائیں ${mobile()}`,
+    () =>
+      `احساس پروگرام: فوراً اپنا پن کوڈ اور او ٹی پی بھیجیں ورنہ آپ کی رقم ضبط ہو جائے گی۔ رابطہ کریں ${mobile()}`,
     () => `آپ کی لاٹری نکل آئی ہے! رقم لینے کے لیے آج ہی فیس جمع کرائیں۔ کال کریں ${mobile()}`,
   ];
   for (let i = 0; i < 18; i++) add('SCAM', 'classic scam', scams[i % scams.length](), true);
@@ -402,14 +494,22 @@ export function scamSet(r, sealSecret, root = ROOT) {
     () => `السلام علیکم، کل شام کو خالہ کے گھر جانا ہے، تیار رہنا۔`,
     () => `بجلی کل صبح ${r.pick(['۹', '۱۰'])} بجے سے بند رہے گی، پانی بھر لیں۔`,
   ];
-  for (let i = 0; i < 14; i++) add('GENUINE', 'harmless chat', harmless[i % harmless.length](), true);
+  for (let i = 0; i < 14; i++)
+    add('GENUINE', 'harmless chat', harmless[i % harmless.length](), true);
 
   return r.shuffle(set);
 }
 
 // ---------- Part A runner: property tests without touching the running services ----------
 
-const UNIT_PACKAGES = ['services/cases', 'services/rails-mock', 'services/ai', 'services/payments', 'services/audit', 'packages/nest-kit'];
+const UNIT_PACKAGES = [
+  'services/cases',
+  'services/rails-mock',
+  'services/ai',
+  'services/payments',
+  'services/audit',
+  'packages/nest-kit',
+];
 
 function testFiles(dir, out = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -432,13 +532,37 @@ export function runUnit(root = ROOT, env = process.env) {
     const out = join(cwd, '.proptest');
     rmSync(out, { recursive: true, force: true });
     console.log(`\n== ${pkg}`);
-    const build = spawnSync(process.execPath, [tsc, '-p', 'tsconfig.json', '--outDir', '.proptest', '--incremental', 'false', '--sourceMap', 'false', '--declaration', 'false'], { cwd, stdio: 'inherit' });
+    const build = spawnSync(
+      process.execPath,
+      [
+        tsc,
+        '-p',
+        'tsconfig.json',
+        '--outDir',
+        '.proptest',
+        '--incremental',
+        'false',
+        '--sourceMap',
+        'false',
+        '--declaration',
+        'false',
+      ],
+      { cwd, stdio: 'inherit' },
+    );
     if (build.status === 0) {
-      const run = spawnSync(process.execPath, ['--test', '--test-reporter=spec', ...testFiles(out)], { cwd, stdio: 'inherit', env });
+      const run = spawnSync(
+        process.execPath,
+        ['--test', '--test-reporter=spec', ...testFiles(out)],
+        { cwd, stdio: 'inherit', env },
+      );
       if (run.status !== 0) failed++;
     } else failed++;
     rmSync(out, { recursive: true, force: true });
   }
-  console.log(failed ? `\n${failed} package(s) failed` : '\nAll property tests passed (✖ lines marked "# …" are documented known gaps, reported as todo).');
+  console.log(
+    failed
+      ? `\n${failed} package(s) failed`
+      : '\nAll property tests passed (✖ lines marked "# …" are documented known gaps, reported as todo).',
+  );
   return failed ? 1 : 0;
 }

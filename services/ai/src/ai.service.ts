@@ -17,6 +17,7 @@ import { GeminiProvider } from './providers/gemini.provider';
 import { MockProvider } from './providers/mock.provider';
 import { extractClaim } from './tasks/extract-claim';
 import { scamCheck } from './tasks/scam-check';
+import { explainDecision, type ExplainRequest } from './tasks/explain';
 import { callerContext } from './caller-context';
 import { documentCheck, UnsupportedImageError } from './vision/document-check';
 import { OcrEngine } from './vision/readers';
@@ -107,6 +108,11 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
   extractClaim(transcript: string) {
     return extractClaim(this.router, transcript);
+  }
+
+  /** Short spoken version of a decision; any doubt returns the rule engine's own words. */
+  explain(req: ExplainRequest) {
+    return explainDecision(this.router, req, env.AI_TIMEOUT_MS);
   }
 
   scamCheck(text: string) {
