@@ -81,7 +81,7 @@ function cardSvg(c: CardSpec): string {
 }
 
 /** Lossless card with a QR encoding `qrCnic ?? cnic`. */
-async function renderCard(c: CardSpec): Promise<Buffer> {
+export async function renderCard(c: CardSpec): Promise<Buffer> {
   const qr = await QRCode.toBuffer(`HAQDAAR-SAMPLE|CNIC:${c.qrCnic ?? c.cnic}`, {
     width: 220,
     margin: 2,
