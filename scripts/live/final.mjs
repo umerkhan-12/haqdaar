@@ -46,8 +46,8 @@ r = await call('POST', `/cases/${caseA.id}/resubmit`, { token: a.token, body: { 
 step('a malformed corrected CNIC is refused', r.status === 400, r.status);
 r = await call('POST', `/cases/${caseA.id}/resubmit`, { token: a.token, body: { cnic: '42201-1234567-4' } });
 step('she cannot "correct" to another person\'s CNIC', r.status === 403, `${r.status} ${r.body?.message}`);
-r = await call('POST', `/cases/${caseA.id}/resubmit`, { token: a.token, body: { cnic: right, fullName: 'Final Check Won' } });
-step('she sends the corrected CNIC and name; the claim goes back to the officer', r.status === 200 && r.body.status !== 'NEEDS_INFO', `${r.status} ${r.body?.status}`);
+r = await call('POST', `/cases/${caseA.id}/resubmit`, { token: a.token, body: { cnic: right } });
+step('she sends the corrected CNIC; the claim goes back to the officer', r.status === 200 && r.body.status !== 'NEEDS_INFO', `${r.status} ${r.body?.status}`);
 r = await call('GET', `/cases/${caseA.id}`, { token: sana });
 step('the timeline records the correction (fields only)', JSON.stringify(r.body.timeline).includes('info_provided'), JSON.stringify(r.body.timeline?.find((e) => e.type === 'info_provided')?.data));
 await call('POST', `/cases/${caseA.id}/approve`, { token: sana, body: {} });

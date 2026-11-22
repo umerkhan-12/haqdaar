@@ -28,3 +28,6 @@ docs/demo/video-build/audio/
 docs/demo/video-build/art/still-*.png
 docs/demo/video-build/*.ttf
 docs/demo/video-build/_p.cjs
+
+# local copy of the demo files for the team (duplicates of docs/)
+DEMO_KIT/

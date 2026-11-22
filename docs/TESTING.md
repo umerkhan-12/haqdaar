@@ -326,6 +326,33 @@ URL (`/cases/%E0%A4%A`, `FST_ERR_BAD_URL`), characters the proxy refuses (`/case
 **15. Each claim overwrites the stored name of the person.** `resolvePerson` updates `fullName`
 from every new claim, so the name on record is whatever was typed last.
 
+## Part C — checks on the deployed site (22 November 2026)
+
+Run against <https://172-198-74-124.sslip.io> on the final build (the AI feature suite was run on the build just before it, which differs by one line in the speech service), through the public API and a real browser. Every script is in `scripts/live/` (see its README) or `docs/demo/video-build/` and prints OK or FAIL per check.
+
+| Suite                           | What it tries                                                                                                                                                                                                                                                                                                                                                       | Result            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `scripts/live/journey.mjs`      | A new person signs up, claims, goes to an officer, is approved, is paid, gets the Haq Receipt SMS, and asks "where is my money?"                                                                                                                                                                                                                                    | 14 of 14          |
+| `scripts/judge-all.mjs`         | Every Judge Mode button: nine challenges and five payment failures                                                                                                                                                                                                                                                                                                  | 14 of 14          |
+| `scripts/live/worst.mjs`        | Forged, unsigned and edited tokens; SQL in the login; one citizen opening, changing or claiming on another's record; citizen, helper and auditor trying to approve; twelve kinds of bad input; broken JSON; a 3 MB body; five identical submits at once; two officers approving at once; a payout to another person's account; a claim after consent was taken back | 56 of 56          |
+| `scripts/live/final.mjs`        | Officer asks and the citizen corrects her CNIC; sealed receipt checks as genuine and a changed amount is caught; a held payout is released only to the claimant's own account; forgotten PIN; a citizen links a helper; correction requests reach an officer; Urdu speech is not written in Hindi letters                                                           | 38 of 38          |
+| `scripts/live/ai.mjs`           | Each AI feature answers on the live service, and Kill AI hands extraction to a person and switches back                                                                                                                                                                                                                                                             | 22 of 22          |
+| `scripts/e2e-signup-payout.mjs` | Sign-up to payout through the existing end-to-end harness                                                                                                                                                                                                                                                                                                           | 4 of 4            |
+| `video-build/offline.mjs`       | Real browser with the network off: the claim screen opens, a typed claim reaches read-back and consent, it is saved on the phone, and it is sent by itself when the network returns                                                                                                                                                                                 | 6 of 6            |
+| `video-build/ui-check.mjs`      | The newest screens at phone size: correction card, helper link, officer case with "Back to the queue", correction requests box                                                                                                                                                                                                                                      | no console errors |
+
+What these runs found and what was done:
+
+- **Sign-up let a wrong code through to the name and PIN steps** (the server refused it only at the end). The code is now checked as soon as it is typed.
+- **A tilted, dim or sideways phone photo of a card was not read.** The reader now makes extra passes at higher resolution and with the image turned, accepts dots read for hyphens, and keeps a card-number-shaped word whatever its OCR score. The number is still cross-checked against the QR and the typed number.
+- **A retry with an empty body returned a validation error** after the corrected-number change, which failed one Judge Mode scenario. Fixed and rerun.
+- **The simulated bank forgot the wallets of self-registered people at each restart**, so their payouts failed with "no account". Wallets are now kept on disk with the bank's statement.
+- **Urdu speech was sometimes written in Hindi letters**, which lost names and districts. The service listens again, telling the recogniser the speech is Urdu.
+- **The officer saw only the last voice turn** of a claim made in several turns. The notes now merge every turn.
+- **Dead ends between roles** (found by reading both sides of each flow): no way for the citizen to answer "please correct this", no forgotten-PIN path, correction requests visible to nobody, a held payout whose number could not be corrected, a new helper with no way to be linked to a family. Each now has a screen and an endpoint; `docs/SCREENS.md` lists every control.
+
+Not covered by these runs: load on the deployed server (one small machine), the fuzz harness against the deployed site (it was run locally), and a real iPhone (the back-swipe fix was checked only in a desktop browser).
+
 ## Known limitations
 
 - **The payment properties test a model, not the service.** The database code

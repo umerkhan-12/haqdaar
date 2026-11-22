@@ -6,17 +6,17 @@ Haqdaar is the platform. **Sahara Relief Programme** is the programme registered
 
 ## 1. Programme at a glance
 
-| Item                | Value                                                                                              |
-| ------------------- | -------------------------------------------------------------------------------------------------- |
-| Programme           | Sahara Relief Programme (rule set "Sahara v1", published)                                          |
-| Run by              | Provincial Social Protection Department (fictional)                                                |
-| Purpose             | Monthly cash relief for widows and large low-income households after the coastal floods            |
-| Benefit             | PKR 12,000 per approved household per month, paid in full to the claimant's own account            |
-| Districts           | Thatta, Sujawal, Badin, Tharparkar, Karachi West                                                   |
-| How to apply        | By voice or typing in the Haqdaar app, on her own phone or with a registered helper                |
-| Cost to the citizen | Nothing. No fee, no agent's share. Any message asking for a fee is a scam                          |
-| Decision time       | At once when the rules are met and identity is certain; otherwise an officer within 3 working days |
-| Where to see it     | Admin → Rules (the rule set), Admin → Programs (the programme), Citizen → Ask (the policy)         |
+| Item                | Value                                                                                                                                                                   |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Programme           | Sahara Relief Programme (rule set "Sahara v1", published)                                                                                                               |
+| Run by              | Provincial Social Protection Department (fictional). On the admin panel: Admin → Programs → "Sahara Relief Department"; its live rule is Admin → Rules → "Live rule v1" |
+| Purpose             | Monthly cash relief for widows and large low-income households after the coastal floods                                                                                 |
+| Benefit             | PKR 12,000 per approved household per month, paid in full to the claimant's own account                                                                                 |
+| Districts           | Thatta, Sujawal, Badin, Tharparkar, Karachi West                                                                                                                        |
+| How to apply        | By voice or typing in the Haqdaar app, on her own phone or with a registered helper                                                                                     |
+| Cost to the citizen | Nothing. No fee, no agent's share. Any message asking for a fee is a scam                                                                                               |
+| Decision time       | At once when the rules are met and identity is certain; otherwise an officer within 3 working days                                                                      |
+| Where to see it     | Admin → Rules (the rule set), Admin → Programs (the programme), Citizen → Ask (the policy)                                                                              |
 
 ## 2. Who is eligible
 
