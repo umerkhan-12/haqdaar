@@ -3,7 +3,7 @@ import { DemoResetController, DemoResetter, HealthRegistry, KitModule } from '@h
 import { env } from './env';
 import { buildSeed } from './data/seed-data';
 import { RailsStore } from './rails.store';
-import { fileJournal } from './journal';
+import { fileJournal, fileWalletJournal } from './journal';
 import {
   FaultsController,
   NadraController,
@@ -36,6 +36,9 @@ import {
           buildSeed(),
           undefined,
           process.env.RAILS_STATE_FILE ? fileJournal(process.env.RAILS_STATE_FILE) : undefined,
+          process.env.RAILS_STATE_FILE
+            ? fileWalletJournal(`${process.env.RAILS_STATE_FILE}.wallets.json`)
+            : undefined,
         ),
     },
     {

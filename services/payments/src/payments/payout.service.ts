@@ -204,11 +204,38 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
   }
 
   /** FAILED → SENT again with the SAME endToEndId, so the provider can never pay twice. */
-  async retry(id: string, user: AuthUser) {
+  async retry(id: string, user: AuthUser, correctedAlias?: string) {
     const p = await this.sm.get(id, user.tenantId);
     if (p.state !== 'FAILED')
       throw new ConflictException(`Only FAILED payments can be retried (is ${p.state})`);
-    return this.send(p, user);
+    if (!correctedAlias || correctedAlias === p.creditorAlias) return this.send(p, user);
+
+    // The claimant gave a corrected mobile account number. It is paid only if the bank has an
+    // account on it AND that account is in the claimant's own name: an officer cannot redirect
+    // the money to someone else.
+    const title = await this.rails.titleFetch({ alias: correctedAlias }).catch(() => null);
+    if (!title) throw new ConflictException('The bank could not be reached. Try again shortly.');
+    if (!title.found || !title.accountTitle)
+      throw new ConflictException('The bank has no account for that mobile number either.');
+    const score = nameMatchScore(p.creditorName, title.accountTitle);
+    if (score < TITLE_MATCH_THRESHOLD)
+      throw new ConflictException(
+        'That account is in a different name than the claimant. The payout was not sent.',
+      );
+    await this.prisma.approval.create({
+      data: {
+        paymentId: id,
+        action: 'CORRECT_PAYOUT_NUMBER',
+        actorId: user.id,
+        note: 'Payout number corrected by the claimant; account title matches',
+      },
+    });
+    return this.send(p, user, {
+      creditorAlias: correctedAlias,
+      creditorIban: title.iban ?? null,
+      titleFetched: title.accountTitle,
+      titleMatchScore: score,
+    });
   }
 
   async inquiry(id: string, by: Principal = SYSTEM, tenantId?: string) {
@@ -217,7 +244,16 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
 
   // ---------- provider ----------
 
-  private async send(payment: Payment, by: Principal = SYSTEM): Promise<Payment> {
+  private async send(
+    payment: Payment,
+    by: Principal = SYSTEM,
+    corrected?: {
+      creditorAlias: string;
+      creditorIban: string | null;
+      titleFetched: string;
+      titleMatchScore: number;
+    },
+  ): Promise<Payment> {
     if (!this.rails.canSend()) {
       this.logger.warn(
         { paymentId: payment.id },
@@ -227,7 +263,12 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
     }
     const sent = await this.sm.transition(payment, 'SENT', {
       by,
-      reason: payment.state === 'FAILED' ? 'RETRY_SAME_END_TO_END_ID' : 'SUBMITTED_TO_RAAST',
+      reason: corrected
+        ? 'RETRY_CORRECTED_PAYOUT_NUMBER'
+        : payment.state === 'FAILED'
+          ? 'RETRY_SAME_END_TO_END_ID'
+          : 'SUBMITTED_TO_RAAST',
+      ...(corrected ? { patch: corrected } : {}),
     });
 
     const started = Date.now();

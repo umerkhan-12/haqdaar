@@ -47,6 +47,7 @@ export function OfficerPayments() {
   const [releasing, setReleasing] = useState<Payment | null>(null);
   const [note, setNote] = useState('');
   const [retrying, setRetrying] = useState<Payment | null>(null);
+  const [newAlias, setNewAlias] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -180,7 +181,10 @@ export function OfficerPayments() {
                     variant="ghost"
                     className="min-h-10 text-sm"
                     disabled={busy}
-                    onClick={() => setRetrying(p)}
+                    onClick={() => {
+                      setNewAlias('');
+                      setRetrying(p);
+                    }}
                   >
                     Retry…
                   </Button>
@@ -221,13 +225,36 @@ export function OfficerPayments() {
         onClose={() => setRetrying(null)}
         onConfirm={() =>
           retrying &&
-          act(() => api.paymentRetry(retrying.id), 'Sent again with the same payment reference.')
+          (newAlias === '' || /^03\d{9}$/.test(newAlias)) &&
+          act(
+            () => api.paymentRetry(retrying.id, newAlias || undefined),
+            newAlias
+              ? 'Sent to the corrected number. The account is in the claimant’s name.'
+              : 'Sent again with the same payment reference.',
+          )
         }
       >
         <p className="text-sm">
           Rs {retrying?.amount.toLocaleString('en-PK')} to {retrying?.creditorName}. The retry
           reuses the same payment reference, so the bank cannot pay it twice.
         </p>
+        <label className="mt-3 block text-sm font-semibold">
+          Corrected mobile account number from the claimant (optional)
+          <input
+            value={newAlias}
+            onChange={(e) => setNewAlias(e.target.value.replace(/\D/g, '').slice(0, 11))}
+            inputMode="numeric"
+            placeholder="03XXXXXXXXX"
+            className="mt-1 w-full rounded-xl border-2 border-slate-400 p-2 font-normal"
+          />
+        </label>
+        <p className="mt-1 text-xs text-muted">
+          Leave empty to send to the same number. A new number is paid only if the bank’s account on
+          it is in the claimant’s own name.
+        </p>
+        {newAlias !== '' && !/^03\d{9}$/.test(newAlias) && (
+          <p className="mt-1 text-xs font-semibold text-red-700">Enter 11 digits: 03XXXXXXXXX</p>
+        )}
       </ConfirmDialog>
     </Shell>
   );

@@ -813,7 +813,9 @@ export const api = {
   auditStats: () => request<AuditStats>('GET', '/audit/stats'),
   auditEntry: (eventId: string) => request<AuditEntry>('GET', `/audit/${eventId}`),
   paymentInquiry: (id: string) => request<Payment>('POST', `/payments/${id}/inquiry`, { body: {} }),
-  paymentRetry: (id: string) => request<Payment>('POST', `/payments/${id}/retry`, { body: {} }),
+  /** Send a failed payout again; with `alias`, to the corrected mobile account number the claimant gave. */
+  paymentRetry: (id: string, alias?: string) =>
+    request<Payment>('POST', `/payments/${id}/retry`, { body: alias ? { alias } : {} }),
 
   // ---- spoken explanation ----
   /** The decision in one or two simpler sentences; guardrails on the server fall back to the engine's text. */

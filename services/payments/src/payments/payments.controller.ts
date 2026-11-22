@@ -14,6 +14,14 @@ import { z } from 'zod';
 import { PrismaService } from '../prisma.service';
 import { PayoutService } from './payout.service';
 
+/** Optional corrected mobile account number, given by the claimant after a failed payout. */
+const RetryBody = z.object({
+  alias: z
+    .string()
+    .regex(/^03\d{9}$/, 'Mobile number must look like 03XXXXXXXXX')
+    .optional(),
+});
+
 const ListQuery = z.object({
   state: PaymentState.optional(),
   caseId: z.string().uuid().optional(),
@@ -132,8 +140,12 @@ export class PaymentsController {
   @Roles('officer', 'admin')
   @Post(':id/retry')
   @HttpCode(200)
-  retry(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
-    return this.payouts.retry(id, user);
+  retry(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ZBody(RetryBody) b: z.infer<typeof RetryBody>,
+  ) {
+    return this.payouts.retry(id, user, b.alias);
   }
 
   @Roles('officer', 'admin')

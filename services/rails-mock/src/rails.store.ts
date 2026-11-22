@@ -53,6 +53,16 @@ export interface Journal {
   save(all: SavedSettlement[]): void;
 }
 
+/** Wallets opened for people who registered themselves, kept across restarts like the book. */
+export interface SavedWallet {
+  alias: string;
+  title: string;
+}
+export interface WalletJournal {
+  load(): SavedWallet[];
+  save(all: SavedWallet[]): void;
+}
+
 export interface SmsMessage {
   messageId: string;
   from: string;
@@ -86,6 +96,7 @@ export class RailsStore {
   private readonly byAlias = new Map<string, Account>();
   private readonly transfers = new Map<string, Settlement>();
   private readonly inboxes = new Map<string, SmsMessage[]>();
+  private readonly wallets: SavedWallet[] = [];
   private faults: Faults = { raast: { mode: 'none', remaining: 0 } };
   private refSeq = 0;
 
@@ -93,6 +104,7 @@ export class RailsStore {
     seed: SeedData,
     private readonly now: () => Date = () => new Date(),
     private readonly journal?: Journal,
+    private readonly walletJournal?: WalletJournal,
   ) {
     for (const p of seed.people) this.people.set(p.cnic, p);
     for (const h of seed.households) this.households.set(h.cnic, h);
@@ -104,6 +116,8 @@ export class RailsStore {
       this.transfers.set(t.result.endToEndId, { ...t, settledAt: new Date(t.settledAt) });
     }
     this.refSeq = this.transfers.size;
+    // A registered citizen's wallet must survive a restart: otherwise her payout fails "no account".
+    for (const w of walletJournal?.load() ?? []) this.openWallet(w.alias, w.title, false);
   }
 
   private remember(): void {
@@ -117,7 +131,7 @@ export class RailsStore {
    * name, the way a real citizen already has one before they ever meet this program. An existing
    * account is never changed, so a mule cannot retitle someone else's number.
    */
-  openWallet(alias: string, title: string): { opened: boolean } {
+  openWallet(alias: string, title: string, save = true): { opened: boolean } {
     const number = normalizeAlias(alias);
     if (this.byAlias.has(number)) return { opened: false };
     const account: Account = {
@@ -129,6 +143,8 @@ export class RailsStore {
     };
     this.byIban.set(account.iban, account);
     this.byAlias.set(number, account);
+    this.wallets.push({ alias: number, title: account.title });
+    if (save) this.walletJournal?.save(this.wallets);
     return { opened: true };
   }
 
