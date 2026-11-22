@@ -53,7 +53,7 @@ export function parseCardText(lines: string[]): CardFields {
   const clean = lines.map((l) => l.trim()).filter(Boolean);
   const text = clean.join('\n');
   const numberish = (text.match(NUMBERISH) ?? []).map((t) =>
-    t.replace(/[OoDIl|SBZ]/g, (c) => CONFUSED[c]!).replace(/\s?[–—~.,_]\s?/g, '-'),
+    t.replace(/[OoDIl|SBZ]/g, (c) => CONFUSED[c]!).replace(/\s*[-–—~.,_]\s*/g, '-'),
   );
   const cnic = findCnic(text) ?? numberish.map(findCnic).find(Boolean) ?? null;
 

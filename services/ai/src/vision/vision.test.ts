@@ -193,3 +193,16 @@ test('real OCR reads the printed number and name', { timeout: 180_000 }, async (
     assert.match(r.fields?.name ?? '', /zainab/i);
   }
 });
+
+test('a card number read with dots or commas for hyphens is still found', () => {
+  for (const line of [
+    '42201-1234567.4 01.01.1980',
+    '42201.1234567.4',
+    '42201 - 1234567 , 4',
+    '4220I-I234567-4',
+  ])
+    assert.equal(parseCardText(['Identity Number', line]).cnic, '42201-1234567-4', line);
+  // a date row alone, or a longer number, is not a card number
+  assert.equal(parseCardText(['15.03.2021 15.03.2031']).cnic, null);
+  assert.equal(parseCardText(['42201.1234567.45']).cnic, null);
+});
