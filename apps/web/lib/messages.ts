@@ -383,6 +383,13 @@ export const M = {
   askQ4: ['شکایت کیسے کروں؟', 'How do I complain?'],
   askQ5: ['میرے پیسے کہاں ہیں؟', 'Where is my money?'],
   askQ6: ['جعلی پیغام کیسے پہچانوں؟', 'How do I spot a fake message?'],
+
+  // scam check: hand a doubtful message to a person
+  scamShowOfficer: ['یہ پیغام افسر کو دکھائیں', 'Show this message to an officer'],
+  scamSentOfficer: [
+    'آپ کا پیغام افسر کو بھیج دیا گیا ہے۔ جب تک جواب نہ آئے، اس پیغام پر عمل نہ کریں۔',
+    'Your message was sent to an officer. Do not act on it until you hear back.',
+  ],
 } as const;
 
 export type MessageKey = keyof typeof M;

@@ -23,12 +23,15 @@ const STAFF_NAV: Partial<Record<Role, { href: string; label: string }[]>> = {
   officer: [
     { href: '/officer', label: 'Queue' },
     { href: '/officer/payments', label: 'Payments' },
+    { href: '/admin/scams', label: 'Scam Map' },
   ],
   admin: [
     { href: '/admin', label: 'Rules' },
     { href: '/admin/ai', label: 'AI' },
     { href: '/admin/money', label: 'Money' },
     { href: '/admin/eval', label: 'Evaluation' },
+    { href: '/admin/scams', label: 'Scam Map' },
+    { href: '/admin/users', label: 'Team' },
     { href: '/admin/tenants', label: 'Programs' },
     { href: '/admin/keys', label: 'API keys' },
     { href: '/admin/webhooks', label: 'Webhooks' },
@@ -38,6 +41,7 @@ const STAFF_NAV: Partial<Record<Role, { href: string; label: string }[]>> = {
   ],
   auditor: [
     { href: '/auditor', label: 'Audit log' },
+    { href: '/admin/scams', label: 'Scam Map' },
     { href: '/admin/eval', label: 'Evaluation' },
   ],
 };
@@ -131,7 +135,7 @@ export function Shell({
         </div>
         {nav && (
           <nav
-            className="latin mx-auto flex max-w-6xl gap-1 overflow-x-auto px-3 pb-2 text-sm"
+            className="latin mx-auto flex max-w-6xl gap-1 overflow-x-auto px-3 pb-2 text-sm lg:hidden"
             dir="ltr"
           >
             {nav.map((n) => (
@@ -163,12 +167,43 @@ export function Shell({
       )}
       <OfflineBanner online={online} waiting={waiting} />
 
-      <main
-        dir={isStaff ? 'ltr' : undefined}
-        className={`mx-auto w-full flex-1 px-4 py-5 ${wide ? 'max-w-6xl' : 'max-w-xl'} ${isStaff ? 'latin' : ''}`}
-      >
-        {children}
-      </main>
+      {/* Staff work is dense (tables, traces, dashboards): on a desktop screen the sections sit in a
+          side column and the page uses the full width. Citizen screens stay one narrow column. */}
+      <div className={nav ? 'mx-auto flex w-full max-w-[90rem] flex-1' : 'flex flex-1'}>
+        {nav && (
+          <nav
+            aria-label="Sections"
+            dir="ltr"
+            className="latin sticky top-0 hidden h-dvh w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-slate-200 bg-white p-3 text-sm lg:flex"
+          >
+            <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">
+              {session.role}
+            </p>
+            {nav.map((n) => (
+              <Link
+                key={n.href}
+                href={n.href}
+                aria-current={path === n.href ? 'page' : undefined}
+                className={`rounded-lg px-3 py-2 ${path === n.href ? 'bg-brand font-semibold text-white' : 'text-ink hover:bg-brand-soft'}`}
+              >
+                {n.label}
+              </Link>
+            ))}
+          </nav>
+        )}
+        <main
+          dir={isStaff ? 'ltr' : undefined}
+          className={`mx-auto w-full min-w-0 flex-1 px-4 py-5 ${isStaff ? 'latin lg:px-8' : ''} ${wide ? 'max-w-6xl' : 'max-w-xl'}`}
+        >
+          {isStaff && (
+            <p className="mb-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-muted lg:hidden">
+              Staff tools are designed for a desktop screen. They work here, but tables are easier
+              to read on a wider display.
+            </p>
+          )}
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

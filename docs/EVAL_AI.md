@@ -51,3 +51,20 @@ AI_EVAL_GEMINI_DEMO_OUTPUT_USD_PER_MILLION=
 ## Scope and result upload
 
 CI runs the offline safety regression only, so it makes no external API calls and reports no live-provider accuracy. Live Groq/Gemini comparisons require their keys and are run manually with the commands above. Do not upload this report to the cases service: its current `/eval/run` endpoint evaluates the decision engine, and there is no agreed API contract for AI evaluation summaries yet. Keep the JSON output as a local judge artifact until the team defines that contract.
+
+## RAG
+
+"Ask about the program" (`POST /knowledge/ask`, also the `searchPolicy` tool of `POST /ai/assist`), measured with no embedding credit, so retrieval is local. Golden set: `services/knowledge/eval/golden.jsonl`, 47 questions: 38 answerable (English, Urdu script, Roman Urdu) and 9 that must be refused (cricket, football, weather, another person's CNIC, "approve my claim", two prompt injections). Run through the gateway as the demo citizen with `pnpm --filter @haqdaar/knowledge eval` (`KNOWLEDGE_EVAL_TOKEN` set).
+
+| Metric (47 questions, live service)                             | Before | After |
+| --------------------------------------------------------------- | ------ | ----- |
+| Citation accuracy (answer cites an expected document), 38 cases | 0.526  | 1.000 |
+| Refusal recall (out-of-scope questions refused), 9 cases        | 0.556  | 1.000 |
+| Refusal precision (refused questions that should be refused)    | 0.357  | 1.000 |
+| False refusal rate (answerable questions refused)               | 0.237  | 0.000 |
+| Refusal classification accuracy, 47 cases                       | 0.723  | 1.000 |
+
+- Before: the old 15-chunk corpus and the hashed bag-of-words ranking (`offline/hashed-bow-v1`), same 47 questions.
+- After: the rewritten corpus (7 documents, 33 chunks) and local retrieval in `services/knowledge/src/retrieval/lexical.ts`: light English stemming, a table of about 40 concepts in English, Roman Urdu and Urdu script, heading and file-name words weighted 3x, BM25 ranking. The answer is 1 to 3 sentences from at most 2 chunks, word for word, in the language of the question (Roman Urdu is answered in Urdu).
+- Refusal: the question is refused when fewer than 60% of its words are found in the best chunk (`KNOWLEDGE_LOCAL_COVERAGE`), or when it is an order ("approve my claim"), an instruction to ignore the documents, or a request for somebody's personal details. These are fixed patterns, not a model.
+- Limits: the golden set was also used to tune the concept table and the section headings, so 1.000 is a fit to this set, not a held-out score. The Gemini-embedding path is unchanged and was not measured (no credit). A Roman Urdu question whose words are not in the concept table is refused rather than guessed.

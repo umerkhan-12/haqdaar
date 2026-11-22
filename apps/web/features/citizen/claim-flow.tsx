@@ -361,6 +361,7 @@ export function ClaimFlow() {
       for (const purpose of consents) await api.grantConsent(personId, purpose);
       const c = await api.submitClaim(claim, key.current);
       localStorage.removeItem(draftKey(personId));
+      if (details.district) localStorage.setItem('hq.district', details.district);
       setResult({ kind: 'sent', case: c });
       setStep('done');
       const reason = lang === 'ur' ? c.decision?.explanationUr : c.decision?.explanationEn;

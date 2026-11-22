@@ -18,7 +18,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const dir = join(here, '../eval/voice');
 const audioDir = join(dir, 'audio');
 const BASE = process.env.EVAL_BASE_URL ?? 'http://127.0.0.1:4000';
-const GAP_MS = 1500;
+// Pause between calls. 1.5 s is enough for the request limit; the free Groq tier also limits tokens
+// per minute, so a busy shared key needs EVAL_GAP_MS=4000.
+const GAP_MS = Number(process.env.EVAL_GAP_MS ?? 1500);
 const args = process.argv.slice(2);
 const flag = (name) => {
   const i = args.indexOf(name);
@@ -216,6 +218,21 @@ async function timed(fn) {
   }
 }
 
+let vendorBusy = 0;
+/**
+ * Extraction for one transcript. When the vendor is busy (free-tier limit) the service answers
+ * through its mock with reason `ai_off`: that says nothing about quality, so wait and ask again
+ * (twice at most). A case still answered by the mock is scored as it came back ("not sure").
+ */
+async function extract(token, transcript) {
+  for (let attempt = 1; ; attempt++) {
+    const r = await timed(() => call('POST', '/ai/extract-claim', { token, body: { transcript } }));
+    if (r.json?.meta?.provider !== 'mock' || attempt === 3) return r;
+    vendorBusy++;
+    await sleep(20_000);
+  }
+}
+
 // ---------- run ----------
 await ensureAudio();
 if (args.includes('--gen-only')) process.exit(0);
@@ -240,12 +257,19 @@ for (const c of cases) {
   const audio = readFileSync(join(audioDir, `${c.id}.mp3`));
   const form = new FormData();
   form.append('file', new Blob([audio], { type: 'audio/mpeg' }), `${c.id}.mp3`);
-  const stt = await timed(() => call('POST', '/ai/transcribe', { token, form }));
+  let stt = await timed(() => call('POST', '/ai/transcribe', { token, form }));
+  for (let again = 0; again < 2 && stt.json?.provider === 'mock'; again++) {
+    vendorBusy++; // the mock hears nothing: wait for the vendor rather than score silence
+    await sleep(20_000);
+    const retry = new FormData();
+    retry.append('file', new Blob([audio], { type: 'audio/mpeg' }), `${c.id}.mp3`);
+    stt = await timed(() => call('POST', '/ai/transcribe', { token, form: retry }));
+  }
   await sleep(GAP_MS);
   const transcript = stt.json?.text ?? '';
   const ext =
     stt.status < 300 && transcript
-      ? await timed(() => call('POST', '/ai/extract-claim', { token, body: { transcript } }))
+      ? await extract(token, transcript)
       : null;
   await sleep(GAP_MS);
 
@@ -262,7 +286,7 @@ for (const c of cases) {
   // Roman Urdu is a way of WRITING Urdu, so those cases are also sent as typed text (helper path).
   let typed = null;
   if (c.lang === 'roman') {
-    const t = await timed(() => call('POST', '/ai/extract-claim', { token, body: { transcript: c.text } }));
+    const t = await extract(token, c.text);
     await sleep(GAP_MS);
     if (t.status === 429) rateLimited++;
     else typed = { id: c.id, lang: 'typed', status: t.status, intent: t.json?.extraction?.intent ?? null, provider: t.json?.meta?.provider ?? null, ...scoreFields(t.json?.extraction ?? null, c) };
@@ -348,6 +372,7 @@ const summary = {
   cases: cases.length,
   scored: rows.length,
   stoppedEarly,
+  vendorBusyRetries: vendorBusy,
   aiStatus,
   providers: {
     stt: tally(rows, (r) => r.stt.provider && `${r.stt.provider} (${r.stt.model})`),

@@ -674,7 +674,10 @@ export const api = {
     request<AssistAnswer>('POST', '/ai/assist', { body: { question, lang } }),
   /** Officer/admin: look for fraud rings across the program's open claims. */
   anomalyScan: () => request<AnomalyScan>('POST', '/cases/anomaly-scan'),
-  scamCheck: (text: string) => request<ScamVerdict>('POST', '/ai/scam-check', { body: { text } }),
+  scamCheck: (text: string, district?: string | null) =>
+    request<ScamVerdict>('POST', '/ai/scam-check', {
+      body: { text, ...(district ? { district } : {}) },
+    }),
   aiStatus: () => request<AiStatus>('GET', '/ai/status'),
   setKill: (killed: boolean) => request<AiStatus>('POST', '/ai/kill-switch', { body: { killed } }),
   setProfile: (profile: AiStatus['profile']) =>
@@ -810,4 +813,85 @@ export const api = {
   // ---- spoken explanation ----
   /** The decision in one or two simpler sentences; guardrails on the server fall back to the engine's text. */
   explain: (input: ExplainInput) => request<Explained>('POST', '/ai/explain', { body: input }),
+
+  // ---- Scam Map ----
+  scamMap: (days = 7) => request<ScamMap>('GET', `/audit/scam-map?days=${days}`),
+  scamSamples: () => request<{ text: string; district: string }[]>('GET', '/ai/scam-samples'),
+  /** A citizen shows a doubtful message to an officer (CNIC and phone numbers are masked on the server). */
+  reportScam: (r: {
+    text: string;
+    verdict: ScamVerdict['verdict'];
+    redFlags: string[];
+    district?: string | null;
+  }) =>
+    request<{ reportId: string }>('POST', '/ai/scam-report', {
+      body: {
+        text: r.text,
+        verdict: r.verdict,
+        redFlags: r.redFlags,
+        ...(r.district ? { district: r.district } : {}),
+      },
+    }),
+  resolveScamReport: (id: string, label: 'confirmed_scam' | 'genuine') =>
+    request<unknown>('POST', `/audit/scam-reports/${id}/resolve`, { body: { label } }),
+
+  // ---- team (admin) ----
+  team: () => request<TeamMember[]>('GET', '/users'),
+  addTeamMember: (m: { name: string; phone: string; role: TeamRole }) =>
+    request<{ user: TeamMember; temporaryPassword: string }>('POST', '/users', { body: m }),
+  updateTeamMember: (id: string, change: { role?: TeamRole; active?: boolean }) =>
+    request<TeamMember>('PATCH', `/users/${id}`, { body: change }),
 };
+
+export type TeamRole = 'officer' | 'helper' | 'auditor' | 'admin';
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  active: boolean;
+  phoneMasked: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+  isYou: boolean;
+}
+
+type ScamVerdictName = ScamVerdict['verdict'];
+export interface ScamMap {
+  days: number;
+  capped: boolean;
+  total: number;
+  byVerdict: Record<ScamVerdictName, number>;
+  genuineWithSeal: number;
+  unsureShare: number;
+  byFlag: { key: string; count: number }[];
+  byDistrict: { key: string; count: number }[];
+  grid: { district: string; flag: string; count: number }[];
+  byDay: { day: string; total: number; scam: number }[];
+  byHour: { hour: number; total: number; scam: number }[];
+  topCombinations: { flags: string[]; count: number }[];
+  latest: {
+    at: string;
+    verdict: ScamVerdictName;
+    confidence: number;
+    redFlags: string[];
+    district: string | null;
+    channel: string;
+  }[];
+  reports: {
+    reportId: string;
+    at: string;
+    verdict: ScamVerdictName;
+    redFlags: string[];
+    district: string | null;
+    text: string;
+    label: 'confirmed_scam' | 'genuine' | null;
+  }[];
+  humanReview: {
+    reported: number;
+    open: number;
+    confirmedScam: number;
+    genuine: number;
+    falseAlarms: number;
+    falseAlarmShare: number | null;
+  };
+}
