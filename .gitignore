@@ -15,3 +15,16 @@ coverage/
 **/generated/
 *.tsbuildinfo
 .deploy/
+
+# demo video build: keep the scripts, not the recordings or tools
+docs/demo/video-build/node_modules/
+docs/demo/video-build/raw/
+docs/demo/video-build/seg/
+docs/demo/video-build/shots/
+docs/demo/video-build/cap/
+docs/demo/video-build/ref/
+docs/demo/video-build/explore/
+docs/demo/video-build/audio/
+docs/demo/video-build/art/still-*.png
+docs/demo/video-build/*.ttf
+docs/demo/video-build/_p.cjs

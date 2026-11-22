@@ -33,6 +33,26 @@ if (force || !existsSync('audio/claim-ur.wav')) {
   console.log('claim-ur.wav');
 }
 
+// Follow-up answer, for when the app asks only for the district.
+if (force || !existsSync('audio/district-ur.wav')) {
+  writeFileSync('audio/district-ur.mp3', await record('ur-PK-UzmaNeural', 'میں ضلع ٹھٹھہ میں رہتی ہوں۔'));
+  execFileSync('ffmpeg', ['-y', '-v', 'error', '-i', 'audio/district-ur.mp3', '-af', 'adelay=800,apad=pad_dur=8', '-ar', '48000', '-ac', '1', 'audio/district-ur.wav']);
+  console.log('district-ur.wav');
+}
+
+// Follow-up answers for the CNIC and the name questions.
+for (const [id, text] of [
+  ['cnic', 'میرا شناختی کارڈ نمبر ہے: چار، دو، دو، صفر، ایک، ایک، دو، تین، چار، پانچ، چھ، سات، چار۔'],
+  ['name', 'میرا نام زینب بی بی ہے۔'],
+  ['household', 'میرے گھر میں پانچ لوگ ہیں۔'],
+  ['alias', 'میرا فون نمبر ہے: صفر، تین، صفر، صفر، ایک، ایک، ایک، صفر، صفر، صفر، ایک۔'],
+]) {
+  if (!force && existsSync(`audio/${id}-ur.wav`)) continue;
+  writeFileSync(`audio/${id}-ur.mp3`, await record('ur-PK-UzmaNeural', text));
+  execFileSync('ffmpeg', ['-y', '-v', 'error', '-i', `audio/${id}-ur.mp3`, '-af', 'adelay=800,apad=pad_dur=8', '-ar', '48000', '-ac', '1', `audio/${id}-ur.wav`]);
+  console.log(id, execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', `audio/${id}-ur.wav`]).toString().trim());
+}
+
 const narration = JSON.parse(readFileSync('narration.json', 'utf8'));
 for (const [id, text] of Object.entries(narration)) {
   const f = `audio/${id}.mp3`;

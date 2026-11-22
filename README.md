@@ -172,7 +172,7 @@ We chose one task done deeply over many done thinly, as the brief asks.
 ## Submission
 
 - Live demo: <https://172-198-74-124.sslip.io>
-- Demo video: _add the public Google Drive link_
+- Demo video (3 min, MacBook and iPhone side by side): [docs/demo/haqdaar-demo.mp4](docs/demo/haqdaar-demo.mp4). Public Google Drive link: _add after upload_
 - Slides (optional): _add the link_
 
 ## Team

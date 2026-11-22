@@ -1,0 +1,90 @@
+[
+  { "id": "title", "type": "card", "image": "art/title.png", "dur": 7, "narration": "title", "title": "Title" },
+  {
+    "id": "claim", "type": "phone", "dur": 50, "narration": "claim", "panel": "art/panel-claim.png",
+    "title": "1 · CITIZEN — CLAIM BY VOICE (phone, Urdu)",
+    "fast": { "_": 2.5, "login": 2.5, "understanding": 1.6, "micmore": 2.2, "micmore3": 3, "micmore4": 3, "micmore5": 3, "photo": 1.3 },
+    "captions": {
+      "_": "Zainab signs in with one tap — no typing, no forms",
+      "home": "Her home screen: big pictures, and every option is read aloud in Urdu",
+      "mic": "She taps the microphone and says who she is, in Urdu (real speech recognition)",
+      "understanding": "The AI pulls out her name, district, household size and ID number",
+      "micmore": "It asks only for what is still missing — she answers by voice",
+      "photo": "She scans her ID card (a specimen) — it is checked on our own server",
+      "review": "The app reads everything back to her: yes, or no",
+      "consent": "Consent in plain words — nothing is pre-ticked",
+      "result": "Not sure? An officer decides. The AI never approves or rejects"
+    }
+  },
+  {
+    "id": "scamask", "type": "phone", "dur": 24, "narration": "scamask", "panel": "art/panel-scamask.png",
+    "title": "2 · CITIZEN — SCAM CHECK AND ASK WITH SOURCES (phone)",
+    "fast": { "paste": 1.6 },
+    "captions": {
+      "_": "Fake \"relief payment\" messages ask her to pay a fee first",
+      "paste": "\"Is this message real?\" — she pastes the suspicious SMS",
+      "verdict": "Verdict: SCAM, with the reasons, spoken aloud — she can show it to an officer",
+      "ask": "\"Ask about the program\" — by voice, or one tap on a question",
+      "answer": "The answer comes only from the published policy, with its sources"
+    }
+  },
+  {
+    "id": "officer", "type": "laptop", "dur": 23, "narration": "officer",
+    "title": "3 · OFFICER — HUMAN REVIEW (laptop)",
+    "captions": {
+      "_": "Officer Sana's queue: only the cases the rules were not sure about",
+      "case": "One case: who is claiming, and why it was not approved automatically",
+      "decision": "Decision line: rule version, confidence vs the auto-approve threshold",
+      "notes": "Fraud signals and AI notes help the officer — they never decide",
+      "approve": "The officer approves. The payout is queued — money has not moved",
+      "noapprove": "The officer can approve, reject, ask for information or escalate",
+      "payments": "Payouts: every held or failed payment shows its reason",
+      "release": "A second officer must release the money (four eyes)"
+    }
+  },
+  {
+    "id": "receipt", "type": "phone", "dur": 11.5, "narration": "receipt", "panel": "art/panel-receipt.png",
+    "title": "4 · CITIZEN — DECISION, PAYOUT, HAQ RECEIPT (phone)",
+    "captions": {
+      "_": "\"Where is my money?\" — the status in simple words, spoken",
+      "status": "\"Where is my money?\" — the status in simple words, spoken",
+      "receipt": "Haq Receipt: the exact amount paid, so nobody can keep a share",
+      "noreceipt": "Every step of her claim, with the time",
+      "consents": "My data: who sees it and why — she can take her consent back"
+    }
+  },
+  {
+    "id": "admin", "type": "laptop", "dur": 37, "sync": -1.2, "narration": "admin",
+    "title": "5 · ADMIN — RULES, KILL AI, SCAM MAP, EVALUATION, JUDGE MODE (laptop)",
+    "captions": {
+      "_": "Rules are data. The auto-approve threshold comes from real cost numbers",
+      "twin": "Digital Twin: replays past claims to show what a rule change would do",
+      "kill": "Kill AI: one switch turns every AI model off",
+      "killed": "AI is OFF — claims go to officers and the service keeps working",
+      "scams": "Scam Map: where and when fake messages are being reported",
+      "eval": "Evaluation: measured on 200 test claims — is the confidence honest?",
+      "team": "Team and roles: citizen, helper, officer, admin, auditor",
+      "docs": "API docs, keys and webhooks: other programs can plug in",
+      "judge": "Judge Mode: challenges anyone can run to try to break it",
+      "judged": "Challenge 08: a fake SMS fails, a sealed one passes — the Haqdaar Seal"
+    }
+  },
+  {
+    "id": "auditor", "type": "laptop", "dur": 10.2, "narration": "auditor",
+    "title": "6 · AUDITOR — TAMPER-EVIDENT AUDIT LOG (laptop)",
+    "captions": {
+      "_": "Every step is written to an append-only, hash-chained log",
+      "verified": "\"Verify chain\" recomputes every hash: nothing was altered"
+    }
+  },
+  {
+    "id": "helper", "type": "phone", "dur": 10.7, "narration": "helper", "panel": "art/panel-helper.png",
+    "title": "7 · HELPER MODE — A SHARED PHONE (phone)",
+    "captions": {
+      "_": "Shopkeeper Asif helps families who have no smartphone",
+      "pin": "He needs the family's own PIN (demo PINs are shown on this screen)",
+      "acting": "A banner always shows who he is acting for"
+    }
+  },
+  { "id": "end", "type": "card", "image": "art/end.png", "dur": 8, "narration": "end", "title": "End" }
+]

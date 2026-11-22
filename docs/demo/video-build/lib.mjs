@@ -1,10 +1,11 @@
 // Shared helpers: launch a recorded browser context (laptop or phone), human-paced clicks, cue marks.
 import { chromium } from 'playwright';
-import { mkdirSync, writeFileSync, renameSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, renameSync, existsSync, rmSync, copyFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export const BASE = process.env.BASE || 'https://172-198-74-124.sslip.io';
-export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const MIC = resolve('audio', '_mic.wav');
+export const sleep =(ms) => new Promise((r) => setTimeout(r, ms));
 
 const CURSOR = `(() => {
   const mk = () => {
@@ -28,9 +29,11 @@ export async function launch(kind, name, { record = true, wav } = {}) {
   const args = ['--autoplay-policy=no-user-gesture-required', '--mute-audio'];
   if (phone) {
     args.push('--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream');
-    if (wav) args.push(`--use-file-for-fake-audio-capture=${resolve(wav)}`);
+    // Chromium opens the file each time the microphone starts, so the scene can swap what is "said" (setMic).
+    if (wav) { copyFileSync(resolve(wav), MIC); args.push(`--use-file-for-fake-audio-capture=${MIC}`); }
   }
-  const browser = await chromium.launch({ headless: true, channel: 'chromium', args });
+  const setMic = (src) => copyFileSync(resolve(src), MIC);
+  const browser = await chromium.launch({ headless: true, ...(process.env.CHANNEL ? { channel: process.env.CHANNEL } : {}), args });
   const size = phone ? { width: 390, height: 844 } : { width: 1280, height: 800 };
   const dir = resolve('raw', '_tmp_' + name);
   if (record) { rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true }); }
@@ -44,11 +47,17 @@ export async function launch(kind, name, { record = true, wav } = {}) {
   const page = await ctx.newPage();
   const t0 = Date.now();
   const marks = [];
-  const mark = (id) => { marks.push({ id, t: (Date.now() - t0) / 1000 }); console.log(`[${name}] ${((Date.now() - t0) / 1000).toFixed(1)}s ${id}`); };
+  mkdirSync(resolve('shots'), { recursive: true });
+  // A cue: the caption with this id starts here. Also saves a screenshot for review (taken a moment later).
+  const mark = (id) => {
+    marks.push({ id, t: (Date.now() - t0) / 1000 });
+    console.log(`[${name}] ${((Date.now() - t0) / 1000).toFixed(1)}s ${id}`);
+    setTimeout(() => page.screenshot({ path: resolve('shots', `${name}-${id}.png`) }).catch(() => {}), 1200);
+  };
 
   // Human-paced click: move the pointer there, pause, click.
   const click = async (target, { after = 900, before = 450, force = false } = {}) => {
-    const loc = typeof target === 'string' ? page.locator(target).first() : target.first();
+    const loc = (typeof target === 'string' ? page.locator(target) : target).locator('visible=true').first();
     await loc.waitFor({ state: 'visible', timeout: 20000 });
     await loc.scrollIntoViewIfNeeded();
     const b = await loc.boundingBox();
@@ -67,13 +76,16 @@ export async function launch(kind, name, { record = true, wav } = {}) {
     await sleep(after);
   };
   const scroll = async (dy, ms = 900) => {
-    const n = 12;
-    for (let i = 0; i < n; i++) { await page.mouse.wheel(0, dy / n); await sleep(ms / n); }
-    if (phone) await page.evaluate((y) => window.scrollBy({ top: 0 }), dy);
+    await page.evaluate((y) => window.scrollBy({ top: y, behavior: 'smooth' }), dy);
+    await sleep(ms);
   };
   const login = async (label) => {
     await page.goto(BASE + '/login', { waitUntil: 'networkidle' });
     await sleep(900);
+    if (!phone) {
+      const en = page.getByRole('button', { name: 'English', exact: true });
+      if (await en.count()) { await en.first().click(); await sleep(700); }
+    }
     await click(page.getByRole('button', { name: label }), { after: 700 });
     await click(page.locator('form button[type=submit]'), { after: 300 });
     await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20000 });
@@ -93,5 +105,5 @@ export async function launch(kind, name, { record = true, wav } = {}) {
     }
     await browser.close();
   };
-  return { browser, ctx, page, mark, click, type, scroll, login, done, phone };
+  return { setMic, browser, ctx, page, mark, click, type, scroll, login, done, phone };
 }

@@ -1,0 +1,47 @@
+{
+  "claim": {
+    "kicker": "On the phone · the citizen",
+    "title": "Zainab claims by voice, in Urdu",
+    "points": [
+      "<b>Voice in, voice out</b> — every screen speaks; icons, not forms",
+      "<b>Asks only for what is missing</b> — the next question is chosen by code",
+      "<b>Reads it back</b> — she answers yes or no",
+      "<b>Consent in plain words</b> — nothing is pre-ticked",
+      "<b>The AI never approves</b> — rules decide; not sure → an officer"
+    ],
+    "foot": "Real: Urdu speech recognition, language model, card scan. Works offline: the claim waits on the phone and is sent later."
+  },
+  "scamask": {
+    "kicker": "On the phone · safety and answers",
+    "title": "Is this message real? Ask the program",
+    "points": [
+      "<b>Scam check</b> — paste any SMS; verdict with reasons, spoken aloud",
+      "<b>Haqdaar Seal</b> — genuine messages carry a code that breaks if one character changes",
+      "<b>Ask with sources</b> — answers come only from the published policy",
+      "<b>Reports feed the Scam Map</b> the admin sees"
+    ],
+    "foot": "If the AI is not sure, it says so and hands over to a person."
+  },
+  "receipt": {
+    "kicker": "On the phone · the end of the task",
+    "title": "Decision, payout, Haq Receipt",
+    "points": [
+      "<b>Where is my money?</b> — status in simple words, spoken",
+      "<b>Haq Receipt</b> — the exact amount in digits and words",
+      "<b>My data and consent</b> — who sees what, and why",
+      "<b>Take consent back</b> at any time, in one tap"
+    ],
+    "foot": "Claim → decision → payout → receipt: the whole task, end to end."
+  },
+  "helper": {
+    "kicker": "On the phone · Helper Mode",
+    "title": "A trusted shopkeeper helps a family",
+    "points": [
+      "<b>Shared phone</b> — one helper, many families",
+      "<b>The family's own PIN</b> is needed every time",
+      "<b>Acting-for banner</b> — always shows whose claim this is",
+      "<b>Everything is logged</b> under the helper's name"
+    ],
+    "foot": "The demo shows the PINs on screen; a real helper never sees them."
+  }
+}

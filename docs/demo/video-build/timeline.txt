@@ -1,0 +1,10 @@
+0:00  8.4s  title  — Title
+0:08  50.0s  claim  — 1 · CITIZEN — CLAIM BY VOICE (phone, Urdu)
+0:58  24.0s  scamask  — 2 · CITIZEN — SCAM CHECK AND ASK WITH SOURCES (phone)
+1:22  26.5s  officer  — 3 · OFFICER — HUMAN REVIEW (laptop)
+1:48  12.9s  receipt  — 4 · CITIZEN — DECISION, PAYOUT, HAQ RECEIPT (phone)
+2:01  39.8s  admin  — 5 · ADMIN — RULES, KILL AI, SCAM MAP, EVALUATION, JUDGE MODE (laptop)
+2:41  10.2s  auditor  — 6 · AUDITOR — TAMPER-EVIDENT AUDIT LOG (laptop)
+2:51  10.7s  helper  — 7 · HELPER MODE — A SHARED PHONE (phone)
+3:02  10.8s  end  — End
+TOTAL 193.3s
