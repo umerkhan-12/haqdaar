@@ -328,7 +328,7 @@ from every new claim, so the name on record is whatever was typed last.
 
 ## Part C — checks on the deployed site (22 November 2026)
 
-Run against <https://172-198-74-124.sslip.io> on the final build (the AI feature suite was run on the build just before it, which differs by one line in the speech service), through the public API and a real browser. Every script is in `scripts/live/` (see its README) or `docs/demo/video-build/` and prints OK or FAIL per check.
+Run against <https://172-198-74-124.sslip.io> on the final build, through the public API and a real browser. Every script is in `scripts/live/` (see its README) or `docs/demo/video-build/` and prints OK or FAIL per check.
 
 | Suite                           | What it tries                                                                                                                                                                                                                                                                                                                                                       | Result            |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
