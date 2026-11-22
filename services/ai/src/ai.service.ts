@@ -350,9 +350,10 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-/** True when most letters of the text are Devanagari (Hindi script). */
+/** True when the text carries Devanagari (Hindi script) words. */
 export function mostlyDevanagari(text: string): boolean {
   const deva = (text.match(/[ऀ-ॿ]/g) ?? []).length;
   const letters = (text.match(/\p{L}/gu) ?? []).length;
-  return letters > 0 && deva / letters > 0.5;
+  // Any real amount of Hindi script counts: a sentence that is half Roman Urdu, half Devanagari too.
+  return letters > 0 && (deva >= 3 || deva / letters > 0.5);
 }
