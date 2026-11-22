@@ -610,6 +610,9 @@ export const api = {
   // sign-up (citizen): SMS code → name + PIN → same tokens as login
   signupStart: (phone: string) =>
     request<{ sent: true }>('POST', '/auth/signup/start', { body: { phone }, auth: false }),
+  /** Is the texted code right? Asked as soon as it is typed, before name and PIN. */
+  signupCheck: (body: { phone: string; code: string }) =>
+    request<{ ok: true }>('POST', '/auth/signup/check', { body, auth: false }),
   signupVerify: (body: { phone: string; code: string; fullName: string; pin: string }) =>
     request<Tokens>('POST', '/auth/signup/verify', { body, auth: false }),
   /** PROTOTYPE: the simulated sign-up SMS, shown on the sign-up screen (there is no real phone). */

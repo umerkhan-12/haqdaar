@@ -40,6 +40,18 @@ export class AuthController {
     return this.auth.signupStart(body.phone);
   }
 
+  /** Between the steps: is the texted code right? Refuses a wrong code before name and PIN are asked. */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('signup/check')
+  @HttpCode(200)
+  signupCheck(
+    @ZBody(SignupVerifyRequest.pick({ phone: true, code: true }))
+    body: Pick<z.infer<typeof SignupVerifyRequest>, 'phone' | 'code'>,
+  ) {
+    return this.auth.signupCheck(body.phone, body.code);
+  }
+
   /** Step 2: code + name + 4-digit PIN → a citizen account and the same token pair as login. */
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })

@@ -151,6 +151,26 @@ export class AuthService {
    * The PIN is stored like a password (argon2id), so the normal login works with it.
    * The new person id is only reserved here: cases creates the person record on the first claim.
    */
+  /**
+   * Checks the texted code as soon as it is typed, before the name and PIN are asked, so a wrong
+   * code is refused at once. It counts as a try (same limit as the final step) and does not use
+   * the code up: the final step checks it again.
+   */
+  async signupCheck(rawPhone: string, code: string): Promise<{ ok: true }> {
+    const phone = normalizePhone(rawPhone);
+    const phoneHash = lookupHash(phone, env.PII_HASH_KEY);
+    await this.prisma.signupCode.updateMany({
+      where: { phoneHash, usedAt: null, attempts: { lte: MAX_CODE_TRIES } },
+      data: { attempts: { increment: 1 } },
+    });
+    const row = await this.prisma.signupCode.findUnique({ where: { phoneHash } });
+    const verdict = checkCode(row, hashCode(phone, code, env.PII_HASH_KEY));
+    if (verdict === 'locked')
+      throw new ForbiddenException('Too many wrong codes. Ask for a new code.');
+    if (verdict !== 'ok') throw new BadRequestException('Wrong or expired code');
+    return { ok: true };
+  }
+
   async signupVerify(b: SignupVerifyRequest, userAgent?: string): Promise<TokenPair> {
     const phone = normalizePhone(b.phone);
     const phoneHash = lookupHash(phone, env.PII_HASH_KEY);

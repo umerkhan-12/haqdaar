@@ -88,6 +88,25 @@ export function Signup() {
     }
   }
 
+  /** A wrong code is refused here, before the name and PIN are asked. */
+  async function checkCodeNow() {
+    setBusy(true);
+    setProblem(null);
+    setError(null);
+    try {
+      await api.signupCheck({ phone, code });
+      go('name');
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : 0;
+      setCode('');
+      if (status === 400 || status === 403)
+        fail(status === 403 ? 'signupTooMany' : 'signupWrongCode');
+      else setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function create() {
     setBusy(true);
     setProblem(null);
@@ -197,8 +216,8 @@ export function Signup() {
             </div>
             <PinPad length={6} value={code} onChange={setCode} label={t('signupCodeLabel')} />
             <Button
-              disabled={code.length < 6}
-              onClick={() => go('name')}
+              disabled={code.length < 6 || busy}
+              onClick={checkCodeNow}
               className="min-h-16 w-full"
             >
               {t('next')}
