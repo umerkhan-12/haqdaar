@@ -12,7 +12,8 @@
     "db:generate": "prisma generate",
     "db:push": "node ../../scripts/with-env.mjs prisma db push --skip-generate",
     "ingest": "node dist/ingest.js",
-    "eval": "node dist/eval-golden.js"
+    "eval": "node dist/eval-golden.js",
+    "db:migrate": "node ../../scripts/with-env.mjs prisma migrate deploy"
   },
   "dependencies": {
     "@haqdaar/nest-kit": "workspace:*",

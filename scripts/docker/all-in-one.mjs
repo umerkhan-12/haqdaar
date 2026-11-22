@@ -3,6 +3,7 @@
 // (its /api/* is forwarded to the gateway). Used for one-box hosting (VPS, Hugging Face Spaces).
 // Needs DATABASE_URL; each service gets its own schema in it. Tables and demo data on first boot.
 import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 const root = '/app';
@@ -24,6 +25,12 @@ for (const s of DB_SERVICES) {
     if (r.status !== 0) throw new Error(`${s}: ${args.join(' ')} failed`);
   };
   run([join(root, 'scripts/docker/db-init.mjs')]);
+  // A new version may add tables or columns. They are added in place on every boot; existing rows are
+  // never touched. Prisma refuses any change that would drop data (no --accept-data-loss here), and in
+  // that case the service starts on the tables it already has rather than losing anything.
+  const prisma = createRequire(join(cwd, 'package.json')).resolve('prisma/build/index.js');
+  const sync = spawnSync(process.execPath, [prisma, 'db', 'push', '--skip-generate'], { cwd, env, stdio: 'inherit' });
+  if (sync.status !== 0) console.error(`${s}: schema update refused (it would remove data); keeping the existing tables`);
   if (env.DEMO_MODE === '1' && ['identity', 'cases'].includes(s)) run(['dist/seed.js']);
 }
 

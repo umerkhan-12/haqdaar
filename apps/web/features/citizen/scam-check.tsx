@@ -86,6 +86,7 @@ export function ScamCheck() {
   return (
     <CitizenShell>
       <Link
+        replace
         href="/citizen"
         className="mb-4 inline-flex min-h-12 min-w-12 items-center px-2 text-brand underline"
       >

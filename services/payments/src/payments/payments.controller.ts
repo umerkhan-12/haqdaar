@@ -43,6 +43,14 @@ export class PaymentsController {
       },
       orderBy: { createdAt: 'desc' },
       take: q.take,
+      // The latest step and its reason: staff must see WHY a payout is held or failed, not only that it is.
+      include: {
+        transitions: {
+          orderBy: { at: 'desc' },
+          take: 1,
+          select: { to: true, reason: true, at: true },
+        },
+      },
     });
   }
 

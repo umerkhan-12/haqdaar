@@ -389,6 +389,7 @@ export function ClaimFlow() {
   return (
     <CitizenShell>
       <Link
+        replace
         href="/citizen"
         className="mb-3 inline-flex min-h-12 min-w-12 items-center px-2 text-brand underline"
       >

@@ -23,6 +23,7 @@ export default function ErrorPage({ reset }: { error: Error; reset: () => void }
           {t('retry')}
         </Button>
         <Link
+          replace
           href="/"
           className="flex min-h-12 w-full items-center justify-center rounded-xl border-2 border-brand bg-white px-5 text-lg font-semibold text-brand-dark"
         >

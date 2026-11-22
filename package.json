@@ -31,7 +31,8 @@
     "chaos": "node scripts/reset-demo.mjs && node scripts/chaos.mjs",
     "load": "node scripts/load.mjs",
     "fuzz": "node scripts/fuzz.mjs",
-    "audio": "node services/ai/scripts/gen-audio.mjs"
+    "audio": "node services/ai/scripts/gen-audio.mjs",
+    "db:migrate": "pnpm --filter \"./services/*\" run db:migrate"
   },
   "devDependencies": {
     "@nestjs/cli": "^11",

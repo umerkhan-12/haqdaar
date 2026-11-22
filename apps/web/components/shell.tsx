@@ -97,7 +97,8 @@ export function Shell({
     const helper = getHelperSession();
     if (helper) saveSession(helper);
     saveHelperSession(null);
-    router.replace('/helper');
+    // The family's screens must not stay behind for the next family to swipe back to.
+    leaveTo('/helper');
   };
 
   const nav = STAFF_NAV[session.role];

@@ -68,6 +68,7 @@ export function Button({
 export function LinkButton({ href, children }: { href: string; children: ReactNode }) {
   return (
     <Link
+      replace
       href={href}
       className="flex min-h-12 w-full items-center justify-center rounded-xl bg-brand px-5 text-lg font-semibold text-white hover:bg-brand-dark"
     >
@@ -90,6 +91,7 @@ export function BigActionCard({
 }) {
   return (
     <Link
+      replace
       href={href}
       className={`flex min-h-24 w-full items-center gap-4 rounded-2xl border-2 p-5 text-start text-xl font-semibold shadow-sm motion-safe:active:scale-[0.99] ${TONE[tone]}`}
     >

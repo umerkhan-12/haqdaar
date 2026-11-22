@@ -25,6 +25,7 @@ export default function OfflinePage() {
           <AudioButton text={text} className="text-brand" />
         </div>
         <Link
+          replace
           href="/citizen"
           className="flex min-h-12 w-full items-center justify-center rounded-xl bg-brand px-5 text-lg font-semibold text-white"
         >

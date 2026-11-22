@@ -21,8 +21,12 @@ export function HistoryGuard() {
   return null;
 }
 
-/** Leave the current account: blank the screen first so the frozen copy the browser keeps is empty. */
+/**
+ * Leave the current account or family. Phones keep a picture of the screen they are leaving and show
+ * it during a back-swipe, so the screen is blanked first and the browser is given two frames to paint
+ * the blank before the page is replaced: the picture it keeps is then empty.
+ */
 export function leaveTo(path: string): void {
   document.documentElement.style.visibility = 'hidden';
-  window.location.replace(path);
+  requestAnimationFrame(() => requestAnimationFrame(() => window.location.replace(path)));
 }

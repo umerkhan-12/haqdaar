@@ -222,6 +222,8 @@ export interface Payment {
   creditorName: string;
   creditorAlias: string | null;
   holdReason: string | null;
+  /** Latest state change and its reason (newest first, one entry). */
+  transitions?: { to: string; reason: string | null; at: string }[];
   titleFetched: string | null;
   titleMatchScore: number | null;
   makerId: string;

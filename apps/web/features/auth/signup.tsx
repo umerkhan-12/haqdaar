@@ -208,7 +208,7 @@ export function Signup() {
             </Button>
             <p className="latin text-center text-xs text-muted" dir="ltr">
               Prototype: no real SMS is sent. The code appears above and on the{' '}
-              <Link href="/phone" className="underline">
+              <Link replace href="/phone" className="underline">
                 Mock phone screen
               </Link>{' '}
               (admin login).
@@ -275,6 +275,7 @@ export function Signup() {
           </Button>
         )}
         <Link
+          replace
           href="/login"
           className="flex min-h-12 items-center justify-center text-lg text-brand underline"
         >

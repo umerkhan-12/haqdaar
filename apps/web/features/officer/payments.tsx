@@ -14,6 +14,18 @@ import {
 import { api, ApiError, type Payment } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
+/** Bank and rail codes in words an officer can act on. */
+function plainReason(code: string | null | undefined): string {
+  if (!code) return 'No reason recorded';
+  if (/AC0[134]|ACCOUNT_NOT_FOUND|not found|no such account/i.test(code))
+    return 'The bank has no account for this mobile number. Ask the claimant for the correct number.';
+  if (/timeout|UNKNOWN|no answer/i.test(code))
+    return 'The bank did not answer. Ask the bank (inquiry) before paying again.';
+  if (/RJCT|REJECT/i.test(code))
+    return `The bank rejected the transfer (${code.replace(/^(RJCT|REQUEST_REJECTED):\s*/i, '')}).`;
+  return code;
+}
+
 const STATE_TONE: Record<string, Tone> = {
   SUCCESS: 'ok',
   HELD: 'warn',
@@ -109,7 +121,7 @@ export function OfficerPayments() {
             { header: 'Amount', cell: (p) => `Rs ${p.amount.toLocaleString('en-PK')}` },
             { header: 'Beneficiary', cell: (p) => p.creditorName },
             {
-              header: 'Why held',
+              header: 'Why held or failed',
               cell: (p) =>
                 p.holdReason ? (
                   <span>
@@ -120,6 +132,8 @@ export function OfficerPayments() {
                       </span>
                     )}
                   </span>
+                ) : p.state === 'FAILED' || p.state === 'UNKNOWN' ? (
+                  <span>{plainReason(p.transitions?.[0]?.reason)}</span>
                 ) : (
                   '—'
                 ),

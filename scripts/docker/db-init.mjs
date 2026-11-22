@@ -1,5 +1,5 @@
 // Creates a service's schema and tables on first boot. Never touches a schema that already has tables
-// (the audit log must never be reset), so later schema changes are applied with `prisma db push` by hand.
+// (the audit log must never be reset). Later additive schema changes are applied in place by all-in-one.mjs.
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 

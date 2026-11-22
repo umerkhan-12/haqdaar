@@ -92,6 +92,7 @@ export default function LoginPage() {
       </form>
 
       <Link
+        replace
         href="/signup"
         className="mt-4 flex min-h-16 w-full items-center justify-center rounded-xl border-2 border-brand bg-white px-5 text-xl font-semibold text-brand-dark hover:bg-brand-soft"
       >

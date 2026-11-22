@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { leaveTo } from '@/components/history-guard';
 import { useState } from 'react';
 import { Shell } from '@/components/shell';
 import { IconLock, IconUsers } from '@/components/icons';
@@ -33,7 +33,6 @@ interface Family {
 /** Helper Mode: a shopkeeper serves many families; each needs its own PIN, one at a time. */
 export function HelperFamilies() {
   const { t, speak } = useI18n();
-  const router = useRouter();
   const { data, error, loading, reload } = useAsync(() => api.families(), []);
   const [chosen, setChosen] = useState<Family | null>(null);
   const [pin, setPin] = useState('');
@@ -50,7 +49,7 @@ export function HelperFamilies() {
       const tokens = await api.actFor(f.personId, value, helper.accessToken);
       saveHelperSession(helper);
       saveSession(sessionFrom(tokens, f.label));
-      router.replace('/citizen');
+      leaveTo('/citizen');
     } catch (e) {
       setPinError(e);
       setPin('');
@@ -76,6 +75,14 @@ export function HelperFamilies() {
             <h1 className="flex-1 text-2xl font-bold">{t('helperTitle')}</h1>
             <AudioButton text={t('helperTitle')} className="text-brand" />
           </div>
+          <p
+            className="latin mb-3 rounded-xl border border-dashed border-slate-300 p-3 text-sm text-muted"
+            dir="ltr"
+          >
+            Prototype demo PINs (a real family keeps its PIN secret): Zainab Bibi 1111 · Rashida
+            Begum 2222 · Nasreen Bi Bi 3333 · Kaneez Fatima 4444 · Zainab Bibi (Badin) 5555. Five
+            wrong tries lock that family.
+          </p>
           {loading && !data ? (
             <Skeleton lines={4} />
           ) : error ? (
