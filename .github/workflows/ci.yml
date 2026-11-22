@@ -42,6 +42,8 @@ jobs:
         run: pnpm build
       - name: Build web app
         run: pnpm --filter @haqdaar/web build
+      - name: AI golden-set safety evaluation (offline)
+        run: pnpm eval:ai
       - name: Unit tests
         run: pnpm test
       - name: Golden-set evaluation (decision engine)

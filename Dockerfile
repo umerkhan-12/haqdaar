@@ -1,6 +1,6 @@
 # One image recipe for every Haqdaar service.
 #   docker build --build-arg SERVICE=identity -t haqdaar-identity .
-# SERVICE: gateway | identity | cases | ai | payments | audit | rails-mock | judge
+# SERVICE: gateway | identity | cases | ai | payments | audit | rails-mock | judge | knowledge
 #
 # Only the chosen service, its workspace dependencies (shared, nest-kit) and the root
 # toolchain are installed. Prisma clients are generated INSIDE the image, so the query

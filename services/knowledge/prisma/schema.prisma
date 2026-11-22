@@ -1,0 +1,45 @@
+// Knowledge service owns the `knowledge` schema; no other service reads these tables.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("KNOWLEDGE_DATABASE_URL")
+}
+
+model KnowledgeDocument {
+  docId       String           @id
+  title       String
+  contentHash String
+  version     String
+  chunks      KnowledgeChunk[]
+  updatedAt   DateTime         @updatedAt
+}
+
+model KnowledgeChunk {
+  id             String           @id
+  docId          String
+  heading        String
+  content        String
+  contentHash    String
+  embedding      Float[]
+  embeddingModel String
+  embeddingMode  String
+  dimension      Int
+  ordinal        Int
+  document       KnowledgeDocument @relation(fields: [docId], references: [docId], onDelete: Cascade)
+
+  @@unique([docId, ordinal])
+  @@index([docId])
+}
+
+model KnowledgeIndex {
+  id          String   @id
+  model       String
+  mode        String
+  dimension   Int
+  corpusHash  String
+  updatedAt   DateTime @updatedAt
+}

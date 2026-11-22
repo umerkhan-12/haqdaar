@@ -10,6 +10,15 @@ export interface AiMeta {
   fallbackUsed: boolean;
   cached: boolean;
   repaired: boolean;
+  model?: string;
+  calls?: {
+    provider: string;
+    model: string;
+    latencyMs: number;
+    fallbackUsed: boolean;
+    inputTokens?: number;
+    outputTokens?: number;
+  }[];
 }
 
 export type StructuredResult<T> =
@@ -36,9 +45,17 @@ export class TtlCache<V> {
     if (this.map.size >= this.max) this.map.delete(this.map.keys().next().value as string);
     this.map.set(k, { v, exp: Date.now() + this.ttlMs });
   }
+  clear(): void {
+    this.map.clear();
+  }
 }
 
 const cache = new TtlCache<unknown>();
+
+/** Evaluation uses a cold pass followed by a cached pass in the same process. */
+export function clearStructuredCache() {
+  cache.clear();
+}
 
 /**
  * Ask for JSON, validate with Zod, repair once with the validation error, otherwise give up.
@@ -49,14 +66,15 @@ export async function structured<S extends ZodTypeAny>(
   schema: S,
   req: Omit<LlmRequest, 'json'>,
 ): Promise<StructuredResult<z.infer<S>>> {
-  const key = sha256(JSON.stringify([req.task, req.system, req.messages]));
-  const hit = cache.get(key);
+  const key = sha256(JSON.stringify([router.activeProfile, req.task, req.system, req.messages]));
+  // Never let a prior live response bypass Kill AI. Profile is also part of the cache key.
+  const hit = router.isKilled ? undefined : cache.get(key);
   const base = { task: req.task, latencyMs: 0, fallbackUsed: false, repaired: false };
   if (hit !== undefined) {
     return {
       ok: true,
       data: hit as z.infer<S>,
-      meta: { ...base, provider: 'cache', cached: true },
+      meta: { ...base, provider: 'cache', cached: true, calls: [] },
     };
   }
 
@@ -64,9 +82,20 @@ export async function structured<S extends ZodTypeAny>(
   const meta: AiMeta = {
     ...base,
     provider: first.provider,
+    model: first.value.model,
     latencyMs: first.latencyMs,
     fallbackUsed: first.fallbackUsed,
     cached: false,
+    calls: [
+      {
+        provider: first.provider,
+        model: first.value.model,
+        latencyMs: first.latencyMs,
+        fallbackUsed: first.fallbackUsed,
+        inputTokens: first.value.inputTokens,
+        outputTokens: first.value.outputTokens,
+      },
+    ],
   };
   if (first.isMock) return { ok: false, reason: 'ai_off', meta };
 
@@ -85,13 +114,24 @@ export async function structured<S extends ZodTypeAny>(
       ],
     });
     meta.latencyMs += second.latencyMs;
+    meta.provider = second.provider;
+    meta.model = second.value.model;
+    meta.fallbackUsed ||= second.fallbackUsed;
+    meta.calls!.push({
+      provider: second.provider,
+      model: second.value.model,
+      latencyMs: second.latencyMs,
+      fallbackUsed: second.fallbackUsed,
+      inputTokens: second.value.inputTokens,
+      outputTokens: second.value.outputTokens,
+    });
     meta.repaired = true;
     if (second.isMock) return { ok: false, reason: 'ai_off', meta };
     parsed = tryParse(schema, second.value.text);
   }
   if (!parsed.ok) return { ok: false, reason: 'invalid_output', meta };
 
-  cache.set(key, parsed.data);
+  if (!router.isKilled) cache.set(key, parsed.data);
   return { ok: true, data: parsed.data, meta };
 }
 

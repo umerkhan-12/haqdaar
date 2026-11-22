@@ -47,6 +47,8 @@ envVarGroups:
         value: https://hq26-rails.onrender.com
       - key: JUDGE_URL
         value: https://hq26-judge.onrender.com
+      - key: KNOWLEDGE_URL
+        value: https://hq26-knowledge.onrender.com
       # Public half of the token key pair: not a secret. The private half lives only in identity.
       - key: JWT_PUBLIC_KEY
         value: |
@@ -206,6 +208,26 @@ services:
         fromDatabase:
           name: hq26-db
           property: connectionString
+  - type: web
+    name: hq26-knowledge
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: knowledge
+      - fromGroup: haqdaar-config
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hq26-db
+          property: connectionString
+      - key: AI_PROFILE
+        value: dev
+      - key: GEMINI_API_KEY
+        sync: false
   - type: web
     name: hq26-web
     runtime: node

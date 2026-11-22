@@ -311,11 +311,50 @@ async function auditSuite() {
   });
 }
 
+async function knowledgeSuite() {
+  describe('Knowledge (ask about the program)');
+  const citizen = await token('citizen');
+  const ask = (question, t = citizen) => api('POST', '/knowledge/ask', { token: t, body: { question } });
+
+  await it('needs a login; only citizens, helpers and officers may ask', async () => {
+    expectStatus(await api('POST', '/knowledge/ask', { body: { question: 'Who is eligible?' } }), 401);
+    expectStatus(await ask('Who is eligible?', await token('auditor')), 403);
+  });
+  await it('empty, oversized or unknown-field bodies are rejected', async () => {
+    expectStatus(await ask(''), 400);
+    expectStatus(await ask('x'.repeat(1201)), 400);
+    expectStatus(await api('POST', '/knowledge/ask', { token: citizen, body: { question: 'Who is eligible?', sources: [] } }), 400);
+  });
+  await it('an out-of-scope question is refused, with no citations', async () => {
+    const r = await ask('What is the cricket score today?');
+    expectStatus(r, 200);
+    expect(r.body.refused === true && r.body.citations.length === 0, JSON.stringify(r.body).slice(0, 200));
+  });
+  await it('an answer is only quotes from the cited policy text (needs `pnpm knowledge:ingest`)', async () => {
+    const r = await ask('My CNIC is 42201-1234567-4. Is there a guaranteed payment date?');
+    expectStatus(r, 200);
+    expect(r.body.refused === false, 'refused: run pnpm knowledge:ingest first');
+    expect(r.body.citations.some((c) => c.docId === 'payment-schedule'), JSON.stringify(r.body.citations).slice(0, 200));
+    expect(r.body.answer === r.body.citations.map((c) => c.quote).join(' '), 'answer must be exactly its quotes');
+    expect(!/42201/.test(r.body.answer), 'CNIC echoed');
+  });
+  await it('the retrieval routes of the AI service are internal only', async () => {
+    expectStatus(await api('POST', '/ai/embed', { token: citizen, body: { text: 'hello' } }), 403);
+    expectStatus(
+      await api('POST', '/ai/answer-from-sources', {
+        token: await token('admin'),
+        body: { question: 'q', sources: [{ id: 's', docId: 'd', heading: 'h', content: 'c' }] },
+      }),
+      403,
+    );
+  });
+}
+
 async function gatewaySuite() {
   describe('Gateway & resilience');
   await it('/status reports every service', async () => {
     const r = await api('GET', '/status');
-    expect(r.body.services.length === 7, `seven backends, got ${r.body.services.length}`);
+    expect(r.body.services.length === 8, `eight backends, got ${r.body.services.length}`);
     const down = r.body.services.filter((s) => !s.ok).map((s) => s.name);
     expect(down.length === 0, `down: ${down.join(', ')}`);
   });
@@ -332,6 +371,7 @@ async function gatewaySuite() {
 registerSuite(gatewaySuite);
 registerSuite(identitySuite);
 registerSuite(aiSuite);
+registerSuite(knowledgeSuite);
 registerSuite(partnerSuite);
 registerSuite(saasSuite);
 await import('./e2e-flows.mjs');

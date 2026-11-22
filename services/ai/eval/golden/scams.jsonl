@@ -1,0 +1,40 @@
+{"id":"s01","text":"Sahara Relief: your monthly assistance information is available from your program officer.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s02","text":"Your Sahara Relief claim was received. Please wait for an update from your local officer.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s03","text":"Sahara Relief: your application is under review. No payment is required.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s04","text":"Your monthly relief update is ready. Contact the program officer listed in your materials.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s05","text":"Sahara Relief confirms that your submitted information was received.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s06","text":"Please keep your claim reference. The program will share updates through its official channel.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s07","text":"Your claim needs an officer review. You do not need to send money or a PIN.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s08","text":"Sahara Relief: an update about your application is available at your local program desk.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s09","text":"Your program information was updated. Ask your designated officer if you need help.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s10","text":"This is an informational message about your relief claim. No reply is needed.","fixture":"valid","expected":"GENUINE","category":"genuine_seal"}
+{"id":"s11","text":"Congratulations, your relief grant is ready. Send a processing fee to release it.","fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s12","text":"Sahara Relief payment is blocked. Share your OTP with this number to unlock it.","fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s13","text":"Your claim is approved. Pay Rs 500 registration charges now.","fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s14","text":"Send your PIN to confirm the relief transfer immediately.","fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s15","text":"Open this link to receive your Sahara cash payment today: http://fake.example/claim", "fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s16","text":"Your lottery relief prize is waiting. Call 03009990000 now.","fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s17","text":"The program seal has been copied here, but send your secret code to verify your account.","fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s18","text":"Urgent: pay the delivery fee in 24 hours or lose your grant.","fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s19","text":"Benazir relief winner! Send your password and bank PIN to receive the prize.","fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s20","text":"Your payment is ready. Easypaisa Rs 300 to the agent before 5 pm.","fixture":"forged","expected":"SCAM","category":"fake_seal"}
+{"id":"s21","text":"BISP mubarak, Rs 25000 milenge. Pehle Rs 500 fee jama karwao.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s22","text":"Send your OTP and PIN now so we can transfer your relief money.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s23","text":"Congratulations winner! Pay a small registration fee to collect your government grant.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s24","text":"Aaj hi call karein 03009990000 warna aap ki payment band ho jayegi.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s25","text":"Click www.fake.example and enter your CNIC, OTP, and bank password for assistance.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s26","text":"Mubarak ho, lottery mein relief prize nikla. Processing charges bhej dein.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s27","text":"Urgent message from the payment office: send your secret code to this private number.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s28","text":"Ehsaas cash release karne ke liye pehle easypaisa fee jama karein.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s29","text":"Your account will be closed today. Reply with your password and OTP to avoid losing money.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s30","text":"Aap ko inaam mila hai. Foran apna PIN aur card code bhej dein.","fixture":"none","expected":"SCAM","category":"classic_scam"}
+{"id":"s31","text":"The neighborhood meeting is at the community hall at 4 pm.","fixture":"none","expected":"GENUINE","category":"ordinary"}
+{"id":"s32","text":"Your appointment with the clinic is tomorrow morning.","fixture":"none","expected":"GENUINE","category":"ordinary"}
+{"id":"s33","text":"Please bring the signed form to the school office on Monday.","fixture":"none","expected":"GENUINE","category":"ordinary"}
+{"id":"s34","text":"The water supply will be interrupted for maintenance this afternoon.","fixture":"none","expected":"GENUINE","category":"ordinary"}
+{"id":"s35","text":"Your parcel will be delivered between 2 pm and 5 pm.","fixture":"none","expected":"GENUINE","category":"ordinary"}
+{"id":"s36","text":"Mujhe bazaar se doodh aur roti le aana, ghar par milte hain.","fixture":"none","expected":"GENUINE","category":"ordinary"}
+{"id":"s37","text":"Aaj school ki chhutti do baje hogi, bachon ko waqt par le jana.","fixture":"none","expected":"GENUINE","category":"ordinary"}
+{"id":"s38","text":"Please call me when you reach the bus stop.","fixture":"none","expected":"GENUINE","category":"ordinary"}
+{"id":"s39","text":"The family dinner is on Friday. Let us know how many people are coming.","fixture":"none","expected":"GENUINE","category":"ordinary"}
+{"id":"s40","text":"Kal subah dawa lene jana hai, doctor ki parchi mez par rakhi hai.","fixture":"none","expected":"GENUINE","category":"ordinary"}

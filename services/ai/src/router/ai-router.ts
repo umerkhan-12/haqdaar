@@ -2,32 +2,39 @@ import { CircuitBreaker } from '@haqdaar/nest-kit';
 import {
   ProviderError,
   type AiProvider,
+  type LlmResponse,
   type LlmRequest,
+  type EmbeddingRequest,
   type SttRequest,
 } from '../providers/types';
 
 export type ProfileName = 'dev' | 'demo' | 'offline';
 
-/** Provider order per profile. `mock` is always the last resort, so the system never crashes. */
-export const PROFILES: Record<ProfileName, { llm: string[]; stt: string[]; description: string }> =
-  {
-    dev: {
-      llm: ['groq', 'gemini'],
-      stt: ['gemini', 'groq'],
-      description:
-        'Build mode: free Groq first for text; Gemini listens to speech first (when it has credit), Groq Whisper as fallback',
-    },
-    demo: {
-      llm: ['gemini-demo', 'groq'],
-      stt: ['gemini-demo', 'groq'],
-      description: 'Judging day: paid Gemini first for text and Urdu speech, Groq as fallback',
-    },
-    offline: {
-      llm: [],
-      stt: [],
-      description: 'No external AI: deterministic mock, every uncertain case goes to a human',
-    },
-  };
+/** Provider order per profile. LLM/STT fall back to mock so the system never crashes; embeddings fail closed. */
+export const PROFILES: Record<
+  ProfileName,
+  { llm: string[]; stt: string[]; embed: string[]; description: string }
+> = {
+  dev: {
+    llm: ['groq', 'gemini'],
+    stt: ['gemini', 'groq'],
+    embed: ['gemini'],
+    description:
+      'Build mode: free Groq first for text; Gemini listens to speech first (when it has credit), Groq Whisper as fallback',
+  },
+  demo: {
+    llm: ['gemini-demo', 'groq'],
+    stt: ['gemini-demo', 'groq'],
+    embed: ['gemini-demo'],
+    description: 'Judging day: paid Gemini first for text and Urdu speech, Groq as fallback',
+  },
+  offline: {
+    llm: [],
+    stt: [],
+    embed: [],
+    description: 'No external AI: deterministic mock, every uncertain case goes to a human',
+  },
+};
 
 export interface Attempt {
   provider: string;
@@ -48,14 +55,18 @@ export interface RoutedResult<T> {
 
 export interface CallRecord {
   task: string;
-  kind: 'llm' | 'stt';
+  kind: 'llm' | 'stt' | 'embed';
   provider: string;
   model: string;
   ok: boolean;
   isMock: boolean;
   fallbackUsed: boolean;
   latencyMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
+
+export type ProviderRoutes = Partial<Record<'llm' | 'stt' | 'embed', string[]>>;
 
 /**
  * Routes each AI call through the active profile's provider list:
@@ -72,6 +83,7 @@ export class AiRouter {
     private profile: ProfileName,
     providers: AiProvider[],
     private readonly onCall: (r: CallRecord) => void = () => undefined,
+    private readonly routeOverrides: ProviderRoutes = {},
   ) {
     this.providers = new Map(providers.map((p) => [p.id, p]));
     const mock = providers.find((p) => p.isMock);
@@ -110,14 +122,15 @@ export class AiRouter {
       profile: this.profile,
       description: prof.description,
       killed: this.killed,
-      llm: chain(prof.llm),
-      stt: chain(prof.stt),
+      llm: chain(this.order('llm')),
+      stt: chain(this.order('stt')),
+      embed: chain(this.order('embed')),
       lastResort: 'mock',
     };
   }
 
-  complete(req: LlmRequest): Promise<RoutedResult<{ text: string; model: string }>> {
-    return this.route('llm', req.task, PROFILES[this.profile].llm, (p) => {
+  complete(req: LlmRequest): Promise<RoutedResult<LlmResponse>> {
+    return this.route('llm', req.task, this.order('llm'), (p) => {
       if (!p.complete) throw new ProviderError(p.id, 'no LLM support', undefined, true);
       return p.complete(req);
     });
@@ -127,10 +140,21 @@ export class AiRouter {
     req: SttRequest,
     task = 'transcribe',
   ): Promise<RoutedResult<{ text: string; model: string }>> {
-    return this.route('stt', task, PROFILES[this.profile].stt, (p) => {
+    return this.route('stt', task, this.order('stt'), (p) => {
       if (!p.transcribe) throw new ProviderError(p.id, 'no STT support', undefined, true);
       return p.transcribe(req);
     });
+  }
+
+  embed(req: EmbeddingRequest): Promise<RoutedResult<{ embedding: number[]; model: string }>> {
+    return this.route('embed', req.task, this.order('embed'), (p) => {
+      if (!p.embed) throw new ProviderError(p.id, 'no embedding support', undefined, true);
+      return p.embed(req);
+    });
+  }
+
+  private order(kind: 'llm' | 'stt' | 'embed') {
+    return this.routeOverrides[kind] ?? PROFILES[this.profile][kind];
   }
 
   private breaker(id: string): CircuitBreaker {
@@ -143,7 +167,7 @@ export class AiRouter {
   }
 
   private async route<T extends { model: string }>(
-    kind: 'llm' | 'stt',
+    kind: 'llm' | 'stt' | 'embed',
     task: string,
     order: string[],
     call: (p: AiProvider) => Promise<T>,
@@ -180,22 +204,25 @@ export class AiRouter {
       }
     }
 
+    if (kind === 'embed')
+      throw new ProviderError('ai-router', 'No embedding provider is available');
     const value = await call(this.mock);
     attempts.push({ provider: this.mock.id, ok: true, ms: 0 });
     return this.done(kind, task, value, this.mock, attempts, started);
   }
 
   private done<T extends { model: string }>(
-    kind: 'llm' | 'stt',
+    kind: 'llm' | 'stt' | 'embed',
     task: string,
     value: T,
     p: AiProvider,
     attempts: Attempt[],
     started: number,
   ): RoutedResult<T> {
-    const firstReal = attempts.find((a) => !a.skipped);
-    const fallbackUsed = !!firstReal && firstReal.provider !== p.id;
+    // Skipped unconfigured providers count as a fallback when a later provider answers.
+    const fallbackUsed = attempts.some((attempt) => !attempt.ok);
     const latencyMs = Date.now() - started;
+    const usage = value as T & { inputTokens?: number; outputTokens?: number };
     this.onCall({
       task,
       kind,
@@ -205,6 +232,8 @@ export class AiRouter {
       isMock: p.isMock,
       fallbackUsed: fallbackUsed || p.isMock,
       latencyMs,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
     });
     return {
       value,

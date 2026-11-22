@@ -15,6 +15,7 @@ const Env = BaseEnv.extend({
   GROQ_STT_MODEL: z.string().default('whisper-large-v3'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_DEMO_API_KEY: z.string().optional(),
+  KNOWLEDGE_EMBEDDING_MODEL: z.string().default('gemini-embedding-001'),
   GEMINI_MODEL: z.string().default('gemini-3.5-flash-lite'),
   /** Hard cap on total Gemini spend (USD) across restarts; past it Gemini is skipped. */
   GEMINI_BUDGET_USD: z.coerce.number().min(0).default(2),
@@ -36,6 +37,7 @@ export const env = {
   GROQ_API_KEY: blank(raw.GROQ_API_KEY),
   GEMINI_API_KEY: blank(raw.GEMINI_API_KEY),
   GEMINI_DEMO_API_KEY: blank(raw.GEMINI_DEMO_API_KEY),
+  KNOWLEDGE_EMBEDDING_MODEL: raw.KNOWLEDGE_EMBEDDING_MODEL,
   TESSDATA_DIR: blank(raw.TESSDATA_DIR),
   TTS_CACHE_DIR: blank(raw.TTS_CACHE_DIR),
 };

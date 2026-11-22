@@ -74,6 +74,13 @@ export class CasesController {
   }
 
   @Roles('officer', 'admin')
+  @Post('cases/anomaly-scan')
+  @HttpCode(200)
+  scanAnomalies(@CurrentUser() user: AuthUser) {
+    return this.cases.scanAnomalies(requireUser(user));
+  }
+
+  @Roles('officer', 'admin')
   @Post('cases/:id/approve')
   @HttpCode(200)
   approve(

@@ -1,6 +1,7 @@
 import { autoApproveThreshold, type CostSettings, type Lane } from '@haqdaar/shared';
 import { evaluateRules, type Clause, type ClauseResult, type Facts } from './rules';
 import { ACTIVE_CALIBRATION, sigmoid, type PlattParams } from './calibration';
+import { isAnomalyFlag, type AnomalyFlag } from './anomaly';
 
 /** Evidence quality signals that feed the confidence score. */
 export interface Evidence {
@@ -20,7 +21,8 @@ export type HardFlag =
   | 'name_mismatch'
   | 'duplicate_claim_this_month'
   | 'household_not_found'
-  | 'verification_unavailable';
+  | 'verification_unavailable'
+  | AnomalyFlag;
 
 /** Snapshot stored with every decision so the Digital Twin can replay it under another rule. */
 export interface DecisionInputs {
@@ -288,7 +290,11 @@ const MISSING_TEXT: Record<string, [string, string]> = {
   cnic: ['آپ کا شناختی کارڈ نمبر', 'your CNIC number'],
 };
 
-const FLAG_TEXT: Record<HardFlag, [string, string]> = {
+/**
+ * Text the claimant reads. Anomaly (fraud-ring) flags have no entry on purpose: naming the check
+ * that fired would tell a fraudster what to change. Officers see those flags and their evidence.
+ */
+const FLAG_TEXT: Record<Exclude<HardFlag, AnomalyFlag>, [string, string]> = {
   deceased: [
     'شناختی ریکارڈ میں یہ شخص وفات شدہ درج ہے',
     'the identity record lists this person as deceased',
@@ -362,8 +368,11 @@ function explainReview(
   reason: keyof typeof REASON_TEXT | null,
 ) {
   const failed = clauseTexts(results, clauses, false);
-  const flagTexts = [...new Set(flags.map((f) => textOf(FLAG_TEXT, f, OTHER_FLAG)))];
-  // Never an empty reason: with nothing specific to say (e.g. records missing), say that an officer must check.
+  // Anomaly (fraud-ring) flags are skipped: the claimant is never told which fraud check fired.
+  const shown = flags.filter((f) => !isAnomalyFlag(f));
+  const flagTexts = [...new Set(shown.map((f) => textOf(FLAG_TEXT, f, OTHER_FLAG)))];
+  // Never an empty reason: with nothing specific to say (e.g. records missing, or only an anomaly flag),
+  // say that an officer must check.
   if (!flagTexts.length && !failed.ur.length && !reason) flagTexts.push(OTHER_FLAG);
   const ur = [
     ...flagTexts.map((t) => t[0]),

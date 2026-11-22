@@ -14,6 +14,13 @@ export interface CaseView {
     explanationEn: string;
     hardFlags: string[];
   } | null;
+  anomalies?: {
+    type: string;
+    evidenceCaseIds: string[];
+    observedCount: number;
+    threshold: number;
+  }[];
+  timeline?: { type: string }[];
 }
 
 export interface Payment {

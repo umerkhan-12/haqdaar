@@ -1,4 +1,4 @@
-# Everything in one container: 8 services + web app on one public port (PUBLIC_PORT, default 7860).
+# Everything in one container: 9 services + web app on one public port (PUBLIC_PORT, default 7860).
 #   docker build -f Dockerfile.allinone -t haqdaar-all .
 #   docker run -p 7860:7860 --env-file .env.prod haqdaar-all
 # For small single-box hosting (a VPS, Hugging Face Spaces). The per-service Dockerfile stays the
@@ -10,7 +10,7 @@ WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile --config.shamefully-hoist=true
 RUN pnpm db:generate && pnpm build && pnpm --filter @haqdaar/web build
-RUN for s in identity cases payments audit; do \
+RUN for s in identity cases payments audit knowledge; do \
       (cd services/$s && pnpm exec prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > dist/schema.sql) || exit 1; \
     done
 

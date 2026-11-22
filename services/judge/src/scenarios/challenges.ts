@@ -1,4 +1,4 @@
-import { FAMILIES } from '../demo-data';
+import { FAMILIES, MULE_ALIAS } from '../demo-data';
 import type { Scenario } from './types';
 import { waitFor } from '../run';
 import { claimFor, fmt, grantConsents, items, type CaseView } from './helpers';
@@ -385,6 +385,132 @@ const scams: Scenario = {
   },
 };
 
+const OPEN_STATUSES = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW'];
+/** Words that would tell a claimant which fraud check fired. */
+const ANOMALY_WORDING = /anomal|fraud|payout|account|helper|identit|ادائیگی|اکاؤنٹ|مددگار/i;
+
+const fraudRing: Scenario = {
+  id: 'c09-fraud-ring',
+  challenge: '09',
+  title: 'Fraud ring signals',
+  proves:
+    'A third person paid to the same account sends the claim to an officer with evidence. The claimant is told nothing about the check, and nobody is rejected by a machine.',
+  async run({ api, run }) {
+    // One after another, like a real ring: the first two are decided on their own merits,
+    // the third is the one that makes "more than two people on one account" true.
+    const ring = [FAMILIES.zainabBadin, FAMILIES.kaneez, FAMILIES.akram];
+    const claims: CaseView[] = [];
+    for (const family of ring) claims.push(await claimFor(api, run, family, { alias: MULE_ALIAS }));
+    const third = claims[2]!;
+    run.check(
+      'Three distinct claims were created',
+      new Set(claims.map((claim) => claim.id)).size === 3,
+    );
+    run.check(
+      'The third claim goes to a human, not to automatic approval or rejection',
+      third.lane === 'HUMAN_REVIEW' && third.status === 'IN_REVIEW',
+      `${third.status} / ${third.lane}`,
+    );
+
+    // What the claimant (through the helper) is shown.
+    const theirs = await run.step(
+      'The family opens the third claim',
+      async () =>
+        api.call<CaseView>('GET', `/cases/${third.id}`, { token: await api.family(ring[2]!) }),
+      (response) => `"${response.body?.decision?.explanationEn}"`,
+    );
+    const shown = theirs.body;
+    run.check(
+      'The family sees no anomaly flag, evidence or timeline entry',
+      !!shown &&
+        !shown.flags.some((flag) => flag.startsWith('anomaly:')) &&
+        !(shown.decision?.hardFlags ?? []).some((flag) => flag.startsWith('anomaly:')) &&
+        shown.anomalies === undefined &&
+        !(shown.timeline ?? []).some((event) => event.type === 'anomaly.detected'),
+    );
+    run.check(
+      'The explanation only says an officer will check',
+      !!shown?.decision &&
+        !ANOMALY_WORDING.test(`${shown.decision.explanationEn} ${shown.decision.explanationUr}`),
+      shown?.decision?.explanationUr,
+    );
+
+    const officer = await api.as('officer');
+    const scan = await run.step(
+      'Officer runs the tenant-scoped anomaly scan',
+      () =>
+        api.call<{
+          signalsDetected: number;
+          findingsCreated: number;
+          findings: { type: string; evidenceCaseIds: string[] }[];
+        }>('POST', '/cases/anomaly-scan', { token: officer }),
+      (response) =>
+        `HTTP ${response.status}: ${response.body?.signalsDetected} signals, ${response.body?.findingsCreated} new findings`,
+      (response) => response.body?.findings,
+    );
+    const retry = await run.step(
+      'Repeat the same scan to verify finding idempotency',
+      () =>
+        api.call<{ findingsCreated: number; findingsUpdated: number }>(
+          'POST',
+          '/cases/anomaly-scan',
+          { token: officer },
+        ),
+      (response) =>
+        `HTTP ${response.status}: ${response.body?.findingsCreated} new, ${response.body?.findingsUpdated} updated`,
+    );
+    const details = await Promise.all(
+      claims.map((claim) =>
+        run.step(
+          `Officer inspects evidence for ${claim.id.slice(0, 8)}`,
+          () => api.call<CaseView>('GET', `/cases/${claim.id}`, { token: officer }),
+          (response) =>
+            `${response.body?.status}, ${response.body?.flags.filter((flag) => flag.startsWith('anomaly:')).join(', ') || 'no anomaly flag'}`,
+        ),
+      ),
+    );
+    const expectedEvidence = claims.map((claim) => claim.id).sort();
+    run.check(
+      'Scan identifies the shared payout group',
+      (scan.body?.findings ?? []).some(
+        (finding) =>
+          finding.type === 'shared_payout' &&
+          expectedEvidence.every((id) => finding.evidenceCaseIds.includes(id)),
+      ),
+    );
+    const sharedFinding = (details[2]!.body?.anomalies ?? []).find(
+      (finding) =>
+        finding.type === 'shared_payout' &&
+        expectedEvidence.every((id) => finding.evidenceCaseIds.includes(id)),
+    );
+    run.check(
+      'The officer sees the flag on the third claim, with all three case IDs as evidence',
+      details[2]!.body?.flags.includes('anomaly:shared_payout') === true && !!sharedFinding,
+      sharedFinding?.evidenceCaseIds.join(', '),
+    );
+    const open = details.filter((response) => OPEN_STATUSES.includes(response.body?.status ?? ''));
+    run.check(
+      'Every ring claim still open is flagged for the officer; none is rejected by a machine',
+      open.every((response) => response.body?.flags.includes('anomaly:shared_payout')) &&
+        details.every((response) => response.body?.status !== 'REJECTED'),
+      `${open.length} of 3 still open`,
+    );
+    run.check(
+      'Repeated scan creates no duplicate findings',
+      retry.status === 200 && retry.body?.findingsCreated === 0,
+    );
+    run.check(
+      'Each flagged claim has exactly one anomaly timeline entry per finding',
+      open.every(
+        (response) =>
+          response.body?.timeline?.filter((event) => event.type === 'anomaly.detected').length ===
+          (response.body?.anomalies ?? []).length,
+      ),
+    );
+    return `Three people, one payout alias: the third claim went to an officer with ${sharedFinding?.evidenceCaseIds.length ?? 0} linked cases as evidence; the family was only told an officer will check.`;
+  },
+};
+
 export const CHALLENGE_SCENARIOS: Scenario[] = [
   costOfBeingWrong,
   notSure,
@@ -394,4 +520,5 @@ export const CHALLENGE_SCENARIOS: Scenario[] = [
   consent,
   worksForEveryone,
   scams,
+  fraudRing,
 ];
