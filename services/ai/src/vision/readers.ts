@@ -79,6 +79,8 @@ export function parseCardText(lines: string[]): CardFields {
 
 /** Words below this confidence (photo texture, QR modules) are dropped before parsing. */
 const MIN_WORD_CONFIDENCE = 55;
+const MIN_NUMBER_CONFIDENCE = 25;
+const CARD_NUMBER_SHAPE = /^\D?\d{5}\D?\d{7}\D?\d\D?$/;
 
 /**
  * One cached Tesseract worker (English model, downloaded once to TESSDATA_DIR). It runs in a
@@ -103,7 +105,15 @@ export class OcrEngine {
       b.paragraphs.flatMap((p) =>
         p.lines.map((l) =>
           l.words
-            .filter((w) => w.confidence >= MIN_WORD_CONFIDENCE)
+            .filter(
+              (w) =>
+                w.confidence >= MIN_WORD_CONFIDENCE ||
+                // Digits on a tilted or dim photo score low; a number-shaped word is kept at a lower
+                // bar, because the card number is cross-checked (QR, typed number) afterwards.
+                (w.confidence >= MIN_NUMBER_CONFIDENCE && /\d{4,}/.test(w.text)) ||
+                // A word with the exact shape of a card number is kept whatever its score.
+                CARD_NUMBER_SHAPE.test(w.text),
+            )
             .map((w) => w.text)
             .join(' '),
         ),
