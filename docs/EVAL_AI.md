@@ -68,3 +68,38 @@ CI runs the offline safety regression only, so it makes no external API calls an
 - After: the rewritten corpus (7 documents, 33 chunks) and local retrieval in `services/knowledge/src/retrieval/lexical.ts`: light English stemming, a table of about 40 concepts in English, Roman Urdu and Urdu script, heading and file-name words weighted 3x, BM25 ranking. The answer is 1 to 3 sentences from at most 2 chunks, word for word, in the language of the question (Roman Urdu is answered in Urdu).
 - Refusal: the question is refused when fewer than 60% of its words are found in the best chunk (`KNOWLEDGE_LOCAL_COVERAGE`), or when it is an order ("approve my claim"), an instruction to ignore the documents, or a request for somebody's personal details. These are fixed patterns, not a model.
 - Limits: the golden set was also used to tune the concept table and the section headings, so 1.000 is a fit to this set, not a held-out score. The Gemini-embedding path is unchanged and was not measured (no credit). A Roman Urdu question whose words are not in the concept table is refused rather than guessed.
+
+## Urdu voice
+
+"Does it really understand Urdu?" measured with `pnpm eval:voice`: 24 spoken claims (`services/ai/eval/voice/cases.json`: 10 Urdu, 7 Roman Urdu, 4 English, 3 mixed) are played through the real pipeline, `POST /ai/transcribe` then `POST /ai/extract-claim`, and scored against what was said. The run below was made against the deployed site on the final build, 22 November 2026 (`services/ai/eval/voice/run-final.json`). "Before" is the same clips on the first build (`run-v1.json`).
+
+| Speech recognition (Groq Whisper large-v3)                    | Before | Final build |
+| ------------------------------------------------------------- | ------ | ----------- |
+| Urdu clips written back in Hindi (Devanagari) letters         | 10     | 0           |
+| Urdu clips written back in Urdu script                        | 5      | 15          |
+| Word error rate, Urdu speech (wrong alphabet counts as wrong) | 0.673  | 0.144       |
+| Word error rate, mixed Urdu and English                       | 0.636  | 0.318       |
+| Word error rate, English                                      | 0.075  | 0.075       |
+| CNIC spoken in 12 clips: all 13 digits heard                  | 10     | 10          |
+
+| Fields understood (24 clips)             | Before | Final build |
+| ---------------------------------------- | ------ | ----------- |
+| Name exactly right                       | 14     | 16          |
+| CNIC right                               | 16     | 17          |
+| District right and in the programme list | 13     | 18          |
+| Household size right                     | 23     | 19          |
+| All four right                           | 8      | 11          |
+| Values returned that were never said     | 1      | 0           |
+
+On the 10 Urdu-script clips alone, the final build got the name in 9, the district in 10, the household size in 10, the CNIC in 7 and all four in 6.
+
+Median time: 1.7 s to transcribe and 1.4 s to extract (95th percentile 2.7 s and 2.5 s).
+
+What changed between the two runs: a vocabulary hint for the recogniser (programme districts and common names); a second listen with the language set to Urdu whenever the first answer contains Hindi letters (`mostlyDevanagari` in `services/ai/src/ai.service.ts`); extraction prompt v2, which returns districts in the programme's spelling and refuses instructions hidden in speech (the invented household size of 30 in the first run came from an injected sentence).
+
+Limits, stated plainly:
+
+- **The clips are synthetic neural voices, not people.** No accents, no room noise, no elderly speakers. Real speech will score lower.
+- **The free model tier limited this run.** The vendor answered "busy" 28 times; 6 of the 24 extractions and 1 transcription fell through to the last-resort answer, which says "I am not sure" and fills nothing. That is the designed behaviour (she is asked again or types), but it means the field numbers above are a lower bound for this build, and household size looks worse than in the first run for that reason. The speech-recognition rows are not affected in the same way: 23 of 24 clips were transcribed by Whisper.
+- **A spoken CNIC is the weakest field.** Thirteen digits are heard in full in 10 of 12 clips, and extracted from the sentence less often. This is why the claim also offers the card photo and typing, and why the number is read back before she confirms.
+- **24 clips is a small set.** It shows direction, not a confidence interval.
