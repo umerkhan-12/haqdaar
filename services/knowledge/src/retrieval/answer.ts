@@ -1,4 +1,12 @@
-import { cosine, hashedEmbedding, terms } from './embeddings';
+import {
+  contentTokens,
+  idfTable,
+  isOutOfScope,
+  isRomanUrdu,
+  queryTokens,
+  rankLexical,
+  type LexicalChunk,
+} from './lexical';
 
 /** Pure retrieval and answer helpers: no database, no network, no environment. */
 
@@ -14,37 +22,29 @@ export function refusal(): Answer {
   return { answer: REFUSAL, citations: [], refused: true };
 }
 
-/** Offline index: the question is hashed the same way the chunks were at ingestion. */
-export function rankByHashedEmbedding<T extends { embedding: number[] }>(
+/** At most this many chunks reach the answer, so it stays on one topic and can be read aloud. */
+const MAX_CHUNKS = 2;
+const MAX_SENTENCES = 3;
+
+/**
+ * Local ranking (offline profile, Kill AI, no embedding credit): BM25 over stemmed words and the
+ * Urdu / Roman-Urdu concept table. Nothing is returned (the caller refuses) when fewer than
+ * `minCoverage` of the question's words are in the best chunk, or when the question is an order,
+ * an injection or a request for somebody's personal details.
+ */
+export function rankLocal<T extends LexicalChunk>(
   question: string,
   chunks: T[],
-  dimension: number,
-  threshold: number,
+  minCoverage: number,
 ): Ranked<T>[] {
-  const query = hashedEmbedding(question, dimension);
-  return top(
-    chunks.map((chunk) => ({ chunk, score: cosine(query, chunk.embedding) })),
-    threshold,
-  );
-}
-
-/** Kill AI against a live index: plain word overlap, no model call. */
-export function rankByWords<T extends { content: string }>(
-  question: string,
-  chunks: T[],
-  threshold: number,
-): Ranked<T>[] {
-  return top(
-    chunks.map((chunk) => ({ chunk, score: lexicalScore(question, chunk.content) })),
-    threshold,
-  );
-}
-
-function top<T>(ranked: Ranked<T>[], threshold: number): Ranked<T>[] {
-  return ranked
-    .sort((a, b) => b.score - a.score)
-    .filter((item) => item.score >= threshold)
-    .slice(0, 4);
+  if (isOutOfScope(question)) return [];
+  const hits = rankLexical(question, chunks);
+  const best = hits[0];
+  if (!best || best.coverage < minCoverage) return [];
+  return hits
+    .filter((hit) => hit.score >= best.score * 0.75)
+    .slice(0, MAX_CHUNKS)
+    .map(({ chunk, score }) => ({ chunk, score }));
 }
 
 /** The model's answer is accepted only if it is exactly its quotes, and every quote is in a retrieved source. */
@@ -74,55 +74,55 @@ export function redactPii(input: string) {
     .replace(/(?:\+?92[-\s]?|0)3\d{2}[-\s]?\d{7}\b/g, '[PHONE]');
 }
 
-export function lexicalScore(question: string, content: string) {
-  const query = new Set(terms(question).filter((term) => !STOP.has(term)));
-  if (!query.size) return 0;
-  const body = new Set(terms(content));
-  const overlaps = [...query].filter((term) => body.has(term)).length;
-  return overlaps / query.size;
+type Pair = { source: Source; at: number; quote: string; tokens: Set<string> };
+
+/** Each English sentence with its Urdu twin, so a question in either language finds the same sentence. */
+function sentencePairs(source: Source): Pair[] {
+  const all = sentenceCandidates(source.content);
+  const en = all.filter((s) => languageOf(s) === 'en');
+  const ur = all.filter((s) => languageOf(s) === 'ur');
+  const paired = en.length === ur.length;
+  return (paired ? en : all).map((quote, at) => ({
+    source,
+    at,
+    quote,
+    tokens: new Set(contentTokens(paired ? `${quote} ${ur[at]}` : quote)),
+  }));
 }
 
-const STOP = new Set([
-  'what',
-  'when',
-  'where',
-  'who',
-  'how',
-  'the',
-  'for',
-  'and',
-  'are',
-  'is',
-  'can',
-  'will',
-  'میں',
-  'کیا',
-  'کے',
-  'کی',
-  'ہے',
-  'ہیں',
-]);
-
-/** No model: the answer is the best-matching sentences of the retrieved chunks, word for word. */
-export function extractiveAnswer(question: string, sources: Source[], threshold: number): Answer {
-  const query = new Set(terms(question).filter((term) => !STOP.has(term)));
-  const selections = sources
-    .flatMap((source) =>
-      sentenceCandidates(source.content).map((quote) => ({
-        source,
-        quote,
-        score: lexicalScore(question, quote),
-      })),
-    )
-    .filter((item) => item.score >= threshold)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 2);
-  if (!selections.length || !query.size) return refusal();
-  const citations = selections.map(({ source, quote }) => ({
-    docId: source.docId,
-    heading: source.heading,
-    quote,
-  }));
+/**
+ * No model: the answer is the sentences that share the most (and the rarest) words with the question,
+ * then the sentences that follow the best one, 3 at most, word for word, from at most two chunks,
+ * in reading order.
+ */
+export function extractiveAnswer(question: string, sources: Source[]): Answer {
+  const query = queryTokens(question);
+  const used = sources.slice(0, MAX_CHUNKS);
+  const pairs = used.flatMap(sentencePairs);
+  if (!query.length || !pairs.length) return refusal();
+  const idf = idfTable(pairs.map((pair) => [...pair.tokens]));
+  const scored = pairs
+    .map((pair) => ({
+      pair,
+      score: query.reduce((sum, token) => sum + (pair.tokens.has(token) ? idf(token) + 1 : 0), 0),
+    }))
+    .sort((a, b) => b.score - a.score);
+  const best = scored[0]!.score;
+  if (best <= 0) return refusal();
+  const chosen = scored
+    .filter((item) => item.score >= best * 0.75)
+    .slice(0, MAX_SENTENCES)
+    .map((item) => item.pair);
+  // A lone opening sentence ("eligible when all four rules are true") needs the lines after it.
+  const lead = chosen[0]!;
+  for (const pair of pairs) {
+    if (chosen.length >= MAX_SENTENCES) break;
+    if (pair.source === lead.source && pair.at > lead.at && !chosen.includes(pair))
+      chosen.push(pair);
+  }
+  const citations = chosen
+    .sort((a, b) => used.indexOf(a.source) - used.indexOf(b.source) || a.at - b.at)
+    .map(({ source, quote }) => ({ docId: source.docId, heading: source.heading, quote }));
   return {
     answer: citations.map((citation) => citation.quote).join(' '),
     citations,
@@ -130,7 +130,8 @@ export function extractiveAnswer(question: string, sources: Source[], threshold:
   };
 }
 
-function sentenceCandidates(content: string) {
+/** The sentences of a chunk that may be quoted alone (exported so the corpus format is tested). */
+export function sentenceCandidates(content: string) {
   return content
     .split(/(?<=[.!؟۔])\s+/u)
     .map((sentence) => sentence.trim())
@@ -141,7 +142,12 @@ export type AnswerLang = 'ur' | 'en';
 
 /** A sentence counts as Urdu when it has Arabic-script letters; the policy files are English + Urdu. */
 export function languageOf(text: string): AnswerLang {
-  return /[\u0600-\u06FF]/.test(text) ? 'ur' : 'en';
+  return /[؀-ۿ]/.test(text) ? 'ur' : 'en';
+}
+
+/** Language to answer a question in: Roman Urdu ("paise kab milenge") is answered in Urdu. */
+export function questionLanguage(question: string): AnswerLang {
+  return languageOf(question) === 'ur' || isRomanUrdu(question) ? 'ur' : 'en';
 }
 
 /**

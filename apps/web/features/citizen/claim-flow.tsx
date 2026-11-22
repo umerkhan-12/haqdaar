@@ -41,6 +41,7 @@ import {
   type FieldName,
 } from './claim-words';
 import { CnicPhoto } from './cnic-photo';
+import { SimpleWordsLabel, useSimpleExplanation } from './simple-explanation';
 
 /** speak → card photo → review (yes / no) → consent → done; `edit` is the typed fallback, reachable from anywhere. */
 type Step = 'speak' | 'review' | 'edit' | 'photo' | 'consent' | 'done';
@@ -126,6 +127,8 @@ export function ClaimFlow() {
   const [result, setResult] = useState<
     { kind: 'sent'; case: CaseDetail } | { kind: 'saved' } | null
   >(null);
+  // Simpler wording of the decision, if the AI has one; the result itself never waits for it.
+  const simple = useSimpleExplanation(result?.kind === 'sent' ? result.case : null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<'' | 'recording' | 'understanding' | 'sending'>('');
   const key = useRef(crypto.randomUUID());
@@ -639,11 +642,14 @@ export function ClaimFlow() {
                 tone={laneTone(result.case.lane)}
                 title={t(`lane${result.case.lane ?? 'HUMAN_REVIEW'}` as MessageKey)}
                 body={
+                  simple ??
                   (lang === 'ur'
                     ? result.case.decision?.explanationUr
-                    : result.case.decision?.explanationEn) ?? undefined
+                    : result.case.decision?.explanationEn) ??
+                  undefined
                 }
               />
+              {simple && <SimpleWordsLabel />}
               {result.case.lane !== 'AUTO_APPROVE' && (
                 <StatusCard tone="info" title={t('waitingOfficer')} />
               )}

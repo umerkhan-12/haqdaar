@@ -66,47 +66,51 @@ async function main() {
   const corpusHash = sha(
     docs.map((doc) => `${doc.docId}:${doc.contentHash}:${doc.version}`).join('\n'),
   );
-  await prisma.$transaction(async (tx) => {
-    await tx.knowledgeDocument.deleteMany({
-      where: { docId: { notIn: docs.map((doc) => doc.docId) } },
-    });
-    for (const doc of docs) {
-      await tx.knowledgeDocument.upsert({
-        where: { docId: doc.docId },
-        create: {
-          docId: doc.docId,
-          title: doc.title,
-          contentHash: doc.contentHash,
-          version: doc.version,
-        },
-        update: { title: doc.title, contentHash: doc.contentHash, version: doc.version },
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.knowledgeDocument.deleteMany({
+        where: { docId: { notIn: docs.map((doc) => doc.docId) } },
       });
-    }
-    if (ids.length) await tx.knowledgeChunk.deleteMany({ where: { id: { notIn: ids } } });
-    for (const chunk of prepared) {
-      const data = {
-        docId: chunk.docId,
-        heading: chunk.heading,
-        content: chunk.content,
-        contentHash: chunk.contentHash,
-        embedding: chunk.embedding,
-        embeddingModel: chunk.embeddingModel,
-        embeddingMode: chunk.embeddingMode,
-        dimension: chunk.dimension,
-        ordinal: chunk.ordinal,
-      };
-      await tx.knowledgeChunk.upsert({
-        where: { id: chunk.id },
-        create: { id: chunk.id, ...data },
-        update: data,
+      for (const doc of docs) {
+        await tx.knowledgeDocument.upsert({
+          where: { docId: doc.docId },
+          create: {
+            docId: doc.docId,
+            title: doc.title,
+            contentHash: doc.contentHash,
+            version: doc.version,
+          },
+          update: { title: doc.title, contentHash: doc.contentHash, version: doc.version },
+        });
+      }
+      if (ids.length) await tx.knowledgeChunk.deleteMany({ where: { id: { notIn: ids } } });
+      for (const chunk of prepared) {
+        const data = {
+          docId: chunk.docId,
+          heading: chunk.heading,
+          content: chunk.content,
+          contentHash: chunk.contentHash,
+          embedding: chunk.embedding,
+          embeddingModel: chunk.embeddingModel,
+          embeddingMode: chunk.embeddingMode,
+          dimension: chunk.dimension,
+          ordinal: chunk.ordinal,
+        };
+        await tx.knowledgeChunk.upsert({
+          where: { id: chunk.id },
+          create: { id: chunk.id, ...data },
+          update: data,
+        });
+      }
+      await tx.knowledgeIndex.upsert({
+        where: { id: 'active' },
+        create: { id: 'active', model, mode, dimension, corpusHash },
+        update: { model, mode, dimension, corpusHash },
       });
-    }
-    await tx.knowledgeIndex.upsert({
-      where: { id: 'active' },
-      create: { id: 'active', model, mode, dimension, corpusHash },
-      update: { model, mode, dimension, corpusHash },
-    });
-  });
+      // The dev database can be behind a slow tunnel: the default 5 s would abort a full re-index.
+    },
+    { maxWait: 20_000, timeout: 180_000 },
+  );
   console.log(
     `Knowledge index active: ${docs.length} documents, ${prepared.length} chunks, ${mode}/${model}, dimension ${dimension}`,
   );

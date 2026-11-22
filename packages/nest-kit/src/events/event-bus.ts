@@ -161,6 +161,10 @@ class OutboxRelay {
   ) {
     const { url, schema } = stripSchemaParam(databaseUrl);
     this.pool = new Pool({ connectionString: url, max: 2 });
+    // A database restart or a dropped network link ends idle connections. Without a listener Node treats
+    // that as an unhandled error and kills the whole service; with one, the pool simply reconnects on
+    // the next tick and no event is lost (unpublished rows are still in the outbox).
+    this.pool.on('error', () => undefined);
     this.table = `"${(schema ?? 'public').replace(/"/g, '')}"."outbox"`;
   }
 
@@ -186,6 +190,9 @@ class OutboxRelay {
       this.running = false;
       return;
     }
+    // Same for a connection that drops while we hold it: the query below rejects, the tick ends cleanly.
+    const dropped = () => undefined;
+    client.on('error', dropped);
     try {
       await client.query('BEGIN');
       const { rows } = await client.query<{ id: string; envelope: EventEnvelope }>(
@@ -216,6 +223,7 @@ class OutboxRelay {
       await client.query('ROLLBACK').catch(() => undefined);
       this.logger.error({ err }, 'Outbox relay tick failed');
     } finally {
+      client.removeListener('error', dropped);
       client.release();
       this.running = false;
     }

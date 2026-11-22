@@ -12,16 +12,16 @@ The generator (`services/ai/src/vision/fixtures.ts`) draws a card with the same 
 
 Printed fields on the genuine specimen:
 
-| Field | Value |
-| ----- | ----- |
-| Name | Zainab Bibi |
-| Father Name | Allah Ditta |
-| Gender | F |
-| Country of Stay | Pakistan |
+| Field           | Value           |
+| --------------- | --------------- |
+| Name            | Zainab Bibi     |
+| Father Name     | Allah Ditta     |
+| Gender          | F               |
+| Country of Stay | Pakistan        |
 | Identity Number | 42201-1234567-4 |
-| Date of Birth | 01.01.1980 |
-| Date of Issue | 15.03.2021 |
-| Date of Expiry | 15.03.2031 |
+| Date of Birth   | 01.01.1980      |
+| Date of Issue   | 15.03.2021      |
+| Date of Expiry  | 15.03.2031      |
 
 ## How to produce them
 
@@ -38,15 +38,15 @@ Do not commit the images unless the team decides to; they can always be regenera
 
 ## The seven files and what each one shows
 
-| File | How it is made | What the system should do |
-| ---- | -------------- | ------------------------- |
-| `genuine.jpg` | The card saved like a phone photo (JPEG quality 75, camera-style EXIF). | Reads `42201-1234567-4` and "Zainab Bibi", QR matches, every check passes. The screen says "The photo is fine" and the name and number are filled in from the card. |
-| `genuinePng.png` | The same card, lossless PNG. | Same as genuine. Shows that PNG uploads work. |
-| `tampered.jpg` | The identity-number area is cut from a different card (Rashida Begum, `42201-7654321-2`) and pasted onto Zainab's card, then saved again at quality 95. | The printed number no longer matches the QR, and the pasted area shows up as an edited region. The screen says "An officer will look at your card. Your claim continues." The claim goes to the officer queue; nothing is rejected by the machine. |
-| `blurred.jpg` | The genuine card with a strong blur. | "The photo is not clear. Please take it again." A blurry photo is never called a forgery. |
-| `editedExif.jpg` | The genuine card with the EXIF software tag "Adobe Photoshop 25.1 (Windows)". | The picture looks fine but the file says it passed through an editor. Goes to an officer. |
-| `mismatchedQr.jpg` | Zainab's printed number, but the QR encodes `42201-7654321-2`. | Printed number and QR disagree. Goes to an officer. |
-| `expired.jpg` | Issue date 10.02.2012, expiry 10.02.2022. | The expiry check fails. Goes to an officer. |
+| File               | How it is made                                                                                                                                          | What the system should do                                                                                                                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `genuine.jpg`      | The card saved like a phone photo (JPEG quality 75, camera-style EXIF).                                                                                 | Reads `42201-1234567-4` and "Zainab Bibi", QR matches, every check passes. The screen says "The photo is fine" and the name and number are filled in from the card.                                                                                |
+| `genuinePng.png`   | The same card, lossless PNG.                                                                                                                            | Same as genuine. Shows that PNG uploads work.                                                                                                                                                                                                      |
+| `tampered.jpg`     | The identity-number area is cut from a different card (Rashida Begum, `42201-7654321-2`) and pasted onto Zainab's card, then saved again at quality 95. | The printed number no longer matches the QR, and the pasted area shows up as an edited region. The screen says "An officer will look at your card. Your claim continues." The claim goes to the officer queue; nothing is rejected by the machine. |
+| `blurred.jpg`      | The genuine card with a strong blur.                                                                                                                    | "The photo is not clear. Please take it again." A blurry photo is never called a forgery.                                                                                                                                                          |
+| `editedExif.jpg`   | The genuine card with the EXIF software tag "Adobe Photoshop 25.1 (Windows)".                                                                           | The picture looks fine but the file says it passed through an editor. Goes to an officer.                                                                                                                                                          |
+| `mismatchedQr.jpg` | Zainab's printed number, but the QR encodes `42201-7654321-2`.                                                                                          | Printed number and QR disagree. Goes to an officer.                                                                                                                                                                                                |
+| `expired.jpg`      | Issue date 10.02.2012, expiry 10.02.2022.                                                                                                               | The expiry check fails. Goes to an officer.                                                                                                                                                                                                        |
 
 In the officer's case panel, the "AI notes" card shows the number on the claim, the number printed on the card, the number inside the QR, the edit suspicion and blur scores, and which checks failed.
 

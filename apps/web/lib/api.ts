@@ -29,24 +29,28 @@ interface Options {
 /** Weak signal: a request that gets no answer in this time counts as "no network", so the UI can save and retry. */
 const TIMEOUT_MS = 30_000;
 
-let refreshing: Promise<boolean> | null = null;
+type Refreshed = 'ok' | 'denied' | 'unavailable';
+let refreshing: Promise<Refreshed> | null = null;
 
 /** Refresh-token rotation; concurrent 401s share one refresh. */
-async function refresh(): Promise<boolean> {
+async function refresh(): Promise<Refreshed> {
   const s = getSession();
-  if (!s) return false;
-  refreshing ??= (async () => {
+  if (!s) return 'denied';
+  refreshing ??= (async (): Promise<Refreshed> => {
     try {
       const res = await fetch(`${BASE}/auth/refresh`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ refreshToken: s.refreshToken }),
       });
-      if (!res.ok) return false;
+      // Only the server saying "this session is over" ends it. A restart, an overload or a dropped
+      // signal is not her fault and must not throw her back to the login screen mid-claim.
+      if (res.status === 400 || res.status === 401 || res.status === 403) return 'denied';
+      if (!res.ok) return 'unavailable';
       saveSession(sessionFrom((await res.json()) as Tokens, s.familyLabel));
-      return true;
+      return 'ok';
     } catch {
-      return false;
+      return 'unavailable';
     } finally {
       setTimeout(() => (refreshing = null), 0);
     }
@@ -78,8 +82,10 @@ export async function request<T>(
   }
 
   if (res.status === 401 && token && !o.token && !retried) {
-    if (await refresh()) return request<T>(method, path, o, true);
-    clearSession();
+    const refreshed = await refresh();
+    if (refreshed === 'ok') return request<T>(method, path, o, true);
+    if (refreshed === 'denied') clearSession();
+    else throw new ApiError(0, 'offline', 'OFFLINE');
   }
 
   const text = await res.text();
@@ -576,6 +582,23 @@ export interface AuditStats {
   lastRecordedAt: string | null;
 }
 
+// ---- spoken explanation (POST /ai/explain) ----
+/** What the AI may reword: the engine's decision and its own sentences, never free text from her. */
+export interface ExplainInput {
+  lane: Lane;
+  clauses: { textUr: string; textEn: string; passed: boolean }[];
+  flags: string[];
+  templateUr: string;
+  templateEn: string;
+}
+
+/** `source: 'template'` means a guardrail refused the AI wording and the engine's own text came back. */
+export interface Explained {
+  textUr: string;
+  textEn: string;
+  source: 'ai' | 'template';
+}
+
 // ---------- endpoints ----------
 export const api = {
   login: (phone: string, password: string) =>
@@ -783,4 +806,8 @@ export const api = {
   auditEntry: (eventId: string) => request<AuditEntry>('GET', `/audit/${eventId}`),
   paymentInquiry: (id: string) => request<Payment>('POST', `/payments/${id}/inquiry`, { body: {} }),
   paymentRetry: (id: string) => request<Payment>('POST', `/payments/${id}/retry`, { body: {} }),
+
+  // ---- spoken explanation ----
+  /** The decision in one or two simpler sentences; guardrails on the server fall back to the engine's text. */
+  explain: (input: ExplainInput) => request<Explained>('POST', '/ai/explain', { body: input }),
 };

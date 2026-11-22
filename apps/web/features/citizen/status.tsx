@@ -18,6 +18,7 @@ import { useAsync, useSession } from '@/lib/hooks';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { urduNumberWords } from '@/lib/urdu-number';
 import { missingPurposes, purposeText } from './consent-purposes';
+import { SimpleWordsLabel, useSimpleExplanation } from './simple-explanation';
 
 const STATUS_TONE: Partial<Record<CaseStatus, 'ok' | 'bad' | 'warn' | 'info'>> = {
   PAID: 'ok',
@@ -208,6 +209,8 @@ function CaseCard({ id }: { id: string }) {
 
   const title = c ? t(STATUS_KEY[c.status]) : '';
   const explanation = lang === 'ur' ? c?.decision?.explanationUr : c?.decision?.explanationEn;
+  // Arrives later (or never): the engine's sentence above is what is spoken when the card appears.
+  const simple = useSimpleExplanation(c);
   const paid = c?.status === 'PAID' && c.amount != null ? c.amount : null;
   const amount = useAmountText(paid ?? 0);
 
@@ -227,7 +230,12 @@ function CaseCard({ id }: { id: string }) {
 
   return (
     <div className="space-y-4">
-      <StatusCard tone={STATUS_TONE[c.status] ?? 'info'} title={title} body={explanation} />
+      <StatusCard
+        tone={STATUS_TONE[c.status] ?? 'info'}
+        title={title}
+        body={simple ?? explanation}
+      />
+      {simple && <SimpleWordsLabel />}
       {paid != null && <HaqReceipt amount={paid} />}
       {c.status === 'IN_REVIEW' && <StatusCard tone="info" title={t('waitingOfficer')} />}
       {c.status === 'NEEDS_INFO' && <NeedsInfo c={c} onResent={reload} />}

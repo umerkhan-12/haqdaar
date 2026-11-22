@@ -14,6 +14,8 @@ import { ApiKeysController } from './api-keys/api-keys.controller';
 import { ApiKeysService } from './api-keys/api-keys.service';
 import { InternalUsageController, TenantsController } from './tenants/tenants.controller';
 import { TenantsService } from './tenants/tenants.service';
+import { UsersController } from './users/users.controller';
+import { UsersService } from './users/users.service';
 import { EventsConsumer } from './events.consumer';
 
 @Module({
@@ -37,6 +39,7 @@ import { EventsConsumer } from './events.consumer';
     ConsentsController,
     ApiKeysController,
     TenantsController,
+    UsersController,
     InternalUsageController,
     DemoResetController,
   ],
@@ -48,6 +51,7 @@ import { EventsConsumer } from './events.consumer';
     ConsentsService,
     ApiKeysService,
     TenantsService,
+    UsersService,
     EventsConsumer,
   ],
 })

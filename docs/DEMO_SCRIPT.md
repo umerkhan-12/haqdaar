@@ -7,31 +7,31 @@ Rubric tags in brackets refer to [`docs/COVERAGE.md` section 10](COVERAGE.md#10-
 
 ## Who does what
 
-| Person | Plays | Screen |
-| ------ | ----- | ------ |
-| **P1** | Narrator and Zainab (citizen) | Phone, or a narrow browser window. Logged in as "Citizen — Zainab" (`03001110001`). |
-| **P2** | Officer Sana, then Auditor Bilal | Laptop window 2: Officer (`03001110003`). Window 3: Auditor (`03001110005`). |
-| **P3** | Admin Hira | Laptop window 4: Admin (`03001110004`). This is the projector screen for rules, AI, Judge Mode and Evaluation. |
-| **P4** (if four people) | Helper, shopkeeper Asif; timekeeper | Second phone or window 5: Helper (`03001110002`). With three people, P1 does this. |
+| Person                  | Plays                               | Screen                                                                                                         |
+| ----------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **P1**                  | Narrator and Zainab (citizen)       | Phone, or a narrow browser window. Logged in as "Citizen — Zainab" (`03001110001`).                            |
+| **P2**                  | Officer Sana, then Auditor Bilal    | Laptop window 2: Officer (`03001110003`). Window 3: Auditor (`03001110005`).                                   |
+| **P3**                  | Admin Hira                          | Laptop window 4: Admin (`03001110004`). This is the projector screen for rules, AI, Judge Mode and Evaluation. |
+| **P4** (if four people) | Helper, shopkeeper Asif; timekeeper | Second phone or window 5: Helper (`03001110002`). With three people, P1 does this.                             |
 
 The app keeps one login per browser profile. Use a **separate browser profile or private window for each role**, all logged in before you start. Password for every demo account: `demo1234`.
 
 ## Timeline
 
-| Time | Step | Who | Rubric |
-| ---- | ---- | --- | ------ |
-| 0:00 | 1. The problem in one sentence | P1 | Real |
-| 0:20 | 2. Zainab claims by voice and by card scan → approved → Haq Receipt | P1 | AI, Access, Real |
-| 1:40 | 3. Fake SMS vs sealed genuine SMS | P3, P1 | AI, Innov, Safety |
-| 2:15 | 4. "I am not sure" → officer queue with AI notes → approve | P4, P2 | Safety, AI |
-| 3:00 | 5. Rule change, Digital Twin, old decision keeps its version | P3, P2 | SaaS, Innov |
-| 3:50 | 6. Consent take-back blocks the officer, shows in the audit log | P4, P2 | Safety |
-| 4:25 | 7. Helper Mode: switching families with PINs | P4 | Innov, Safety |
-| 4:55 | 8. Offline claim that syncs once | P4 | Access |
-| 5:30 | 9. Kill AI | P3, P1 | Safety, AI |
-| 6:00 | 10. Judge Mode: break it yourself | P3 + judges | Safety, SaaS |
-| 6:30 | 11. The numbers behind our threshold | P3 | AI, Safety |
-| 7:00 | Stop. Questions. | all | |
+| Time | Step                                                                | Who         | Rubric            |
+| ---- | ------------------------------------------------------------------- | ----------- | ----------------- |
+| 0:00 | 1. The problem in one sentence                                      | P1          | Real              |
+| 0:20 | 2. Zainab claims by voice and by card scan → approved → Haq Receipt | P1          | AI, Access, Real  |
+| 1:40 | 3. Fake SMS vs sealed genuine SMS                                   | P3, P1      | AI, Innov, Safety |
+| 2:15 | 4. "I am not sure" → officer queue with AI notes → approve          | P4, P2      | Safety, AI        |
+| 3:00 | 5. Rule change, Digital Twin, old decision keeps its version        | P3, P2      | SaaS, Innov       |
+| 3:50 | 6. Consent take-back blocks the officer, shows in the audit log     | P4, P2      | Safety            |
+| 4:25 | 7. Helper Mode: switching families with PINs                        | P4          | Innov, Safety     |
+| 4:55 | 8. Offline claim that syncs once                                    | P4          | Access            |
+| 5:30 | 9. Kill AI                                                          | P3, P1      | Safety, AI        |
+| 6:00 | 10. Judge Mode: break it yourself                                   | P3 + judges | Safety, SaaS      |
+| 6:30 | 11. The numbers behind our threshold                                | P3          | AI, Safety        |
+| 7:00 | Stop. Questions.                                                    | all         |                   |
 
 ---
 
@@ -45,11 +45,11 @@ The app keeps one login per browser profile. Use a **separate browser profile or
 
 Start on the citizen home screen (four big cards).
 
-1. Tap **"Claim my money"** (میرے پیسے کے لیے درخواست). The screen speaks by itself. *Let the judges hear two seconds of it.*
+1. Tap **"Claim my money"** (میرے پیسے کے لیے درخواست). The screen speaks by itself. _Let the judges hear two seconds of it._
 2. Tap **"Start with a photo of my CNIC"**, then **"Take photo"**, and choose `docs/demo/cards/genuine.jpg`.
    **Say:** "This is a specimen card, stamped 'not a real CNIC'. The photo is read on our own server. It never goes to an outside model."
    The screen says "The photo is fine". Name and number are now filled from the card.
-3. The app asks aloud only for what the card cannot tell it. Tap the **microphone**, say in Urdu: *"Main Thatta mein rehti hoon, ghar mein paanch log hain"* ("I live in Thatta, five people at home"), tap again to stop.
+3. The app asks aloud only for what the card cannot tell it. Tap the **microphone**, say in Urdu: _"Main Thatta mein rehti hoon, ghar mein paanch log hain"_ ("I live in Thatta, five people at home"), tap again to stop.
    **Say:** "It asks only for what is missing, and the next question is chosen by code, not by the model."
 4. The review screen reads everything back in Urdu. Tap the green **"Yes, it is correct"** (جی ہاں، ٹھیک ہے).
 5. Permission screen: tap both boxes (NADRA check, household income), then **"Send my claim"**.
@@ -59,8 +59,8 @@ Start on the citizen home screen (four big cards).
 7. Tap **"Where is my money?"**. When the status is "Money sent to your account", the green **Haq Receipt** shows 12,000 rupees in digits and words and reads it aloud.
    **Say:** "She hears the exact amount on her own phone, so a middleman cannot quietly keep a share."
 
-*If the microphone fails:* tap **"Type instead"**, fill Thatta and 5, continue. Say "voice is the first way in, not the only one."
-*If the voice claim goes to an officer instead of approving:* say "the speech model was not sure, so a person decides" and let P2 approve it. That is step 4 done early.
+_If the microphone fails:_ tap **"Type instead"**, fill Thatta and 5, continue. Say "voice is the first way in, not the only one."
+_If the voice claim goes to an officer instead of approving:_ say "the speech model was not sure, so a person decides" and let P2 approve it. That is step 4 done early.
 
 ### 3. Fake SMS vs sealed SMS (1:40, 35 s) — P3 then P1
 
@@ -69,7 +69,7 @@ Start on the citizen home screen (four big cards).
 2. **P1:** Citizen home > **"Is this message real?"**, paste:
    `BISP: Rs 25000 lene ke liye apna PIN aur Rs 500 fee bhejein`
    Tap **"Check"** → **Scam! Do not act on it**, with the reasons (asks for a PIN, asks for a fee, program name without a code).
-3. *Optional, 10 s:* paste the genuine SMS with one digit of the amount changed → Scam (forged code).
+3. _Optional, 10 s:_ paste the genuine SMS with one digit of the amount changed → Scam (forged code).
    **Say:** "This is the shopkeeper's problem from the brief. The AI is only used for messages the seal and the rules cannot settle, and it is allowed to say 'not sure'."
 
 ### 4. "I am not sure" (2:15, 45 s) — P4 files it during step 3; P2 reviews
@@ -97,7 +97,7 @@ Start on the citizen home screen (four big cards).
 The pre-staged case in the queue belongs to Kaneez Fatima.
 
 1. **P4:** Helper > **Kaneez Fatima** > PIN `4444` > **"My data and permission"** > on the **NADRA** row tap **"Take back"** > **"Yes, take it back"**.
-2. **P2 (officer):** tap Kaneez's case in the queue again. It is refused: *"The citizen has withdrawn (or not given) consent: personal data is blocked"*.
+2. **P2 (officer):** tap Kaneez's case in the queue again. It is refused: _"The citizen has withdrawn (or not given) consent: personal data is blocked"_.
    **Say:** "This is enforced on the server on the very next request, not hidden in the screen."
 3. **P2 (auditor window):** **Audit log** > type `identity.consent.withdrawn` in the event filter. The entry is there, with who and when. Tap **"Verify chain"**.
    **Say:** "The log is append-only and hash-chained. The auditor can read everything and change nothing."
@@ -143,21 +143,21 @@ The pre-staged case in the queue belongs to Kaneez Fatima.
 
 ## Questions judges will ask
 
-| Question | Answer |
-| -------- | ------ |
-| **Why microservices for a hackathon?** | Three reasons we can show. Blast radius: the AI service can be down and login, payments and audit keep working (`pnpm chaos`). Security boundaries: only identity can sign tokens, only payments can move money, audit is separate from what it audits. Parallel work: one owner per service and schema. The cost is more moving parts; we kept it down with one shared toolkit, shared contracts, one Postgres with a schema per service and a queue inside Postgres. For a small deployment the same services can run in one container (`Dockerfile.allinone`). |
-| **Why 0.988?** | It is not chosen, it is derived: approve alone only if the expected loss of approving, (1 − p) × 25,000, is below the cost of a review, 300. The costs are admin settings. Nonsense costs (zero, or a review dearer than a wrong approval) switch auto-approval off. |
-| **Is that confidence a real probability?** | The raw score has hand-set weights, so we calibrate it with Platt scaling on a labelled set and show the reliability table. A test refits it and fails if the stored values drift. It is calibrated on synthetic data only. |
-| **What if the model is wrong?** | The model cannot approve, reject or pay. It reads speech, sorts messages and phrases explanations. Its output is schema-checked; what the phone reports can only add caution; she confirms a read-back before anything is sent; the card photo overrides a misheard name. A wrong reading costs a review, not a payout. |
-| **What if the model is down or the quota runs out?** | Fallback chain with a circuit breaker per provider, then a deterministic local answer that routes to a person. Kill AI shows it. |
-| **How do you stop a helper stealing a family's money?** | A PIN per family, with a lock after five wrong tries. Actions are recorded as the helper acting for that person. Before paying, the account title is fetched and matched to the beneficiary; a mismatch holds the payout. One account collecting for more than two other people in a day is held. Releasing a held payout needs a second officer. She hears the exact amount (Haq Receipt), and the SMS is sealed. Fraud-ring signals across claims are landing. <!-- STATUS: pending merge --> |
-| **Can someone sign up and claim with another person's CNIC?** | Our own fuzz test found exactly that. Now the first claim that ties a CNIC to a self-registered account always goes to an officer. Knowing a number proves nothing. |
-| **How would real data be protected?** | CNIC and phone are encrypted at rest (AES-256-GCM) with a keyed hash for lookup; staff screens show masked values; the queue shows no names; consent is checked on every staff read; PII is removed before any prompt; card photos are processed on our server and never sent to an outside model; the audit log records every access-changing event. For production we would add key management in a vault, data residency, retention limits and an external anchor for the audit chain. |
-| **What happens if Raast times out after the money left?** | The payment becomes UNKNOWN and is never re-sent blindly. A status inquiry settles it. One idempotency key per payout, a unique constraint, and the rail dedupes by our reference. Judge Mode shows it. |
-| **How do you know the books are right?** | Double-entry ledger; balances are derived, never edited; reconciliation against the bank statement flags a duplicate settlement. |
-| **Why not let the AI decide? It is an AI hackathon.** | Because a decision about someone's money must be replayable. Every decision stores its inputs, rule version, confidence and threshold. An LLM answer cannot be replayed. The AI does the parts people cannot: hearing Urdu, reading a card, sorting messages. |
-| **What is not built, and why?** | Subscription billing: a relief program has no paying subscribers, so plans are per-program usage limits, reported but not enforced. WhatsApp and email: SMS is simulated, so there was nothing real to send through. Versioned migrations: we used `prisma db push`. A user-management screen. A complaint case from the Haq Receipt. A fraud-desk queue for "not sure" scam messages. Server-side memory across devices. We chose depth on one task over these. |
-| **What are you least sure about?** | Accuracy on real speech and real photos; scam recall on wording we did not template; the free Urdu voice endpoint is unofficial. Each of these fails toward a human. |
+| Question                                                      | Answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Why microservices for a hackathon?**                        | Three reasons we can show. Blast radius: the AI service can be down and login, payments and audit keep working (`pnpm chaos`). Security boundaries: only identity can sign tokens, only payments can move money, audit is separate from what it audits. Parallel work: one owner per service and schema. The cost is more moving parts; we kept it down with one shared toolkit, shared contracts, one Postgres with a schema per service and a queue inside Postgres. For a small deployment the same services can run in one container (`Dockerfile.allinone`). |
+| **Why 0.988?**                                                | It is not chosen, it is derived: approve alone only if the expected loss of approving, (1 − p) × 25,000, is below the cost of a review, 300. The costs are admin settings. Nonsense costs (zero, or a review dearer than a wrong approval) switch auto-approval off.                                                                                                                                                                                                                                                                                              |
+| **Is that confidence a real probability?**                    | The raw score has hand-set weights, so we calibrate it with Platt scaling on a labelled set and show the reliability table. A test refits it and fails if the stored values drift. It is calibrated on synthetic data only.                                                                                                                                                                                                                                                                                                                                       |
+| **What if the model is wrong?**                               | The model cannot approve, reject or pay. It reads speech, sorts messages and phrases explanations. Its output is schema-checked; what the phone reports can only add caution; she confirms a read-back before anything is sent; the card photo overrides a misheard name. A wrong reading costs a review, not a payout.                                                                                                                                                                                                                                           |
+| **What if the model is down or the quota runs out?**          | Fallback chain with a circuit breaker per provider, then a deterministic local answer that routes to a person. Kill AI shows it.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **How do you stop a helper stealing a family's money?**       | A PIN per family, with a lock after five wrong tries. Actions are recorded as the helper acting for that person. Before paying, the account title is fetched and matched to the beneficiary; a mismatch holds the payout. One account collecting for more than two other people in a day is held. Releasing a held payout needs a second officer. She hears the exact amount (Haq Receipt), and the SMS is sealed. Fraud-ring signals across claims are landing. <!-- STATUS: pending merge -->                                                                   |
+| **Can someone sign up and claim with another person's CNIC?** | Our own fuzz test found exactly that. Now the first claim that ties a CNIC to a self-registered account always goes to an officer. Knowing a number proves nothing.                                                                                                                                                                                                                                                                                                                                                                                               |
+| **How would real data be protected?**                         | CNIC and phone are encrypted at rest (AES-256-GCM) with a keyed hash for lookup; staff screens show masked values; the queue shows no names; consent is checked on every staff read; PII is removed before any prompt; card photos are processed on our server and never sent to an outside model; the audit log records every access-changing event. For production we would add key management in a vault, data residency, retention limits and an external anchor for the audit chain.                                                                         |
+| **What happens if Raast times out after the money left?**     | The payment becomes UNKNOWN and is never re-sent blindly. A status inquiry settles it. One idempotency key per payout, a unique constraint, and the rail dedupes by our reference. Judge Mode shows it.                                                                                                                                                                                                                                                                                                                                                           |
+| **How do you know the books are right?**                      | Double-entry ledger; balances are derived, never edited; reconciliation against the bank statement flags a duplicate settlement.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Why not let the AI decide? It is an AI hackathon.**         | Because a decision about someone's money must be replayable. Every decision stores its inputs, rule version, confidence and threshold. An LLM answer cannot be replayed. The AI does the parts people cannot: hearing Urdu, reading a card, sorting messages.                                                                                                                                                                                                                                                                                                     |
+| **What is not built, and why?**                               | Subscription billing: a relief program has no paying subscribers, so plans are per-program usage limits, reported but not enforced. WhatsApp and email: SMS is simulated, so there was nothing real to send through. Versioned migrations: we used `prisma db push`. A user-management screen. A complaint case from the Haq Receipt. A fraud-desk queue for "not sure" scam messages. Server-side memory across devices. We chose depth on one task over these.                                                                                                  |
+| **What are you least sure about?**                            | Accuracy on real speech and real photos; scam recall on wording we did not template; the free Urdu voice endpoint is unofficial. Each of these fails toward a human.                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ---
 
@@ -187,14 +187,14 @@ The pre-staged case in the queue belongs to Kaneez Fatima.
 
 ## Fallback plan
 
-| What fails | What to do | What to say |
-| ---------- | ---------- | ----------- |
-| Venue internet | Run on the laptop (`localhost`). Recorded Urdu prompts still play. Admin > AI > **Offline**. | "No outside AI now. Watch the claim still finish, through a person." |
-| Speech vendor (Groq) down or out of quota | The app says it could not hear, then offers typing. Use "Type instead". | "Voice is the first way in, not the only one. Typing is not doubt, so it does not cost her a review." |
-| LLM down | Scam check falls back to the seal and the rules. Extraction answers "not sure". | "This is the Kill AI path, for real this time." |
-| Urdu voice endpoint down | Recorded prompts still play; other sentences use the phone's own voice. | "Three levels of voice: recordings, server, phone." |
-| **Offline profile, full claim** | Zainab scans the specimen card (the check adds "AI is off: an officer reviews every document"), types district and household, sends. The case goes to the officer queue. P2 opens it, reads the notes, approves. Payout and Haq Receipt follow on the mock rail. | "With no AI at all the claim still completes, through a human. That is the design, not an accident." |
-| Deployed site slow or down | Switch to the laptop. | Nothing. Just switch. |
-| Laptop dies | Second laptop on the deployed link; then the backup video. | "A live demo is mandatory, so we brought two." |
-| A Judge Mode scenario fails | Read the failing step aloud. Do not hide it. Tap "Reset demo…" and move on. | "That is a real failure and it tells us exactly where. The log has it." |
-| Microphone permission blocked | Use the card scan plus "Type instead". | Same as the speech-vendor line. |
+| What fails                                | What to do                                                                                                                                                                                                                                                       | What to say                                                                                           |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Venue internet                            | Run on the laptop (`localhost`). Recorded Urdu prompts still play. Admin > AI > **Offline**.                                                                                                                                                                     | "No outside AI now. Watch the claim still finish, through a person."                                  |
+| Speech vendor (Groq) down or out of quota | The app says it could not hear, then offers typing. Use "Type instead".                                                                                                                                                                                          | "Voice is the first way in, not the only one. Typing is not doubt, so it does not cost her a review." |
+| LLM down                                  | Scam check falls back to the seal and the rules. Extraction answers "not sure".                                                                                                                                                                                  | "This is the Kill AI path, for real this time."                                                       |
+| Urdu voice endpoint down                  | Recorded prompts still play; other sentences use the phone's own voice.                                                                                                                                                                                          | "Three levels of voice: recordings, server, phone."                                                   |
+| **Offline profile, full claim**           | Zainab scans the specimen card (the check adds "AI is off: an officer reviews every document"), types district and household, sends. The case goes to the officer queue. P2 opens it, reads the notes, approves. Payout and Haq Receipt follow on the mock rail. | "With no AI at all the claim still completes, through a human. That is the design, not an accident."  |
+| Deployed site slow or down                | Switch to the laptop.                                                                                                                                                                                                                                            | Nothing. Just switch.                                                                                 |
+| Laptop dies                               | Second laptop on the deployed link; then the backup video.                                                                                                                                                                                                       | "A live demo is mandatory, so we brought two."                                                        |
+| A Judge Mode scenario fails               | Read the failing step aloud. Do not hide it. Tap "Reset demo…" and move on.                                                                                                                                                                                      | "That is a real failure and it tells us exactly where. The log has it."                               |
+| Microphone permission blocked             | Use the card scan plus "Type instead".                                                                                                                                                                                                                           | Same as the speech-vendor line.                                                                       |

@@ -10,7 +10,8 @@ const Env = BaseEnv.extend({
   KNOWLEDGE_EMBEDDING_MODEL: z.string().default('gemini-embedding-001'),
   AI_TIMEOUT_MS: z.coerce.number().int().min(1000).default(20_000),
   KNOWLEDGE_RELEVANCE_THRESHOLD: z.coerce.number().min(-1).max(1).default(0.32),
-  KNOWLEDGE_OFFLINE_THRESHOLD: z.coerce.number().min(-1).max(1).default(0.12),
+  // Share of the question's words the best chunk must contain before the local path answers.
+  KNOWLEDGE_LOCAL_COVERAGE: z.coerce.number().min(0).max(1).default(0.6),
   LOG_PRETTY: z.string().optional(),
 });
 

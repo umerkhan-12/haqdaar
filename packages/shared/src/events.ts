@@ -24,6 +24,13 @@ export const EventSchemas = {
   'identity.user.logged_in': z.object({ userId: z.string() }),
   /** A citizen created their own account (phone verified by a one-time code). */
   'identity.user.registered': z.object({ userId: z.string(), personId: z.string() }),
+  /** An admin added a team member (staff or helper). Never the phone or the temporary password. */
+  'identity.user.created': z.object({ userId: z.string(), role: z.string() }),
+  /** An admin changed a team member's role or disabled/enabled them. `changes` holds from → to. */
+  'identity.user.updated': z.object({
+    userId: z.string(),
+    changes: z.record(z.object({ from: z.string(), to: z.string() })),
+  }),
   /** A platform admin launched a new program (tenant) with its first admin user. */
   'identity.tenant.created': z.object({
     tenantId: z.string().uuid(),
@@ -98,6 +105,29 @@ export const EventSchemas = {
     ok: z.boolean(),
     ms: z.number(),
     planner: z.enum(['model', 'keywords']),
+  }),
+  /** One message checked for scams. Powers the Scam Map. Never the message text, never who sent it. */
+  'ai.scam.checked': z.object({
+    verdict: z.enum(['GENUINE', 'SCAM', 'UNSURE']),
+    confidence: z.number().min(0).max(1),
+    redFlags: z.array(z.string().max(40)).max(12),
+    sealValid: z.boolean().nullable(),
+    district: z.string().max(40).nullable(),
+    channel: z.enum(['citizen', 'helper', 'partner', 'staff']),
+  }),
+  /** A citizen chose to show a doubtful message to an officer. `text` is PII-masked and cut short. */
+  'ai.scam.reported': z.object({
+    reportId: z.string().uuid(),
+    verdict: z.enum(['GENUINE', 'SCAM', 'UNSURE']),
+    redFlags: z.array(z.string().max(40)).max(12),
+    district: z.string().max(40).nullable(),
+    reporterRole: z.string().max(20),
+    text: z.string().max(600),
+  }),
+  /** An officer's label for a reported message; the human truth behind the false-alarm number. */
+  'ai.scam.report_resolved': z.object({
+    reportId: z.string().uuid(),
+    label: z.enum(['confirmed_scam', 'genuine']),
   }),
   'judge.scenario.ran': z.object({
     scenarioId: z.string(),

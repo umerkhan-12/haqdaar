@@ -24,6 +24,7 @@ async function main() {
     .filter(Boolean)
     .map((line) => JSON.parse(line) as Golden);
   const outcomes: {
+    id: string;
     expectedRefused: boolean;
     refused: boolean;
     expectedDocIds: string[];
@@ -39,6 +40,7 @@ async function main() {
     if (!response.ok) throw new Error(`Golden ${item.id} failed with HTTP ${response.status}`);
     const answer = (await response.json()) as Answer;
     outcomes.push({
+      id: item.id,
       expectedRefused: item.expectedRefused,
       refused: answer.refused,
       expectedDocIds: item.expectedDocIds,
@@ -52,6 +54,8 @@ async function main() {
   ).length;
   const answerableCases = outcomes.filter((o) => !o.expectedRefused).length;
   const invalidRefusals = outcomes.filter((o) => !o.expectedRefused && o.refused).length;
+  const cited = (o: (typeof outcomes)[number]) =>
+    o.citedDocIds.some((id) => o.expectedDocIds.includes(id));
   console.log(
     JSON.stringify(
       {
@@ -62,7 +66,15 @@ async function main() {
           outcomes.filter((o) => o.expectedRefused && o.refused).length,
           refusalCases,
         ),
+        // Of everything refused, how much should have been refused.
+        refusalPrecision: ratio(
+          outcomes.filter((o) => o.expectedRefused && o.refused).length,
+          outcomes.filter((o) => o.refused).length,
+        ),
         falseRefusalRate: ratio(invalidRefusals, answerableCases),
+        failed: outcomes
+          .filter((o) => (o.expectedRefused ? !o.refused : o.refused || !cited(o)))
+          .map((o) => o.id),
       },
       null,
       2,

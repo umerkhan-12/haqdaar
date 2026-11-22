@@ -4,10 +4,9 @@ import { PrismaService } from './prisma.service';
 import { cosine } from './retrieval/embeddings';
 import {
   extractiveAnswer,
-  languageOf,
   localize,
-  rankByHashedEmbedding,
-  rankByWords,
+  questionLanguage,
+  rankLocal,
   redactPii,
   refusal,
   validCitations,
@@ -15,10 +14,11 @@ import {
   type AnswerLang,
   type Source,
 } from './retrieval/answer';
+import { isOutOfScope } from './retrieval/lexical';
 import { env } from './env';
 
 const LIVE_THRESHOLD = env.KNOWLEDGE_RELEVANCE_THRESHOLD;
-const OFFLINE_THRESHOLD = env.KNOWLEDGE_OFFLINE_THRESHOLD;
+const LOCAL_COVERAGE = env.KNOWLEDGE_LOCAL_COVERAGE;
 
 type AiStatus = { profile: 'dev' | 'demo' | 'offline'; killed: boolean };
 type Chunk = {
@@ -39,13 +39,15 @@ export class KnowledgeService {
   ) {}
 
   /** Answers only from the policy files, in the language asked for (default: the language of the question). */
-  async ask(question: string, lang: AnswerLang = languageOf(question)) {
+  async ask(question: string, lang: AnswerLang = questionLanguage(question)) {
     const sources: Source[] = [];
     return localize(await this.answer(question, sources), sources, lang);
   }
 
   private async answer(question: string, used: Source[]): Promise<Answer> {
     const redactedQuestion = redactPii(question);
+    // Orders, injected instructions and requests for somebody's details never reach a model.
+    if (isOutOfScope(redactedQuestion)) return this.refused();
     const index = await this.prisma.knowledgeIndex.findUnique({ where: { id: 'active' } });
     if (!index) return this.refused();
 
@@ -76,12 +78,9 @@ export class KnowledgeService {
       else offline = true;
     }
     if (offline) {
-      // Offline index uses the same deterministic hash vectors created by ingestion. Against a
-      // live index, use local lexical matching.
-      ranked =
-        status?.profile === 'offline' && index.mode === 'offline'
-          ? rankByHashedEmbedding(redactedQuestion, chunks, index.dimension, OFFLINE_THRESHOLD)
-          : rankByWords(redactedQuestion, chunks, OFFLINE_THRESHOLD);
+      // No usable embedding: BM25 over stemmed words and the Urdu / Roman-Urdu concept table.
+      // The stored hashed vectors are not used to rank; they only keep the index shape valid.
+      ranked = rankLocal(redactedQuestion, chunks, LOCAL_COVERAGE);
     }
     if (!ranked.length) return this.refused();
 
@@ -92,7 +91,7 @@ export class KnowledgeService {
       content: chunk.content,
     }));
     used.push(...sources);
-    if (offline) return extractiveAnswer(redactedQuestion, sources, OFFLINE_THRESHOLD);
+    if (offline) return extractiveAnswer(redactedQuestion, sources);
     try {
       const answer = await this.upstream.call<{
         answer: string;

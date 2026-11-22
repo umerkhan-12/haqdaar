@@ -24,6 +24,7 @@
     "knowledge:ingest": "pnpm --filter @haqdaar/knowledge run ingest",
     "knowledge:eval": "pnpm --filter @haqdaar/knowledge run eval",
     "eval:ai": "pnpm --filter @haqdaar/ai run eval:ai",
+    "eval:voice": "node services/ai/scripts/eval-voice.mjs",
     "keys": "node scripts/gen-keys.mjs",
     "e2e": "node scripts/reset-demo.mjs && node scripts/e2e.mjs",
     "demo:reset": "node scripts/reset-demo.mjs",

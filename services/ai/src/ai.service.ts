@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -15,6 +16,7 @@ import {
   type AuthUser,
   type Principal,
 } from '@haqdaar/nest-kit';
+import type { EventEnvelope } from '@haqdaar/shared';
 import { env } from './env';
 import { edgeSynthesizer, Speech, SpeechUnavailableError, type SpeechLang } from './speech/speech';
 import { AiRouter, PROFILES, type CallRecord, type ProfileName } from './router/ai-router';
@@ -23,6 +25,7 @@ import { GeminiProvider } from './providers/gemini.provider';
 import { MockProvider } from './providers/mock.provider';
 import { extractClaim } from './tasks/extract-claim';
 import { scamCheck } from './tasks/scam-check';
+import { scamSamples } from './tasks/scam-samples';
 import { explainDecision, type ExplainRequest } from './tasks/explain';
 import { redactPii } from './tasks/pii';
 import { runAssist, type AssistLang } from './assist/assist';
@@ -30,6 +33,14 @@ import { callerTools } from './assist/tools';
 import { callerContext } from './caller-context';
 import { documentCheck, UnsupportedImageError } from './vision/document-check';
 import { OcrEngine } from './vision/readers';
+
+/** What the citizen's screen showed her, sent along when she asks an officer to look. */
+export interface ScamReport {
+  text: string;
+  verdict: 'GENUINE' | 'SCAM' | 'UNSURE';
+  redFlags: string[];
+  district?: string;
+}
 
 /** Rolling in-memory stats for the evaluation dashboard (persisted via events to audit). */
 interface Stats {
@@ -124,8 +135,69 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     return explainDecision(this.router, req, env.AI_TIMEOUT_MS);
   }
 
-  scamCheck(text: string) {
-    return scamCheck(this.router, text, env.SEAL_SECRET);
+  /**
+   * Every check also feeds the Scam Map: verdict, rule ids, district and channel go to the audit
+   * log. The message text and the sender never leave this function.
+   */
+  async scamCheck(text: string, district?: string) {
+    const result = await scamCheck(this.router, text, env.SEAL_SECRET);
+    const principal = callerContext.getStore();
+    const role = principal?.kind === 'user' ? principal.role : null;
+    const partner = principal?.kind === 'user' && !!principal.scopes?.length;
+    this.publishQuietly(() =>
+      buildEvent(
+        'ai.scam.checked',
+        {
+          verdict: result.verdict,
+          confidence: result.confidence,
+          redFlags: result.redFlags,
+          sealValid: result.sealValid,
+          district: district ?? null,
+          channel: partner ? 'partner' : role === 'citizen' || role === 'helper' ? role : 'staff',
+        },
+        { source: 'ai', principal },
+      ),
+    );
+    return result;
+  }
+
+  /** The 40 synthetic messages behind the Scam Map's "Load sample messages" button. */
+  scamSamples() {
+    return scamSamples(env.SEAL_SECRET);
+  }
+
+  /**
+   * "Show this to an officer": the doubtful message goes to the audit log with phone numbers and
+   * CNICs masked and the text cut short, so an officer can label it. Nothing else is stored.
+   */
+  scamReport(report: ScamReport, user: AuthUser) {
+    const reportId = randomUUID();
+    this.publishQuietly(() =>
+      buildEvent(
+        'ai.scam.reported',
+        {
+          reportId,
+          verdict: report.verdict,
+          redFlags: report.redFlags,
+          district: report.district ?? null,
+          reporterRole: user.role,
+          text: redactPii(report.text).text.slice(0, 600),
+        },
+        { source: 'ai', principal: user },
+      ),
+    );
+    return { reportId, sent: true };
+  }
+
+  /** Map events are best effort: a bad payload or a bus outage must never fail her request. */
+  private publishQuietly(build: () => EventEnvelope) {
+    try {
+      void this.bus
+        .publish(build())
+        .catch((err) => this.logger.error({ err }, 'Could not publish scam event'));
+    } catch (err) {
+      this.logger.error({ err }, 'Could not build scam event');
+    }
   }
 
   /**

@@ -41,6 +41,17 @@ const AssistBody = z
     lang: z.enum(['ur', 'en']).default('ur'),
   })
   .strict();
+/** District is optional and only used to place the check on the Scam Map; it is never tied to a person. */
+const District = z.string().trim().min(1).max(40).optional();
+const ScamCheckBody = ScamCheckRequest.extend({ district: District });
+const ScamReportBody = z
+  .object({
+    text: z.string().trim().min(1).max(2000),
+    verdict: z.enum(['GENUINE', 'SCAM', 'UNSURE']),
+    redFlags: z.array(z.string().max(40)).max(12).default([]),
+    district: District,
+  })
+  .strict();
 const ExtractBody = z.object({ transcript: z.string().min(1).max(4000) });
 const EmbedBody = z.object({
   text: z.string().min(1).max(4000),
@@ -135,8 +146,26 @@ export class AiController {
   @PartnerScope('scam:check')
   @Post('scam-check')
   @HttpCode(200)
-  scam(@ZBody(ScamCheckRequest) b: z.infer<typeof ScamCheckRequest>) {
-    return this.ai.scamCheck(b.text);
+  scam(@ZBody(ScamCheckBody) b: z.infer<typeof ScamCheckBody>) {
+    return this.ai.scamCheck(b.text, b.district);
+  }
+
+  /** The fixed synthetic set (with freshly sealed genuine ones) that the Scam Map demo button sends. */
+  @Roles('admin')
+  @Get('scam-samples')
+  scamSamples() {
+    return this.ai.scamSamples();
+  }
+
+  /** "Show this to an officer": records a PII-masked report an officer labels on the Scam Map. */
+  @Roles('citizen', 'helper')
+  @Post('scam-report')
+  @HttpCode(200)
+  scamReport(
+    @CurrentUser() user: AuthUser,
+    @ZBody(ScamReportBody) b: z.infer<typeof ScamReportBody>,
+  ) {
+    return this.ai.scamReport(b, user);
   }
 
   /**

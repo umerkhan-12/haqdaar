@@ -1,6 +1,6 @@
 import { Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Roles, ZBody, ZQuery } from '@haqdaar/nest-kit';
+import { CurrentUser, Roles, ZBody, ZQuery, type AuthUser } from '@haqdaar/nest-kit';
 import { z } from 'zod';
 import { AuditService } from './audit.service';
 
@@ -17,7 +17,13 @@ const ListQuery = z.object({
 
 const VerifyBody = z.object({ fromSeq: z.number().int().positive().optional() }).default({});
 
-/** Read-only by design: there is no update or delete endpoint anywhere in this service. */
+const ScamMapQuery = z.object({ days: z.coerce.number().int().min(1).max(30).default(7) });
+const ResolveBody = z.object({ label: z.enum(['confirmed_scam', 'genuine']) }).strict();
+
+/**
+ * Append-only by design: there is no update or delete endpoint anywhere in this service.
+ * The one write (a scam report label) adds a new chained event.
+ */
 @ApiTags('audit')
 @ApiBearerAuth()
 @Roles('auditor', 'admin')
@@ -39,6 +45,25 @@ export class AuditController {
   @HttpCode(200)
   verify(@ZBody(VerifyBody) b: z.infer<typeof VerifyBody>) {
     return this.audit.verify(b.fromSeq);
+  }
+
+  /** Scam patterns by type, district and time for the caller's program. No message text. */
+  @Roles('admin', 'officer', 'auditor')
+  @Get('scam-map')
+  scamMap(@CurrentUser() user: AuthUser, @ZQuery(ScamMapQuery) q: z.infer<typeof ScamMapQuery>) {
+    return this.audit.scamMap(user.tenantId, q.days);
+  }
+
+  /** An officer labels a reported message; appended to the chain, never an edit. */
+  @Roles('officer', 'admin')
+  @Post('scam-reports/:id/resolve')
+  @HttpCode(200)
+  resolveScamReport(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ZBody(ResolveBody) b: z.infer<typeof ResolveBody>,
+  ) {
+    return this.audit.resolveScamReport(id, b.label, user);
   }
 
   @Get(':eventId')

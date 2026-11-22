@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { EventBus } from '@haqdaar/nest-kit';
+import { buildEvent, EventBus, type AuthUser } from '@haqdaar/nest-kit';
+import { aggregateScamMap, SCAM_EVENT_TYPES, type ScamMap } from './scam-map';
 import { ALL_EVENT_TYPES, EventEnvelope } from '@haqdaar/shared';
 import { Prisma, type AuditLog } from '../generated/prisma';
 import { PrismaService } from './prisma.service';
@@ -15,6 +16,8 @@ import {
 /** Any constant works; it only has to be the same for every appender. */
 const CHAIN_LOCK = 7_420_101;
 const VERIFY_BATCH = 1000;
+/** Most scam events one map request reads; beyond it the response says `capped`. */
+const SCAM_MAP_CAP = 5000;
 
 export interface AuditQuery {
   type?: string;
@@ -140,6 +143,53 @@ export class AuditService implements OnModuleInit {
       cursor = Number(batch.at(-1)!.seq);
     }
     return { valid: true, checked, lastSeq, lastHash: expectedPrev, fromSeq: fromSeq ?? 1 };
+  }
+
+  /**
+   * Scam Map for the caller's own program: built from scam-check events only, which hold no
+   * message text. Newest rows first and capped, so a flood of checks cannot slow the page down.
+   */
+  async scamMap(tenantId: string, days: number): Promise<ScamMap> {
+    const now = new Date();
+    const rows = await this.prisma.auditLog.findMany({
+      where: {
+        type: { in: [...SCAM_EVENT_TYPES] },
+        tenantId,
+        occurredAt: { gte: new Date(now.getTime() - days * 86_400_000) },
+      },
+      orderBy: { seq: 'desc' },
+      take: SCAM_MAP_CAP + 1,
+      select: { type: true, occurredAt: true, payload: true },
+    });
+    return aggregateScamMap(rows.slice(0, SCAM_MAP_CAP), {
+      days,
+      now,
+      capped: rows.length > SCAM_MAP_CAP,
+    });
+  }
+
+  /**
+   * An officer's label for a reported message. Nothing is edited: the label is one more chained
+   * event, appended here directly so the map shows it at once.
+   */
+  async resolveScamReport(reportId: string, label: 'confirmed_scam' | 'genuine', by: AuthUser) {
+    const report = await this.prisma.auditLog.findFirst({
+      where: {
+        type: 'ai.scam.reported',
+        tenantId: by.tenantId,
+        payload: { path: ['reportId'], equals: reportId },
+      },
+      select: { seq: true },
+    });
+    if (!report) throw new NotFoundException('Scam report not found');
+    await this.append(
+      buildEvent(
+        'ai.scam.report_resolved',
+        { reportId, label },
+        { source: 'audit', principal: by },
+      ),
+    );
+    return { reportId, label };
   }
 
   async stats() {
