@@ -463,7 +463,7 @@ export function ClaimFlow() {
               type="button"
               onClick={() => setStep('photo')}
               disabled={busy !== ''}
-              className="flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl border-2 border-brand bg-white px-5 text-xl font-semibold text-brand-dark disabled:opacity-50"
+              className="flex min-h-20 w-full items-center justify-center gap-3 rounded-2xl border-2 border-brand bg-white px-5 py-2 text-xl font-semibold text-brand-dark disabled:opacity-50"
             >
               <IconIdCard className="h-8 w-8" />
               {t('scanFirst')}

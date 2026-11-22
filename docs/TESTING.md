@@ -237,7 +237,10 @@ Ranked by severity. "Fixed" means fixed in this work, in the files this work own
 
 ### Critical
 
-**1. A new account can be auto-approved for a stranger's benefit — open.**
+**1. A new account can be auto-approved for a stranger's benefit — fixed.**
+Fix: the first claim that ties a CNIC to a self-registered account gets the soft flag
+`identity_first_claim` (`services/cases/src/cases/cases.service.ts`, `ai-notes.ts`), so it always
+goes to an officer and is never auto-approved. The original report follows.
 Sign up with any phone number, give your own consent, then claim with another person's CNIC and
 name. The registry confirms the CNIC and name, the household is eligible, and the engine answers
 `APPROVED / AUTO_APPROVE` (confidence 0.991). Nothing links the account to the CNIC.
@@ -292,20 +295,22 @@ by this work; fixed there by its owner while this work was in progress. The prop
 letters. In `services/ai/src/tasks/pii.ts`, not owned by this work; fixed there by its owner while
 this work was in progress. The properties now pass.
 
-### Medium — open
+### Medium — fixed
 
-**10. `POST /cases` with a NUL character in `district` or `fullName` answers HTTP 500.** Valid
+**10. `POST /cases` with a NUL character in `district` or `fullName` answered HTTP 500 — fixed.**
+Both fields now refuse control characters and answer 400 (`cases.schemas.ts`, `plain`). Valid
 JSON, passes validation, then PostgreSQL refuses the text. Reproduce: a valid claim with
 `"district": "Thatta\u0000x"`. Expected 400. Where: `services/cases/src/cases/cases.schemas.ts`
 lines 7 and 9. Suggested fix: refuse control characters in both fields.
 
-**11. `POST /ai/transcribe` and `POST /ai/document-check` answer HTTP 500 when the body is not
-multipart.** Reproduce: either route with `content-type: application/json` and body `{}`. Expected
+**11. `POST /ai/transcribe` and `POST /ai/document-check` answered HTTP 500 when the body is not
+multipart — fixed.** Both routes check `req.isMultipart()` first and answer 400. Reproduce: either route with `content-type: application/json` and body `{}`. Expected
 400 or 415. Where: `services/ai/src/ai.controller.ts` lines 116 (`req.file()`) and 136
 (`req.parts()`). Suggested fix: check `req.isMultipart()` first and answer 400.
 
-**12. The scam checker sends the message text to the external model without redaction.**
-`services/ai/src/tasks/scam-check.ts` line 136 sends `normalized.slice(0, 1500)`; scam messages
+**12. The scam checker sent the message text to the external model without redaction — fixed.**
+It now sends `redactPii(normalized).text`. Before, `services/ai/src/tasks/scam-check.ts` sent
+`normalized.slice(0, 1500)`; scam messages
 routinely carry phone numbers, and a citizen may paste her CNIC. `extract-claim` redacts first.
 Suggested fix: `redactPii(normalized).text`.
 

@@ -111,6 +111,8 @@ Every provider sits behind the same interface, with a timeout, a circuit breaker
 | Cloud (free) | Web on Vercel. Services on Render free web services (one per service), Postgres on Supabase with schema-per-service |
 | Fallback     | Laptop runs the full stack for the live demo                                                                        |
 
+**Migrations.** Each service that owns a schema has versioned Prisma migrations in `services/<service>/prisma/migrations/0001_init/migration.sql`. `pnpm db:migrate` runs `prisma migrate deploy` for every service and builds a fresh database; `pnpm db:push` remains for quick local iteration. A database created earlier with `db:push` is baselined once with `prisma migrate resolve --applied 0001_init`. The one-box deploy (`scripts/docker/all-in-one.mjs`) applies new tables and columns in place on boot and never drops data.
+
 ## 7. Why microservices here (judge answer)
 
 - **Blast radius:** the AI service can be slow or down (rate limits) while login, payments and audit keep working.

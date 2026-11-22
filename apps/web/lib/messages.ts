@@ -349,7 +349,7 @@ export const M = {
   stepCheck: ['جانچیں', 'Check'],
   stepCard: ['کارڈ', 'Card'],
   stepAllow: ['اجازت', 'Allow'],
-  scanFirst: ['شناختی کارڈ کی تصویر سے شروع کریں', 'Start with a photo of my CNIC'],
+  scanFirst: ['کارڈ کی تصویر سے شروع کریں', 'Start with a photo of my CNIC'],
   claimSent: ['آپ کی درخواست بھیج دی گئی ہے۔', 'Your claim has been sent.'],
 
   // ---------- Ask about the program (/citizen/ask) ----------

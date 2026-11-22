@@ -109,7 +109,7 @@ export function Shell({
       <p className="bg-amber-100 px-3 py-1 text-center text-xs font-semibold text-amber-900">
         {t('prototype')}
       </p>
-      <header className="bg-brand text-white">
+      <header className="app-header text-white">
         <div
           className={`mx-auto flex items-center gap-3 px-4 py-3 ${wide ? 'max-w-6xl' : 'max-w-xl'}`}
         >

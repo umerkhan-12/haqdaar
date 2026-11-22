@@ -89,6 +89,26 @@ export class RailsStore {
     }
   }
 
+  /**
+   * SIMULATION: a person who registers gets a mobile wallet on their own number, in their registered
+   * name, the way a real citizen already has one before they ever meet this program. An existing
+   * account is never changed, so a mule cannot retitle someone else's number.
+   */
+  openWallet(alias: string, title: string): { opened: boolean } {
+    const number = normalizeAlias(alias);
+    if (this.byAlias.has(number)) return { opened: false };
+    const account: Account = {
+      iban: `PK00WALT${number.padStart(16, '0')}`,
+      alias: number,
+      title: title.trim().toUpperCase(),
+      bank: 'Mock Wallet',
+      cnic: null,
+    };
+    this.byIban.set(account.iban, account);
+    this.byAlias.set(number, account);
+    return { opened: true };
+  }
+
   get counts() {
     return { people: this.people.size, accounts: this.byIban.size, transfers: this.transfers.size };
   }

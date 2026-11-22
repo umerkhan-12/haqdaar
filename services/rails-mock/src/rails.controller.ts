@@ -27,6 +27,11 @@ import {
 /** Sender name identity uses for sign-up codes. */
 const SIGNUP_SENDER = 'HAQDAAR';
 
+const WalletBody = z.object({
+  alias: z.string().regex(/^(?:\+?92|0)3\d{9}$/, 'Mobile number 03XXXXXXXXX'),
+  title: z.string().trim().min(2).max(80),
+});
+
 @ApiTags('nadra')
 @ApiSecurity('internal')
 @InternalOnly()
@@ -56,6 +61,15 @@ export class NadraController {
 @Controller('mock/raast')
 export class RaastController {
   constructor(private readonly rails: RailsStore) {}
+
+  /** SIMULATION, internal only: open a wallet for a newly registered citizen (see RailsStore.openWallet). */
+  @ApiSecurity('internal')
+  @InternalOnly()
+  @Post('wallets')
+  @HttpCode(200)
+  openWallet(@ZBody(WalletBody) b: z.infer<typeof WalletBody>) {
+    return this.rails.openWallet(b.alias, b.title);
+  }
 
   @Post('title-fetch')
   @HttpCode(200)

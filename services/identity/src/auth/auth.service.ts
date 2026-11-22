@@ -91,7 +91,22 @@ export class AuthService {
       return this.issue(tx, user, randomUUID(), undefined, userAgent);
     });
     this.bus.kick();
+    if (user.role === 'citizen') void this.openMockWallet(phone, user.name);
     return pair;
+  }
+
+  /**
+   * SIMULATION ONLY: the mock bank keeps accounts in memory, so a self-registered citizen's wallet is
+   * (re)opened on sign-up and on each login. Best effort: a failure never blocks signing in.
+   */
+  private async openMockWallet(phone: string, name: string): Promise<void> {
+    await this.client
+      .call('rails-mock', '/mock/raast/wallets', {
+        method: 'POST',
+        body: { alias: `0${normalizePhone(phone).replace(/^92/, '')}`, title: name },
+        retries: 0,
+      })
+      .catch(() => undefined);
   }
 
   /**
@@ -180,6 +195,7 @@ export class AuthService {
         return this.issue(tx, user, randomUUID(), undefined, userAgent);
       });
       this.bus.kick();
+      void this.openMockWallet(b.phone, b.fullName);
       return pair;
     } catch (err) {
       if ((err as { code?: string }).code === 'P2002')

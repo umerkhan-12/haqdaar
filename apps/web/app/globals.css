@@ -1,9 +1,9 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-brand: #0b6b4f;
-  --color-brand-dark: #08513c;
-  --color-brand-soft: #e6f3ee;
+  --color-brand: #4338ca;
+  --color-brand-dark: #312e81;
+  --color-brand-soft: #eef2ff;
   --color-ink: #1d2433;
   --color-muted: #5b6677;
   --color-ok: #15803d;
@@ -17,7 +17,7 @@ html {
 }
 
 body {
-  background: #f6f8f7;
+  background: #f4f5fb;
   color: var(--color-ink);
 }
 
@@ -36,4 +36,14 @@ html[lang='ur'] body {
 :focus-visible {
   outline: 3px solid #f59e0b;
   outline-offset: 2px;
+}
+
+/* App header: one calm gradient instead of a flat block; text on it stays white at 7:1 or better. */
+.app-header {
+  background: linear-gradient(120deg, var(--color-brand-dark) 0%, var(--color-brand) 55%, #7c3aed 100%);
+}
+
+/* Primary actions lift slightly so the one thing to tap stands out on a busy screen. */
+.bg-brand {
+  box-shadow: 0 6px 16px -6px rgb(67 56 202 / 0.45);
 }
