@@ -95,7 +95,7 @@ On the 10 Urdu-script clips alone, the final build got the name in 9, the distri
 
 Median time: 1.7 s to transcribe and 1.4 s to extract (95th percentile 2.7 s and 2.5 s).
 
-What changed between the two runs: a vocabulary hint for the recogniser (programme districts and common names); a second listen with the language set to Urdu whenever the first answer contains Hindi letters (`mostlyDevanagari` in `services/ai/src/ai.service.ts`); extraction prompt v2, which returns districts in the programme's spelling and refuses instructions hidden in speech (the invented household size of 30 in the first run came from an injected sentence).
+What changed between the two runs (the recogniser's vocabulary hint of programme districts and common names was already in the first run): a second listen with the language set to Urdu whenever the first answer contains Hindi letters (`mostlyDevanagari` in `services/ai/src/ai.service.ts`); extraction prompt v2, which returns districts in the programme's spelling and refuses instructions hidden in speech (the invented household size of 30 in the first run came from an injected sentence).
 
 Limits, stated plainly:
 
