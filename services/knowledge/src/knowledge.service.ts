@@ -4,11 +4,16 @@ import { PrismaService } from './prisma.service';
 import { cosine } from './retrieval/embeddings';
 import {
   extractiveAnswer,
+  languageOf,
+  localize,
   rankByHashedEmbedding,
   rankByWords,
   redactPii,
   refusal,
   validCitations,
+  type Answer,
+  type AnswerLang,
+  type Source,
 } from './retrieval/answer';
 import { env } from './env';
 
@@ -33,7 +38,13 @@ export class KnowledgeService {
     private readonly upstream: ServiceClient,
   ) {}
 
-  async ask(question: string) {
+  /** Answers only from the policy files, in the language asked for (default: the language of the question). */
+  async ask(question: string, lang: AnswerLang = languageOf(question)) {
+    const sources: Source[] = [];
+    return localize(await this.answer(question, sources), sources, lang);
+  }
+
+  private async answer(question: string, used: Source[]): Promise<Answer> {
     const redactedQuestion = redactPii(question);
     const index = await this.prisma.knowledgeIndex.findUnique({ where: { id: 'active' } });
     if (!index) return this.refused();
@@ -74,12 +85,13 @@ export class KnowledgeService {
     }
     if (!ranked.length) return this.refused();
 
-    const sources = ranked.map(({ chunk }) => ({
+    const sources: Source[] = ranked.map(({ chunk }) => ({
       id: chunk.id,
       docId: chunk.docId,
       heading: chunk.heading,
       content: chunk.content,
     }));
+    used.push(...sources);
     if (offline) return extractiveAnswer(redactedQuestion, sources, OFFLINE_THRESHOLD);
     try {
       const answer = await this.upstream.call<{
