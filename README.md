@@ -13,6 +13,8 @@ _Knows when it doesn't know. Proves who's real._
 | For judges                                             |                                                                                       |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | The brief, line by line, with status and where to look | [docs/COVERAGE.md](docs/COVERAGE.md)                                                  |
+| The programme: rules, process, synthetic test people   | [docs/PROGRAM.md](docs/PROGRAM.md)                                                    |
+| Hands-on test checklist for every feature              | [docs/TEST_REPORT.md](docs/TEST_REPORT.md)                                            |
 | What is real, what is simulated, what the limits are   | [docs/REAL_VS_SIMULATED.md](docs/REAL_VS_SIMULATED.md)                                |
 | The 7-minute demo and prepared answers                 | [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)                                            |
 | Architecture and service contracts                     | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/CONTRACTS.md](docs/CONTRACTS.md) |
