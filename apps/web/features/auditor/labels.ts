@@ -19,6 +19,7 @@ const EVENTS: Record<string, { label: string; tone: Tone }> = {
   'payments.payment.state_changed': { label: 'Payment update', tone: 'neutral' },
   'ai.call.completed': { label: 'AI call', tone: 'info' },
   'ai.kill_switch.changed': { label: 'Kill AI switch', tone: 'bad' },
+  'ai.tool.called': { label: 'Assistant tool call', tone: 'info' },
   'judge.scenario.ran': { label: 'Judge scenario run', tone: 'neutral' },
   'judge.demo.reset': { label: 'Demo data reset', tone: 'warn' },
 };
@@ -29,7 +30,11 @@ export const eventTone = (type: string): Tone => EVENTS[type]?.tone ?? 'neutral'
 /** Quick filters: each is the list of exact event types the audit API is asked for. */
 export const QUICK_FILTERS = [
   { id: 'all', label: 'Everything', types: [] },
-  { id: 'ai', label: 'AI actions', types: ['ai.call.completed', 'ai.kill_switch.changed'] },
+  {
+    id: 'ai',
+    label: 'AI actions',
+    types: ['ai.call.completed', 'ai.tool.called', 'ai.kill_switch.changed'],
+  },
   {
     id: 'consent',
     label: 'Consent',
@@ -78,6 +83,8 @@ export function eventSummary(e: AuditEntry): string {
       return `${p.from ? `${words(p.from)} → ` : ''}${words(p.to)} · Rs ${Number(p.amount ?? 0).toLocaleString('en-PK')}${p.reason ? ` · ${words(p.reason)}` : ''}`;
     case 'ai.call.completed':
       return `${text(p.task)} · ${text(p.provider)} / ${text(p.model)} · ${text(p.latencyMs)} ms · ${p.ok ? 'ok' : 'failed'}${p.fallbackUsed ? ' · fallback used' : ''}`;
+    case 'ai.tool.called':
+      return `${text(p.tool)} · read-only · ${text(p.ms)} ms · ${p.ok ? 'ok' : 'failed'} · chosen by ${text(p.planner)}`;
     case 'ai.kill_switch.changed':
       return p.killed ? 'AI switched OFF: every case goes to a human' : 'AI switched back on';
     case 'identity.consent.granted':

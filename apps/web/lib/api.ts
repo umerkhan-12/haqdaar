@@ -484,7 +484,45 @@ export interface AiNotes {
 }
 
 /** Queue row with the case-management fields. */
+/** A fraud-ring signal on a case. Staff only: the citizen's view never carries it. */
+export interface Anomaly {
+  type: string;
+  evidenceCaseIds: string[];
+  observedCount: number;
+  threshold: number;
+  windowStart: string;
+  windowEnd: string;
+}
+
+/** Result of `POST /cases/anomaly-scan`. */
+export interface AnomalyScan {
+  scannedCases: number;
+  signalsDetected: number;
+  findingsCreated: number;
+  findingsUpdated: number;
+  findings: Anomaly[];
+}
+
+/** One tool the Ask assistant ran for her, shown as a "what I checked" chip. */
+export interface AssistStep {
+  tool: 'searchPolicy' | 'getMyClaims' | 'getMyPayments' | 'checkMessage';
+  ok: boolean;
+  ms: number;
+}
+
+/** Answer of `POST /ai/assist`. `refused` = "I am not sure, ask a helper or an officer". */
+export interface AssistAnswer {
+  answer: string;
+  lang: 'ur' | 'en';
+  refused: boolean;
+  planner: 'model' | 'keywords';
+  steps: AssistStep[];
+  sources: { docId: string; heading: string; quote: string }[];
+  scam: 'GENUINE' | 'SCAM' | 'UNSURE' | null;
+}
+
 export interface QueueCase extends CaseSummary {
+  anomalies?: Anomaly[];
   assignedTo: string | null;
   escalated: boolean;
   escalatedAt: string | null;
@@ -608,6 +646,11 @@ export const api = {
   },
   extract: (transcript: string) =>
     request<Extraction>('POST', '/ai/extract-claim', { body: { transcript } }),
+  /** Ask Haqdaar: policy answers with sources, or her own claim / payment / message checked by tools. */
+  assist: (question: string, lang: 'ur' | 'en') =>
+    request<AssistAnswer>('POST', '/ai/assist', { body: { question, lang } }),
+  /** Officer/admin: look for fraud rings across the program's open claims. */
+  anomalyScan: () => request<AnomalyScan>('POST', '/cases/anomaly-scan'),
   scamCheck: (text: string) => request<ScamVerdict>('POST', '/ai/scam-check', { body: { text } }),
   aiStatus: () => request<AiStatus>('GET', '/ai/status'),
   setKill: (killed: boolean) => request<AiStatus>('POST', '/ai/kill-switch', { body: { killed } }),

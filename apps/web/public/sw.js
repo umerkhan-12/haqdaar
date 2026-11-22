@@ -1,8 +1,8 @@
 // Haqdaar service worker: the app opens with no signal.
 // Pages: network first, then cache, then /offline. Build assets: cache first (immutable hashes).
 // API calls are never cached: offline claims go to the IndexedDB outbox instead.
-const VERSION = 'haqdaar-v2';
-const SHELL = ['/', '/login', '/citizen', '/citizen/claim', '/citizen/status', '/citizen/scam', '/citizen/consents', '/signup', '/helper', '/offline', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
+const VERSION = 'haqdaar-v3';
+const SHELL = ['/', '/login', '/citizen', '/citizen/claim', '/citizen/status', '/citizen/scam', '/citizen/ask', '/citizen/consents', '/signup', '/helper', '/offline', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
