@@ -92,6 +92,13 @@ export const EventSchemas = {
     fallbackUsed: z.boolean(),
   }),
   'ai.kill_switch.changed': z.object({ killed: z.boolean() }),
+  /** One read-only tool run by the Ask assistant for the caller (the envelope's actor). No question text, no PII. */
+  'ai.tool.called': z.object({
+    tool: z.string(),
+    ok: z.boolean(),
+    ms: z.number(),
+    planner: z.enum(['model', 'keywords']),
+  }),
   'judge.scenario.ran': z.object({
     scenarioId: z.string(),
     ok: z.boolean(),
