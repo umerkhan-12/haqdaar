@@ -6,6 +6,7 @@ import { Skeleton, StatusPill, laneTone, staffError } from '@/components/ui';
 import { api, type QueueCase } from '@/lib/api';
 import { useAsync, useSession } from '@/lib/hooks';
 import { CasePanel } from './case-panel';
+import { FraudScan } from './fraud-signals';
 import { flagLabel, laneLabel, staffName } from './labels';
 
 type Sort = 'priority' | 'confidence' | 'waiting';
@@ -63,6 +64,8 @@ export function OfficerQueue() {
               Refresh
             </button>
           </div>
+
+          <FraudScan onDone={reload} />
 
           {data && data.length > 0 && (
             <>
