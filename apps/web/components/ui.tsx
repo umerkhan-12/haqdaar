@@ -250,11 +250,18 @@ export function StatusPill({ children, tone = 'neutral' }: { children: ReactNode
   );
 }
 
-export function Timeline({ events }: { events: { label: string; at: string }[] }) {
+export function Timeline({
+  events,
+  done = false,
+}: {
+  events: { label: string; at: string }[];
+  /** True when nothing more will happen (paid, closed, rejected): the last step is ticked too. */
+  done?: boolean;
+}) {
   return (
     <ol className="space-y-2">
       {events.map((e, i) => {
-        const last = i === events.length - 1;
+        const last = !done && i === events.length - 1;
         return (
           <li key={i} className="flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm">
             {last ? (

@@ -311,7 +311,10 @@ function CaseCard({ id }: { id: string }) {
       {paid != null && <HaqReceipt amount={paid} caseId={c.id} />}
       {c.status === 'IN_REVIEW' && <StatusCard tone="info" title={t('waitingOfficer')} />}
       {c.status === 'NEEDS_INFO' && <NeedsInfo c={c} onResent={reload} />}
-      <Timeline events={timelineRows(c.timeline, t)} />
+      <Timeline
+        events={timelineRows(c.timeline, t)}
+        done={c.status === 'PAID' || c.status === 'CLOSED' || c.status === 'REJECTED'}
+      />
     </div>
   );
 }

@@ -38,7 +38,18 @@ export function OfficerQueue() {
   const [open, setOpen] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>('priority');
 
-  const rows = useMemo(() => [...(data ?? [])].sort(SORTS[sort].compare), [data, sort]);
+  const [find, setFind] = useState('');
+  const rows = useMemo(() => {
+    const q = find.trim().toLowerCase();
+    const all = [...(data ?? [])].sort(SORTS[sort].compare);
+    if (!q) return all;
+    return all.filter((c) =>
+      [c.id, c.district ?? '', laneLabel(c.lane), ...c.flags.map((f) => flagLabel(f).label)]
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [data, sort, find]);
   const counts = useMemo(() => {
     const lanes = new Map<string, number>();
     for (const c of data ?? [])
@@ -97,13 +108,29 @@ export function OfficerQueue() {
             </>
           )}
 
+          {data && data.length > 0 && (
+            <input
+              type="search"
+              value={find}
+              onChange={(e) => setFind(e.target.value)}
+              placeholder="Find: case id, district or warning"
+              aria-label="Find a case in the queue"
+              className="mb-2 min-h-12 w-full rounded-lg border-2 border-slate-300 bg-white px-3 text-sm"
+            />
+          )}
+          {data && data.length > 0 && find.trim() && rows.length === 0 && (
+            <p className="mb-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm text-muted">
+              No case in the queue matches “{find.trim()}”.
+            </p>
+          )}
+
           {loading && !data ? (
             <Skeleton lines={6} />
           ) : error ? (
             <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">
               {staffError(error)}
             </p>
-          ) : !rows.length ? (
+          ) : !(data ?? []).length ? (
             <p className="rounded-xl border border-dashed border-slate-300 p-4 text-muted">
               Queue is empty. Automation handled everything it was sure about.
             </p>
