@@ -14,7 +14,7 @@ const FLAGS: Record<string, [string, string]> = {
   ],
   identity_not_found: [
     'CNIC not found',
-    'The identity record has no person with this CNIC number.',
+    'The NADRA identity record (simulated: see the synthetic registry sheet) has no person with this CNIC number.',
   ],
   name_mismatch: [
     'Name does not match',
@@ -24,7 +24,10 @@ const FLAGS: Record<string, [string, string]> = {
     'Second claim this month',
     'Another claim for the same CNIC already exists this month.',
   ],
-  household_not_found: ['No household record', 'Income and household size could not be verified.'],
+  household_not_found: [
+    'No household record',
+    'The household registry (simulated) has no household for this CNIC, so income and household size could not be verified.',
+  ],
   verification_unavailable: [
     'Checks were down',
     'Identity or household systems did not answer, so nothing was verified.',

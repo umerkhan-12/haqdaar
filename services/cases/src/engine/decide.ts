@@ -300,8 +300,8 @@ const FLAG_TEXT: Record<Exclude<HardFlag, AnomalyFlag>, [string, string]> = {
     'the identity record lists this person as deceased',
   ],
   identity_not_found: [
-    'شناختی کارڈ نمبر ریکارڈ میں نہیں ملا',
-    'the CNIC was not found in the identity record',
+    'آپ کا شناختی کارڈ نمبر نادرا کے ریکارڈ سے ملایا گیا (اس نمونے میں یہ ریکارڈ فرضی ہے) اور وہاں نہیں ملا',
+    'your CNIC was checked against the NADRA identity record (simulated in this prototype) and was not found there',
   ],
   name_mismatch: [
     'نام شناختی ریکارڈ سے پوری طرح نہیں ملتا',
@@ -311,7 +311,10 @@ const FLAG_TEXT: Record<Exclude<HardFlag, AnomalyFlag>, [string, string]> = {
     'اس مہینے اس شناختی کارڈ پر پہلے ہی درخواست موجود ہے',
     'a claim for this CNIC already exists this month',
   ],
-  household_not_found: ['گھریلو ریکارڈ نہیں ملا', 'no household record was found'],
+  household_not_found: [
+    'گھرانوں کے سرکاری ریکارڈ میں (اس نمونے میں فرضی) اس شناختی کارڈ کا گھرانہ نہیں ملا، اس لیے آمدن اور افراد کی تصدیق نہیں ہو سکی',
+    'no household was found for this CNIC in the household registry (simulated in this prototype), so income and family size could not be confirmed',
+  ],
   verification_unavailable: [
     'تصدیقی نظام ابھی دستیاب نہیں',
     'verification systems are unavailable right now',

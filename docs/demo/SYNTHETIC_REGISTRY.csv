@@ -1,0 +1,34 @@
+﻿Name,Father or husband,CNIC,Gender,Date of birth,District,Marital status,Deceased,Household size,Monthly income PKR,Owns vehicle,Mobile account,Bank,Account title,Expected by the rules
+Zainab Bibi,,42201-1234567-4,F,1979-03-14,Thatta,widowed,no,5,18000,no,03001110001,Sahara Partner Bank (demo),ZAINAB BIBI,Eligible
+Rashida Begum,,42201-7654321-2,F,1972-11-02,Karachi West,married,no,7,22000,no,03001110007,Sahara Partner Bank (demo),RASHIDA BEGUM,Eligible
+Zainab Bibi,,41201-4455667-2,F,1990-07-21,Badin,married,no,4,35000,no,03121234501,Habib Bank (demo),ZAINAB BIBI,"Officer: rule 3 not widow, under 5 members"
+Muhammad Akram,,41101-2233445-1,M,1968-05-09,Hyderabad,married,no,6,28000,no,03211234502,Meezan Bank (demo),MUHAMMAD AKRAM,Officer: rule 2 district
+Mohammad Akram,,41101-5566778-3,M,1983-01-30,Hyderabad,married,no,3,52000,yes,03331234503,United Bank (demo),MOHAMMAD AKRAM,"Officer: rule 2 district; 3 not widow, under 5 members; 4 income"
+Nasreen Bi Bi,,42401-3344556-6,F,1975-08-17,Karachi West,widowed,no,8,16000,no,03451234504,JS Bank (demo),NASREEN BI BI,Eligible
+شازیہ بی بی,,43201-1122334-8,F,1981-12-05,Sukkur,widowed,no,5,20000,no,03011234505,Habib Bank (demo),SHAZIA BIBI,Officer: rule 2 district
+Kaneez Fatima,,42101-6677889-4,F,1970-04-23,Karachi East,widowed,no,6,19000,no,03151234506,Meezan Bank (demo),KANEEZ FATIMA,Officer: rule 2 district
+Ghulam Rasool,,44201-9988776-5,M,1950-02-11,Larkana,married,yes,4,12000,no,,,,"Officer: rule 1 deceased; 2 district; 3 not widow, under 5 members"
+Faisal Siddiqui,,43202-9581681-5,M,1964-07-10,Sukkur,married,no,9,29000,yes,03294747202,United Bank (demo),FAISAL SIDDIQUI,Officer: rule 2 district
+Fatima Bibi,,43202-3506894-8,F,1998-06-15,Sukkur,single,no,8,31000,yes,,,,Officer: rule 2 district
+Shabana Begum,,44102-2813148-2,F,1979-12-01,Tharparkar,single,no,5,33000,no,,,,Eligible
+Sakina Khatoon,,42202-7417913-6,F,1992-11-04,Thatta,single,no,10,46000,no,03016737647,JS Bank (demo),SAKINA KHATOON,Officer: rule 4 income
+Fatima Begum,,43302-0564735-6,F,1969-06-06,Dadu,married,no,4,21000,no,03414526753,United Bank (demo),FATIMA BEGUM,"Officer: rule 2 district; 3 not widow, under 5 members"
+Hajra Begum,,44102-7017291-4,F,1957-12-17,Tharparkar,married,no,9,52000,yes,03284015967,Habib Bank (demo),HAJRA BEGUM,Officer: rule 4 income
+Hajra Bi Bi,,44302-3351654-6,F,1974-10-09,Mirpurkhas,single,no,3,24000,no,03083969012,Habib Bank (demo),HAJRA BI BI,"Officer: rule 2 district; 3 not widow, under 5 members"
+Razia Bibi,,42102-1728509-4,F,1954-01-21,Karachi East,married,no,2,22000,no,,,,"Officer: rule 2 district; 3 not widow, under 5 members"
+Parveen Begum,,44302-0661826-0,F,1952-04-11,Mirpurkhas,widowed,no,1,8000,no,03276879317,Meezan Bank (demo),PARVEEN BEGUM,Officer: rule 2 district
+Khadija Begum,,43202-7213699-8,F,1967-03-07,Sukkur,widowed,no,2,33000,no,03144800486,JS Bank (demo),KHADIJA BEGUM,Officer: rule 2 district
+Saima Khatoon,,42102-4087643-8,F,1990-04-21,Karachi East,widowed,no,5,18000,no,03075038160,Habib Bank (demo),SAIMA KHATOON,Officer: rule 2 district
+Parveen Khatoon,,43202-7779431-6,F,1984-10-12,Sukkur,single,no,2,26000,no,,,,"Officer: rule 2 district; 3 not widow, under 5 members"
+Razia Bi Bi,,42402-1599966-0,F,1961-02-27,Karachi West,widowed,no,5,51000,yes,03263214003,Meezan Bank (demo),RAZIA BI BI,Officer: rule 4 income
+Saima Bi Bi,,43202-6848363-0,F,1985-06-02,Sukkur,divorced,no,5,58000,no,03364686967,Meezan Bank (demo),SAIMA BI BI,Officer: rule 2 district; 4 income
+Imran Baloch,,43302-1693700-9,M,1968-09-13,Dadu,married,no,2,37000,no,03020805221,JS Bank (demo),IMRAN BALOCH,"Officer: rule 2 district; 3 not widow, under 5 members"
+Asif Shah,,42402-3013916-7,M,1964-02-25,Karachi West,married,no,1,59000,no,03449040502,United Bank (demo),ASIF SHAH,"Officer: rule 3 not widow, under 5 members; 4 income"
+Rafiq Soomro,,44102-9319210-1,M,1950-09-07,Tharparkar,married,no,4,56000,yes,03393963156,United Bank (demo),RAFIQ SOOMRO,"Officer: rule 3 not widow, under 5 members; 4 income"
+Allah Dino Baloch,,41202-2430854-5,M,1967-10-15,Badin,married,no,10,26000,no,03054333646,United Bank (demo),ALLAH DINO BALOCH,Eligible
+Asif Brohi,,42202-8726077-7,M,1950-03-09,Thatta,single,no,3,60000,no,03474383072,Meezan Bank (demo),ASIF BROHI,"Officer: rule 3 not widow, under 5 members; 4 income"
+Allah Dino Chandio,,41202-9202708-7,M,1984-04-25,Badin,single,no,1,54000,no,03110585859,JS Bank (demo),ALLAH DINO CHANDIO,"Officer: rule 3 not widow, under 5 members; 4 income"
+Parveen Begum,,43302-2190637-6,F,1979-01-24,Dadu,widowed,no,6,52000,yes,03251401058,Habib Bank (demo),PARVEEN BEGUM,Officer: rule 2 district; 4 income
+Rukhsana Begum,,42102-7411445-0,F,1991-12-23,Karachi East,widowed,no,5,56000,no,03465189236,Meezan Bank (demo),RUKHSANA BEGUM,Officer: rule 2 district; 4 income
+Shahid Qureshi,,42102-8115938-1,M,1972-10-12,Karachi East,divorced,no,8,8000,no,,,,Officer: rule 2 district
+Ayesha Begum,,43202-9663668-8,F,1993-11-06,Sukkur,married,no,7,54000,yes,03143981981,JS Bank (demo),AYESHA BEGUM,Officer: rule 2 district; 4 income
