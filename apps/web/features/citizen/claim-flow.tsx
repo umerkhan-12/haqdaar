@@ -334,8 +334,35 @@ export function ClaimFlow() {
     // A claim she simply typed carries no AI notes: typing is not doubt, and must not cost her a review.
     const last = heard.current.at(-1);
     if (!last) return undefined;
+    // She answers in several short turns (name, then number, then district): the officer must see
+    // everything that was understood across all of them, not only the last turn. A later answer
+    // replaces an earlier one for the same field; the lowest confidence of any turn is kept.
+    const all = heard.current.map((h) => h.extraction).filter((x) => x != null);
+    const pick = <
+      K extends 'fullName' | 'cnic' | 'phone' | 'district' | 'householdSize' | 'isWidow',
+    >(
+      k: K,
+    ) => all.map((x) => x[k]).findLast((v) => v != null && v !== '') ?? null;
+    const merged = all.length
+      ? {
+          ...all.at(-1)!,
+          intent: all.find((x) => x.intent && x.intent !== 'other')?.intent ?? all.at(-1)!.intent,
+          fullName: pick('fullName'),
+          cnic: pick('cnic'),
+          phone: pick('phone'),
+          district: pick('district'),
+          householdSize: pick('householdSize'),
+          isWidow: pick('isWidow'),
+          confidence: Math.min(...all.map((x) => x.confidence)),
+        }
+      : null;
+    if (merged) {
+      merged.missingFields = (['fullName', 'cnic', 'district', 'householdSize'] as const).filter(
+        (k) => merged[k] == null,
+      );
+    }
     return {
-      ...(last.extraction ?? {}),
+      ...(merged ?? {}),
       transcript: heard.current.map((h) => h.transcript).join(' | '),
       needsHuman: heard.current.some((h) => h.needsHuman),
       reason: heard.current.find((h) => h.reason)?.reason,

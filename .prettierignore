@@ -10,3 +10,4 @@ docs/*.pdf
 services/ai/eval/voice/run-*.json
 services/ai/eval/voice/last-run.json
 docs/demo/video-build/
+apps/web/next-env.d.ts
