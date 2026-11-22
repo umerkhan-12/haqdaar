@@ -9,6 +9,15 @@ import { useI18n, type MessageKey } from '@/lib/i18n';
 import { HOME, saveHelperSession, rememberPhone, saveSession, sessionFrom } from '@/lib/session';
 
 /** One thing per screen. Each screen has one spoken instruction (the main channel) and one action. */
+// Same rules as the server (packages/shared contracts): letters only in a name, no easy PIN.
+const PERSON_NAME = /^\p{L}[\p{L}\p{M}‌ .'-]*$/u;
+function isWeakPin(pin: string): boolean {
+  const d = [...pin].map(Number);
+  if (d.every((x) => x === d[0])) return true;
+  const step = d[1]! - d[0]!;
+  return Math.abs(step) === 1 && d.every((x, i) => i === 0 || x - d[i - 1]! === step);
+}
+
 type Screen = 'phone' | 'code' | 'name' | 'pin' | 'pinAgain';
 
 const SAY: Record<Screen, MessageKey> = {
@@ -252,7 +261,11 @@ export function Signup() {
               onChange={(e) => setFullName(e.target.value.slice(0, 80))}
               autoFocus
             />
-            <Button type="submit" disabled={fullName.trim().length < 2} className="min-h-16 w-full">
+            <Button
+              type="submit"
+              disabled={fullName.trim().length < 2 || !PERSON_NAME.test(fullName.trim())}
+              className="min-h-16 w-full"
+            >
               {t('next')}
             </Button>
           </form>
@@ -262,6 +275,11 @@ export function Signup() {
           <PinPad
             value={pin}
             onChange={(v) => {
+              if (v.length === 4 && isWeakPin(v)) {
+                setPin('');
+                fail('signupPinWeak');
+                return;
+              }
               setPin(v);
               if (v.length === 4) go('pinAgain');
             }}

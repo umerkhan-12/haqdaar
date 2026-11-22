@@ -168,6 +168,14 @@ export class AuthService {
     if (verdict === 'locked')
       throw new ForbiddenException('Too many wrong codes. Ask for a new code.');
     if (verdict !== 'ok') throw new BadRequestException('Wrong or expired code');
+    // A right code gives the try back and leaves time to enter the name and PIN.
+    await this.prisma.signupCode.updateMany({
+      where: { phoneHash, usedAt: null },
+      data: {
+        attempts: { decrement: 1 },
+        expiresAt: new Date(Date.now() + 2 * CODE_TTL_MINUTES * 60_000),
+      },
+    });
     return { ok: true };
   }
 

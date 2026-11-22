@@ -84,13 +84,14 @@ export class AuditService implements OnModuleInit {
     });
   }
 
-  async list(q: AuditQuery) {
+  async list(q: AuditQuery, ownTenantId: string) {
     const rows = await this.prisma.auditLog.findMany({
       where: {
         type: q.type,
         entityId: q.entityId,
         actorId: q.actorId,
-        tenantId: q.tenantId,
+        // Own program plus system entries (no program); never another program's.
+        OR: [{ tenantId: ownTenantId }, { tenantId: null }],
         occurredAt: q.from || q.to ? { gte: q.from, lte: q.to } : undefined,
         seq: q.cursor ? { lt: BigInt(q.cursor) } : undefined,
       },
@@ -101,9 +102,10 @@ export class AuditService implements OnModuleInit {
     return { items: page, nextCursor: rows.length > q.limit ? page.at(-1)!.seq : null };
   }
 
-  async get(eventId: string) {
+  async get(eventId: string, ownTenantId: string) {
     const row = await this.prisma.auditLog.findUnique({ where: { eventId } });
-    if (!row) throw new NotFoundException('Audit entry not found');
+    if (!row || (row.tenantId && row.tenantId !== ownTenantId))
+      throw new NotFoundException('Audit entry not found');
     return toDto(row);
   }
 

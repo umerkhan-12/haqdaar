@@ -9,6 +9,17 @@ export const LoginRequest = z.object({
 });
 export type LoginRequest = z.infer<typeof LoginRequest>;
 
+/** A person's name: letters of any script (Urdu included), spaces, dot, apostrophe, hyphen. No digits or control characters. */
+export const PERSON_NAME = /^\p{L}[\p{L}\p{M}‌ .'-]*$/u;
+
+/** A PIN anyone would try first: one digit repeated (0000) or a run up or down (1234, 4321). */
+export function isWeakPin(pin: string): boolean {
+  const d = [...pin].map(Number);
+  if (d.every((x) => x === d[0])) return true;
+  const step = d[1]! - d[0]!;
+  return Math.abs(step) === 1 && d.every((x, i) => i === 0 || x - d[i - 1]! === step);
+}
+
 /** Citizen self sign-up, step 1: a Pakistani mobile number, 03XXXXXXXXX. */
 export const SignupStartRequest = z.object({
   phone: z.string().regex(/^03\d{9}$/, 'Mobile number must look like 03XXXXXXXXX'),
@@ -18,8 +29,11 @@ export type SignupStartRequest = z.infer<typeof SignupStartRequest>;
 /** Step 2: the 6-digit SMS code, the citizen's name and the 4-digit PIN they will log in with. */
 export const SignupVerifyRequest = SignupStartRequest.extend({
   code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
-  fullName: z.string().trim().min(2).max(80),
-  pin: z.string().regex(/^\d{4}$/, 'PIN must be 4 digits'),
+  fullName: z.string().trim().min(2).max(80).regex(PERSON_NAME, 'Name must be letters only'),
+  pin: z
+    .string()
+    .regex(/^\d{4}$/, 'PIN must be 4 digits')
+    .refine((p) => !isWeakPin(p), 'PIN is too easy to guess'),
 });
 export type SignupVerifyRequest = z.infer<typeof SignupVerifyRequest>;
 

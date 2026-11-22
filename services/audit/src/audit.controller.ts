@@ -32,8 +32,8 @@ export class AuditController {
   constructor(private readonly audit: AuditService) {}
 
   @Get()
-  list(@ZQuery(ListQuery) q: z.infer<typeof ListQuery>) {
-    return this.audit.list(q);
+  list(@CurrentUser() user: AuthUser, @ZQuery(ListQuery) q: z.infer<typeof ListQuery>) {
+    return this.audit.list(q, user.tenantId);
   }
 
   @Get('stats')
@@ -67,7 +67,7 @@ export class AuditController {
   }
 
   @Get(':eventId')
-  get(@Param('eventId', ParseUUIDPipe) eventId: string) {
-    return this.audit.get(eventId);
+  get(@CurrentUser() user: AuthUser, @Param('eventId', ParseUUIDPipe) eventId: string) {
+    return this.audit.get(eventId, user.tenantId);
   }
 }

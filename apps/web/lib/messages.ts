@@ -162,6 +162,10 @@ export const M = {
   ],
   signupPinAgainSay: ['وہی پن ایک بار پھر درج کریں۔', 'Enter the same PIN once more.'],
   signupPinLabel: ['چار ہندسوں کا پن', '4-digit PIN'],
+  signupPinWeak: [
+    'یہ پن بہت آسان ہے۔ کوئی اور پن چنیں۔',
+    'That PIN is too easy to guess. Choose another one.',
+  ],
   signupPinMismatch: [
     'دونوں پن ایک جیسے نہیں ہیں۔ دوبارہ چنیں۔',
     'The two PINs do not match. Choose again.',
