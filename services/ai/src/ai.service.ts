@@ -226,12 +226,22 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   }
 
   async transcribe(audio: Buffer, mimeType: string, language?: string) {
-    const r = await this.router.transcribe({
+    let r = await this.router.transcribe({
       audio,
       mimeType,
       language,
       timeoutMs: env.AI_TIMEOUT_MS,
     });
+    // Spoken Urdu and Hindi sound alike, and the recogniser sometimes writes Urdu speech in Hindi
+    // (Devanagari) letters, which loses names and districts downstream. Then listen once more,
+    // telling it the speech is Urdu. If that fails, the first answer is kept.
+    if (!language && !r.isMock && mostlyDevanagari(r.value.text)) {
+      const again = await this.router
+        .transcribe({ audio, mimeType, language: 'ur', timeoutMs: env.AI_TIMEOUT_MS })
+        .catch(() => null);
+      if (again && !again.isMock && again.value.text.trim() && !mostlyDevanagari(again.value.text))
+        r = again;
+    }
     return {
       text: r.value.text,
       provider: r.provider,
@@ -338,4 +348,11 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       )
       .catch(() => undefined);
   }
+}
+
+/** True when most letters of the text are Devanagari (Hindi script). */
+export function mostlyDevanagari(text: string): boolean {
+  const deva = (text.match(/[ऀ-ॿ]/g) ?? []).length;
+  const letters = (text.match(/\p{L}/gu) ?? []).length;
+  return letters > 0 && deva / letters > 0.5;
 }

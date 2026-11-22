@@ -52,7 +52,7 @@ export function OfficerQueue() {
   return (
     <Shell roles={['officer', 'admin']} wide>
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
-        <section aria-labelledby="queue-h">
+        <section aria-labelledby="queue-h" className={open ? 'hidden lg:block' : ''}>
           <div className="mb-2 flex items-center justify-between">
             <h1 id="queue-h" className="text-xl font-bold">
               Review queue {data && <span className="text-muted">({data.length})</span>}
@@ -144,9 +144,18 @@ export function OfficerQueue() {
         </section>
         <section aria-label="Case detail">
           {open ? (
-            <CasePanel id={open} onDone={reload} />
+            <>
+              <button
+                type="button"
+                onClick={() => setOpen(null)}
+                className="mb-3 min-h-12 w-full rounded-xl border-2 border-brand px-4 text-left font-semibold text-brand lg:hidden"
+              >
+                ← Back to the queue
+              </button>
+              <CasePanel id={open} onDone={reload} />
+            </>
           ) : (
-            <p className="rounded-xl border border-dashed border-slate-300 p-6 text-muted">
+            <p className="hidden rounded-xl border border-dashed border-slate-300 p-6 text-muted lg:block">
               Select a case from the queue.
             </p>
           )}

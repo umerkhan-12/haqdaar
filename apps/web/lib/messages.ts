@@ -125,7 +125,10 @@ export const M = {
     'If your name or CNIC number was wrong, correct it here by speaking or typing. A box you leave empty stays as it was.',
   ],
   redoSpeak: ['بول کر بتائیں', 'Say it'],
-  redoListening: ['سن رہے ہیں… بات ختم ہو تو دوبارہ دبائیں', 'Listening… tap again when you finish'],
+  redoListening: [
+    'سن رہے ہیں… بات ختم ہو تو دوبارہ دبائیں',
+    'Listening… tap again when you finish',
+  ],
   redoCnic: ['شناختی کارڈ نمبر', 'CNIC number'],
   redoCnicBad: ['شناختی کارڈ نمبر تیرہ ہندسوں کا ہوتا ہے۔', 'A CNIC number has 13 digits.'],
   redoSend: ['درست معلومات بھیجیں', 'Send the corrected details'],
@@ -250,8 +253,8 @@ export const M = {
   givenDone: ['اجازت دے دی گئی۔ شکریہ۔', 'Permission given. Thank you.'],
   fixTitle: ['میری معلومات غلط ہے', 'My information is wrong'],
   fixIntro: [
-    'بتائیں کیا غلط ہے۔ ایک افسر جانچ کر اسے ٹھیک کرے گا۔ آپ خود اسے نہیں بدل سکتے، تاکہ کوئی اور آپ کی شناخت نہ بدل سکے۔',
-    'Tell us what is wrong. An officer will fix it after checking. You cannot change it yourself, so that nobody else can change your identity.',
+    'بتائیں کیا غلط ہے۔ آپ کی بات افسروں کے لیے درج ہو جائے گی۔ آپ خود اسے نہیں بدل سکتے، تاکہ کوئی اور آپ کی شناخت نہ بدل سکے۔',
+    'Tell us what is wrong. Your request is recorded for the officers. You cannot change it yourself, so that nobody else can change your identity.',
   ],
   fixChoose: ['کون سی چیز غلط ہے؟', 'Which one is wrong?'],
   fixName: ['نام', 'Name'],
@@ -261,8 +264,8 @@ export const M = {
   fixNote: ['چاہیں تو لکھ کر بتائیں (ضروری نہیں)', 'Type a note if you want (not required)'],
   fixSend: ['افسر کو بتائیں', 'Tell the officer'],
   fixSent: [
-    'آپ کی بات درج ہو گئی ہے۔ ایک افسر جانچ کر آپ کی معلومات ٹھیک کرے گا۔',
-    'Your request is recorded. An officer will check and fix your information.',
+    'آپ کی بات درج ہو گئی ہے۔ جب افسر آپ کی درخواست میں پوچھے تو آپ وہاں درست معلومات بھیج سکتے ہیں۔',
+    'Your request is recorded. When an officer asks you through your claim, you can send the correct details there.',
   ],
 
   statusPROCESSING: ['آپ کی درخواست جانچی جا رہی ہے', 'Your claim is being checked'],
@@ -290,6 +293,19 @@ export const M = {
   ev_payHeld: [
     'رقم حفاظت کے لیے روکی گئی ہے۔ ایک افسر دیکھ رہا ہے۔',
     'Payment held for safety. An officer is checking.',
+  ],
+  payProblemTitle: ['رقم ابھی آپ تک نہیں پہنچی', 'The money has not reached you yet'],
+  payProblemFailed: [
+    'بینک کو آپ کے دیے ہوئے موبائل نمبر پر اکاؤنٹ نہیں ملا۔ افسر کو اپنا درست موبائل اکاؤنٹ نمبر بتائیں۔ اکاؤنٹ آپ کے اپنے نام پر ہونا چاہیے۔ آپ کی رقم محفوظ ہے۔',
+    'The bank found no account on the mobile number you gave. Tell the officer your correct mobile account number. The account must be in your own name. Your money is safe.',
+  ],
+  payProblemHeld: [
+    'رقم بھیجنے سے پہلے ایک افسر آپ کا اکاؤنٹ جانچ رہا ہے۔ آپ کو کچھ کرنے کی ضرورت نہیں۔ آپ کی رقم محفوظ ہے۔',
+    'An officer is checking your account before the money is sent. You do not need to do anything. Your money is safe.',
+  ],
+  payProblemUnknown: [
+    'بینک کے جواب کا انتظار ہے۔ رقم دوبارہ نہیں بھیجی جائے گی جب تک بینک تصدیق نہ کرے۔ آپ کو کچھ کرنے کی ضرورت نہیں۔',
+    'We are waiting for the bank to confirm. The money is not sent again until the bank answers. You do not need to do anything.',
   ],
   ev_payFailed: ['رقم ابھی نہیں پہنچ سکی', 'The payment did not go through yet'],
   ev_payUnknown: ['بینک کے جواب کا انتظار ہے', 'Waiting for the bank to confirm'],
@@ -402,8 +418,8 @@ export const M = {
   // scam check: hand a doubtful message to a person
   scamShowOfficer: ['یہ پیغام افسر کو دکھائیں', 'Show this message to an officer'],
   scamSentOfficer: [
-    'آپ کا پیغام افسر کو بھیج دیا گیا ہے۔ جب تک جواب نہ آئے، اس پیغام پر عمل نہ کریں۔',
-    'Your message was sent to an officer. Do not act on it until you hear back.',
+    'آپ کا پیغام افسر کو بھیج دیا گیا ہے، وہ اس سے دوسروں کو خبردار کرے گا۔ اگر کسی پیغام پر شک ہو تو اس پر عمل نہ کریں۔',
+    'Your message was sent to an officer, who will use it to warn others. If you are not sure about a message, do not act on it.',
   ],
 } as const;
 

@@ -110,7 +110,7 @@ export class PaymentsController {
   }
 
   /** HELD → AWAITING_APPROVAL. The releasing officer becomes the maker. */
-  @Roles('officer')
+  @Roles('officer', 'admin')
   @Post(':id/release')
   @HttpCode(200)
   release(

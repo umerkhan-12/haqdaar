@@ -220,7 +220,24 @@ function CaseCard({ id }: { id: string }) {
   const explanation = lang === 'ur' ? c?.decision?.explanationUr : c?.decision?.explanationEn;
   // Arrives later (or never): the engine's sentence above is what is spoken when the card appears.
   const simple = useSimpleExplanation(c);
-  const paid = c?.status === 'PAID' && c.amount != null ? c.amount : null;
+  const payEvents = c?.timeline.filter((e) => e.type.startsWith('payment.')) ?? [];
+  const lastPay = payEvents.at(-1)?.type;
+  const wasPaid = payEvents.some((e) => e.type === 'payment.success');
+  // A closed claim that was paid keeps its receipt.
+  const paid =
+    c && c.amount != null && (c.status === 'PAID' || (c.status === 'CLOSED' && wasPaid))
+      ? c.amount
+      : null;
+  const payProblem: MessageKey | null =
+    c?.status !== 'APPROVED'
+      ? null
+      : lastPay === 'payment.failed'
+        ? 'payProblemFailed'
+        : lastPay === 'payment.held'
+          ? 'payProblemHeld'
+          : lastPay === 'payment.unknown'
+            ? 'payProblemUnknown'
+            : null;
   const amount = useAmountText(paid ?? 0);
 
   // Speak the latest status once when it appears (and again only if the status itself changes).
@@ -245,6 +262,14 @@ function CaseCard({ id }: { id: string }) {
         body={simple ?? explanation}
       />
       {simple && <SimpleWordsLabel />}
+      {payProblem && (
+        <div className="flex items-start gap-3">
+          <div className="flex-1">
+            <StatusCard tone="warn" title={t('payProblemTitle')} body={t(payProblem)} />
+          </div>
+          <AudioButton text={[t('payProblemTitle'), t(payProblem)]} className="text-brand" />
+        </div>
+      )}
       {paid != null && <HaqReceipt amount={paid} />}
       {c.status === 'IN_REVIEW' && <StatusCard tone="info" title={t('waitingOfficer')} />}
       {c.status === 'NEEDS_INFO' && <NeedsInfo c={c} onResent={reload} />}
