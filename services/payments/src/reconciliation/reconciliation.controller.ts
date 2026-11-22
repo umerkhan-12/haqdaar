@@ -29,8 +29,9 @@ export class ReconciliationController {
   @Post('run')
   @HttpCode(200)
   async run(@CurrentUser() user: AuthUser, @ZBody(RunBody) b: z.infer<typeof RunBody>) {
-    const date = b.date ?? new Date().toISOString().slice(0, 10);
-    const from = new Date(`${date}T00:00:00.000Z`);
+    // The bank's statement day is a Pakistan day (UTC+5), so ours is cut at the same midnight.
+    const date = b.date ?? new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
+    const from = new Date(`${date}T00:00:00.000+05:00`);
     const to = new Date(from.getTime() + 86_400_000);
 
     const [ours, statement] = await Promise.all([

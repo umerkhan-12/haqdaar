@@ -34,12 +34,12 @@ registerSuite(async () => {
     });
     expectStatus(r, 201);
     citizen = r.body.accessToken;
-    personId = JSON.parse(Buffer.from(citizen.split('.')[1], 'base64url').toString()).personId;
-    expect(personId, 'token carries no personId');
+    personId = JSON.parse(Buffer.from(citizen.split('.')[1], 'base64url').toString()).obo;
+    expect(personId, 'token carries no person');
   });
 
   await it('consent, then claim: a first claim of a new account always goes to an officer', async () => {
-    for (const purpose of ['household_data', 'payment']) {
+    for (const purpose of ['identity_verification', 'household_data', 'payment']) {
       expectStatus(
         await api('POST', '/consents', { token: citizen, body: { personId, purpose } }),
         200,

@@ -20,5 +20,7 @@ ENV NODE_ENV=production PUBLIC_PORT=7860 TESSDATA_DIR=/tmp/tessdata HOME=/tmp
 WORKDIR /app
 COPY --from=build --chown=1000:1000 /app /app
 USER 1000
+# The simulated bank's book; a named volume mounted here keeps it across redeploys.
+RUN mkdir -p /app/state
 EXPOSE 7860
 ENTRYPOINT ["/usr/bin/tini", "--", "node", "/app/scripts/docker/all-in-one.mjs"]

@@ -3,6 +3,7 @@ import { DemoResetController, DemoResetter, HealthRegistry, KitModule } from '@h
 import { env } from './env';
 import { buildSeed } from './data/seed-data';
 import { RailsStore } from './rails.store';
+import { fileJournal } from './journal';
 import {
   FaultsController,
   NadraController,
@@ -28,7 +29,15 @@ import {
     DemoResetController,
   ],
   providers: [
-    { provide: RailsStore, useFactory: () => new RailsStore(buildSeed()) },
+    {
+      provide: RailsStore,
+      useFactory: () =>
+        new RailsStore(
+          buildSeed(),
+          undefined,
+          process.env.RAILS_STATE_FILE ? fileJournal(process.env.RAILS_STATE_FILE) : undefined,
+        ),
+    },
     {
       provide: DemoResetter,
       useFactory: (rails: RailsStore) => ({ reset: async () => rails.resetActivity() }),

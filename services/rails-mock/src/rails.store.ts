@@ -41,6 +41,18 @@ interface Settlement {
   settledAt: Date;
 }
 
+/** A settlement as it is written to disk (dates as ISO text). */
+export type SavedSettlement = Omit<Settlement, 'settledAt'> & { settledAt: string };
+
+/**
+ * Where the simulated bank keeps its book between restarts. A real bank never forgets a transfer;
+ * without this, every redeploy would make reconciliation report our own settled payouts as missing.
+ */
+export interface Journal {
+  load(): SavedSettlement[];
+  save(all: SavedSettlement[]): void;
+}
+
 export interface SmsMessage {
   messageId: string;
   from: string;
@@ -80,6 +92,7 @@ export class RailsStore {
   constructor(
     seed: SeedData,
     private readonly now: () => Date = () => new Date(),
+    private readonly journal?: Journal,
   ) {
     for (const p of seed.people) this.people.set(p.cnic, p);
     for (const h of seed.households) this.households.set(h.cnic, h);
@@ -87,6 +100,16 @@ export class RailsStore {
       this.byIban.set(a.iban, a);
       if (a.alias) this.byAlias.set(a.alias, a);
     }
+    for (const t of journal?.load() ?? []) {
+      this.transfers.set(t.result.endToEndId, { ...t, settledAt: new Date(t.settledAt) });
+    }
+    this.refSeq = this.transfers.size;
+  }
+
+  private remember(): void {
+    this.journal?.save(
+      [...this.transfers.values()].map((t) => ({ ...t, settledAt: t.settledAt.toISOString() })),
+    );
   }
 
   /**
@@ -167,6 +190,7 @@ export class RailsStore {
       creditorIban: creditor?.iban ?? null,
       settledAt: this.now(),
     });
+    this.remember();
     return { result, delayMs: fault === 'timeout_after_debit' ? TIMEOUT_DELAY_MS : 0 };
   }
 
@@ -215,6 +239,7 @@ export class RailsStore {
   resetActivity(): { transfers: number; inboxes: number } {
     const out = { transfers: this.transfers.size, inboxes: this.inboxes.size };
     this.transfers.clear();
+    this.remember();
     this.inboxes.clear();
     this.setFaults({ raast: { mode: 'none', remaining: 0 } });
     return out;

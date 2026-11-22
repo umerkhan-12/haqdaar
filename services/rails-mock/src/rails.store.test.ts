@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSeed, DEMO_SCENARIOS } from './data/seed-data';
-import { RailsStore, TIMEOUT_DELAY_MS, type TransferRequest } from './rails.store';
+import { pktDate, RailsStore, TIMEOUT_DELAY_MS, type TransferRequest } from './rails.store';
 
 const NOW = new Date('2026-11-21T10:00:00Z');
 const store = () => new RailsStore(buildSeed(), () => NOW);
@@ -107,4 +107,25 @@ test('NADRA: name variants match, different names do not, deceased is reported',
     nameScore: null,
     record: null,
   });
+});
+
+test('the bank keeps its book across a restart (journal), and a reset empties it', () => {
+  let disk: import('./rails.store').SavedSettlement[] = [];
+  const journal = { load: () => disk, save: (all: typeof disk) => void (disk = all) };
+  const first = new RailsStore(buildSeed(), () => NOW, journal);
+  const req = transfer('E2E-JOURNAL-1');
+  const paid = first.transfer(req).result;
+  assert.equal(paid.status, 'ACSC');
+
+  const restarted = new RailsStore(buildSeed(), () => NOW, journal);
+  assert.equal(restarted.status('E2E-JOURNAL-1').status, 'ACSC');
+  // the same transfer after a restart is still recognised, not paid twice
+  assert.deepEqual(restarted.transfer(req).result, paid);
+  assert.equal(restarted.statement(pktDate(NOW)).entries.length, 1);
+
+  restarted.resetActivity();
+  assert.equal(
+    new RailsStore(buildSeed(), () => NOW, journal).statement(pktDate(NOW)).entries.length,
+    0,
+  );
 });
