@@ -14,6 +14,7 @@ import {
 import { api, type StaffCase } from '@/lib/api';
 import { useAsync, useSession } from '@/lib/hooks';
 import { AiNotesCard } from './ai-notes-card';
+import { FraudSignalsCard } from './fraud-signals';
 import { laneLabel, staffName, statusLabel, timelineLabel } from './labels';
 
 type Action = 'reject' | 'info' | 'escalate' | 'close';
@@ -168,6 +169,8 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
           </ul>
         </Card>
       )}
+
+      <FraudSignalsCard anomalies={c.anomalies ?? []} />
 
       <AiNotesCard notes={c.aiNotes} typedCnicMasked={c.person.cnicMasked} flags={c.flags} />
 

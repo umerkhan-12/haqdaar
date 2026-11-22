@@ -351,6 +351,38 @@ export const M = {
   stepAllow: ['اجازت', 'Allow'],
   scanFirst: ['شناختی کارڈ کی تصویر سے شروع کریں', 'Start with a photo of my CNIC'],
   claimSent: ['آپ کی درخواست بھیج دی گئی ہے۔', 'Your claim has been sent.'],
+
+  // ---------- Ask about the program (/citizen/ask) ----------
+  askTitle: ['پروگرام کے بارے میں پوچھیں', 'Ask about the program'],
+  askHint: [
+    'بٹن دبا کر اپنا سوال بولیں، یا نیچے سے کوئی سوال چنیں۔',
+    'Tap the button and say your question, or pick a question below.',
+  ],
+  askType: ['یا اپنا سوال یہاں لکھیں', 'Or type your question here'],
+  askSend: ['پوچھیں', 'Ask'],
+  askThinking: ['جواب ڈھونڈا جا رہا ہے…', 'Looking for the answer…'],
+  askYouAsked: ['آپ نے پوچھا', 'You asked'],
+  askAnswer: ['جواب', 'Answer'],
+  askSources: ['یہ جواب ان دستاویزات سے لیا گیا ہے', 'This answer comes from these documents'],
+  askNotSure: ['مجھے یقین نہیں ہے', 'I am not sure'],
+  // Same sentences the assistant sends (services/ai assist NOT_SURE), so they play from the recording.
+  askNotSureBody: ['براہِ کرم کسی مددگار یا افسر سے پوچھیں۔', 'Please ask a helper or an officer.'],
+  askNotSureLead: ['مجھے یقین نہیں ہے۔', 'I am not sure.'],
+  askNotHeard: [
+    'آواز سمجھ نہیں آئی۔ دوبارہ بولیں، یا نیچے سے سوال چنیں۔',
+    'I could not hear that. Please say it again, or pick a question below.',
+  ],
+  askChecked: ['میں نے یہ دیکھا', 'What I checked'],
+  askToolPolicy: ['پروگرام کے قواعد', 'Program rules'],
+  askToolClaims: ['آپ کی درخواست', 'Your claim'],
+  askToolPayments: ['آپ کی ادائیگی', 'Your payment'],
+  askToolMessage: ['پیغام کی جانچ', 'Message check'],
+  askQ1: ['کون درخواست دے سکتا ہے؟', 'Who can make a claim?'],
+  askQ2: ['درخواست کے لیے کون سی معلومات چاہییں؟', 'What do I need to make a claim?'],
+  askQ3: ['رقم کتنی ہے اور کب ملتی ہے؟', 'How much is the money and when is it paid?'],
+  askQ4: ['شکایت کیسے کروں؟', 'How do I complain?'],
+  askQ5: ['میرے پیسے کہاں ہیں؟', 'Where is my money?'],
+  askQ6: ['جعلی پیغام کیسے پہچانوں؟', 'How do I spot a fake message?'],
 } as const;
 
 export type MessageKey = keyof typeof M;

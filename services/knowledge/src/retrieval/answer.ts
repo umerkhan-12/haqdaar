@@ -136,3 +136,45 @@ function sentenceCandidates(content: string) {
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length >= 20 && sentence.length <= 700);
 }
+
+export type AnswerLang = 'ur' | 'en';
+
+/** A sentence counts as Urdu when it has Arabic-script letters; the policy files are English + Urdu. */
+export function languageOf(text: string): AnswerLang {
+  return /[\u0600-\u06FF]/.test(text) ? 'ur' : 'en';
+}
+
+/**
+ * Answer in the language she asked in. Every policy paragraph says the same thing in English and then
+ * in Urdu, sentence for sentence, so a quote in the other language is swapped for its counterpart at the
+ * same position. Still word for word from the source; a sentence with no counterpart is kept as it is.
+ */
+export function localize(answer: Answer, sources: Source[], lang: AnswerLang): Answer {
+  if (answer.refused) return answer;
+  const citations: Citation[] = [];
+  for (const citation of answer.citations) {
+    const source = sources.find(
+      (s) =>
+        s.docId === citation.docId &&
+        s.heading === citation.heading &&
+        s.content.includes(citation.quote),
+    );
+    const quotes = source
+      ? sentenceCandidates(citation.quote).map((q) => counterpart(q, source.content, lang))
+      : [];
+    for (const quote of quotes.length ? quotes : [citation.quote]) {
+      if (!citations.some((c) => c.quote === quote))
+        citations.push({ docId: citation.docId, heading: citation.heading, quote });
+    }
+  }
+  return { answer: citations.map((c) => c.quote).join(' '), citations, refused: false };
+}
+
+function counterpart(sentence: string, content: string, lang: AnswerLang): string {
+  if (languageOf(sentence) === lang) return sentence;
+  const all = sentenceCandidates(content);
+  const same = all.filter((s) => languageOf(s) !== lang);
+  const other = all.filter((s) => languageOf(s) === lang);
+  const at = same.indexOf(sentence);
+  return at >= 0 && same.length === other.length ? other[at]! : sentence;
+}

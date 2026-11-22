@@ -1,4 +1,12 @@
-import { Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, Roles, ZBody, ZQuery, type AuthUser } from '@haqdaar/nest-kit';
 import { PaymentState } from '@haqdaar/shared';
@@ -11,6 +19,7 @@ const ListQuery = z.object({
   caseId: z.string().uuid().optional(),
   take: z.coerce.number().int().min(1).max(200).default(50),
 });
+const MineQuery = z.object({ caseId: z.string().uuid().optional() });
 const NoteBody = z.object({ note: z.string().max(300).optional() }).default({});
 const ReversalBody = z.object({ reason: z.string().min(5).max(300) });
 
@@ -35,6 +44,35 @@ export class PaymentsController {
       orderBy: { createdAt: 'desc' },
       take: q.take,
     });
+  }
+
+  /**
+   * A citizen's own payouts (or the family a helper is acting for), newest first. The person comes from
+   * the token, never from the request, so nobody can read another person's payments. Only what she needs
+   * to hear: amount, state and dates; no account numbers, no officer ids.
+   */
+  @Roles('citizen', 'helper')
+  @Get('mine')
+  async mine(@CurrentUser() user: AuthUser, @ZQuery(MineQuery) q: z.infer<typeof MineQuery>) {
+    if (!user.onBehalfOf) throw new ForbiddenException('No person linked');
+    const rows = await this.prisma.payment.findMany({
+      where: {
+        tenantId: user.tenantId,
+        personId: user.onBehalfOf,
+        ...(q.caseId ? { caseId: q.caseId } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        caseId: true,
+        amount: true,
+        currency: true,
+        state: true,
+        settledAt: true,
+        createdAt: true,
+      },
+    });
+    return rows;
   }
 
   @Roles('officer', 'admin', 'auditor')

@@ -373,7 +373,10 @@ function explainReview(
   const flagTexts = [...new Set(shown.map((f) => textOf(FLAG_TEXT, f, OTHER_FLAG)))];
   // Never an empty reason: with nothing specific to say (e.g. records missing, or only an anomaly flag),
   // say that an officer must check.
-  if (!flagTexts.length && !failed.ur.length && !reason) flagTexts.push(OTHER_FLAG);
+  // A claim held only by an anomaly flag reads word for word like an ordinary "not sure" claim, so the
+  // sentence itself cannot tell a fraudster that a fraud check fired.
+  if (!flagTexts.length && !failed.ur.length && !reason)
+    flagTexts.push(shown.length < flags.length ? [...REASON_TEXT.low_confidence] : OTHER_FLAG);
   const ur = [
     ...flagTexts.map((t) => t[0]),
     ...failed.ur.map((t) => `یہ شرط پوری نہیں ہوئی: ${t}`),

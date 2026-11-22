@@ -14,10 +14,12 @@ import type { MultipartFile } from '@fastify/multipart';
 import type { FastifyRequest } from 'fastify';
 import {
   CurrentPrincipal,
+  CurrentUser,
   InternalOnly,
   PartnerScope,
   Roles,
   ZBody,
+  type AuthUser,
   type Principal,
 } from '@haqdaar/nest-kit';
 import { ScamCheckRequest } from '@haqdaar/shared';
@@ -32,6 +34,13 @@ const SpeakBody = z.object({
   text: z.string().trim().min(1).max(600),
   lang: z.enum(['ur', 'en']).default('ur'),
 });
+/** A spoken or typed question; `lang` is the language of the screen, so the answer comes back in it. */
+const AssistBody = z
+  .object({
+    question: z.string().trim().min(2).max(1500),
+    lang: z.enum(['ur', 'en']).default('ur'),
+  })
+  .strict();
 const ExtractBody = z.object({ transcript: z.string().min(1).max(4000) });
 const EmbedBody = z.object({
   text: z.string().min(1).max(4000),
@@ -128,6 +137,23 @@ export class AiController {
   @HttpCode(200)
   scam(@ZBody(ScamCheckRequest) b: z.infer<typeof ScamCheckRequest>) {
     return this.ai.scamCheck(b.text);
+  }
+
+  /**
+   * Ask Haqdaar: an agent that answers a citizen's question by calling read-only tools as her
+   * (policy search, her claims, her payments, message check). At most three calls; it cannot
+   * approve, pay or change anything. `steps` lists what it checked.
+   */
+  @Roles('citizen', 'helper')
+  @Post('assist')
+  @HttpCode(200)
+  assist(
+    @CurrentUser() user: AuthUser,
+    @Req() req: FastifyRequest,
+    @ZBody(AssistBody) b: z.infer<typeof AssistBody>,
+  ) {
+    // RolesGuard only lets a signed-in citizen or helper through, so the header is her own valid token.
+    return this.ai.assist(b.question, b.lang, user, req.headers.authorization ?? '', req.id);
   }
 
   /**

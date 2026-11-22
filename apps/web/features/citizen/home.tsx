@@ -1,7 +1,7 @@
 'use client';
 
 import { CitizenShell } from '@/components/citizen-shell';
-import { IconLock, IconMic, IconShield, IconWallet } from '@/components/icons';
+import { IconLock, IconMessage, IconMic, IconShield, IconWallet } from '@/components/icons';
 import { AudioButton, BigActionCard } from '@/components/ui';
 import { useI18n } from '@/lib/i18n';
 
@@ -12,7 +12,7 @@ export function CitizenHome() {
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="text-3xl font-bold">{t('homeGreeting')}</h1>
         <AudioButton
-          text={`${t('homeGreeting')}. ${t('claim')}. ${t('status')}. ${t('scam')}. ${t('myData')}`}
+          text={`${t('homeGreeting')}. ${t('claim')}. ${t('status')}. ${t('scam')}. ${t('askTitle')}. ${t('myData')}`}
           className="text-brand"
         />
       </div>
@@ -25,6 +25,7 @@ export function CitizenHome() {
           tone="neutral"
         />
         <BigActionCard href="/citizen/scam" icon={IconShield} label={t('scam')} tone="warn" />
+        <BigActionCard href="/citizen/ask" icon={IconMessage} label={t('askTitle')} tone="info" />
         <BigActionCard
           href="/citizen/consents"
           icon={IconLock}

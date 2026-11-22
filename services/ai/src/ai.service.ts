@@ -8,7 +8,13 @@ import {
   OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { buildEvent, EventBus, HealthRegistry, type Principal } from '@haqdaar/nest-kit';
+import {
+  buildEvent,
+  EventBus,
+  HealthRegistry,
+  type AuthUser,
+  type Principal,
+} from '@haqdaar/nest-kit';
 import { env } from './env';
 import { edgeSynthesizer, Speech, SpeechUnavailableError, type SpeechLang } from './speech/speech';
 import { AiRouter, PROFILES, type CallRecord, type ProfileName } from './router/ai-router';
@@ -19,6 +25,8 @@ import { extractClaim } from './tasks/extract-claim';
 import { scamCheck } from './tasks/scam-check';
 import { explainDecision, type ExplainRequest } from './tasks/explain';
 import { redactPii } from './tasks/pii';
+import { runAssist, type AssistLang } from './assist/assist';
+import { callerTools } from './assist/tools';
 import { callerContext } from './caller-context';
 import { documentCheck, UnsupportedImageError } from './vision/document-check';
 import { OcrEngine } from './vision/readers';
@@ -118,6 +126,31 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
   scamCheck(text: string) {
     return scamCheck(this.router, text, env.SEAL_SECRET);
+  }
+
+  /**
+   * Ask Haqdaar. Tools run with the caller's own token; each one is written to the audit log
+   * (tool, ok, ms, who) without the question or any personal detail.
+   */
+  assist(
+    question: string,
+    lang: AssistLang,
+    user: AuthUser,
+    authorization: string,
+    requestId?: string,
+  ) {
+    const tools = callerTools(authorization, (text) => this.scamCheck(text), requestId);
+    return runAssist(this.router, tools, question, lang, (step, planner) => {
+      void this.bus
+        .publish(
+          buildEvent(
+            'ai.tool.called',
+            { tool: step.tool, ok: step.ok, ms: step.ms, planner },
+            { source: 'ai', principal: user, correlationId: requestId },
+          ),
+        )
+        .catch((err) => this.logger.error({ err }, 'Could not publish tool call event'));
+    });
   }
 
   async transcribe(audio: Buffer, mimeType: string, language?: string) {

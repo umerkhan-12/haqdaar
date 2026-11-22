@@ -57,11 +57,44 @@ const FLAGS: Record<string, [string, string]> = {
     'Card shows another CNIC',
     'The number on the photographed card is not the CNIC on the claim.',
   ],
+  'anomaly:shared_payout': [
+    'Shared payout account',
+    'Several different people are being paid into the same account or mobile wallet. Often one person collecting for many.',
+  ],
+  'anomaly:helper_velocity': [
+    'Helper filing very fast',
+    'One helper submitted an unusual number of claims within an hour.',
+  ],
+  'anomaly:household_pattern': [
+    'Copy-paste households',
+    'Many claims from one district share the same household details within a day.',
+  ],
+  'anomaly:identity_collision': [
+    'Same identity, different people',
+    'This CNIC appears on claims whose name or other details do not agree.',
+  ],
   cnic_photo_skipped: [
     'No CNIC photo',
     'She did not take a photo of her card. The identity record check still ran.',
   ],
 };
+
+/** One sentence of evidence for a fraud-ring signal: what was counted, against which limit. */
+export function anomalyEvidence(a: { type: string; observedCount: number; threshold: number }) {
+  const n = a.observedCount;
+  switch (a.type) {
+    case 'shared_payout':
+      return `${n} different people share this payout account (limit ${a.threshold}).`;
+    case 'helper_velocity':
+      return `${n} claims from the same helper in one hour (limit ${a.threshold}).`;
+    case 'household_pattern':
+      return `${n} people with the same household details in one day (limit ${a.threshold}).`;
+    case 'identity_collision':
+      return `${n} details disagree for the same CNIC (limit ${a.threshold}).`;
+    default:
+      return `Observed ${n}, limit ${a.threshold}.`;
+  }
+}
 
 export function flagLabel(flag: string): { label: string; meaning: string } {
   const f = FLAGS[flag];
