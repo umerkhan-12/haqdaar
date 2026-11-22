@@ -15,12 +15,16 @@ import { PrismaService } from '../prisma.service';
 import { PayoutService } from './payout.service';
 
 /** Optional corrected mobile account number, given by the claimant after a failed payout. */
-const RetryBody = z.object({
-  alias: z
-    .string()
-    .regex(/^03\d{9}$/, 'Mobile number must look like 03XXXXXXXXX')
-    .optional(),
-});
+// A retry with no body at all is the plain "send again".
+const RetryBody = z.preprocess(
+  (v) => v ?? {},
+  z.object({
+    alias: z
+      .string()
+      .regex(/^03\d{9}$/, 'Mobile number must look like 03XXXXXXXXX')
+      .optional(),
+  }),
+);
 
 const ListQuery = z.object({
   state: PaymentState.optional(),
