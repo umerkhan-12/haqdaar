@@ -4,6 +4,7 @@ import { CitizenShell } from '@/components/citizen-shell';
 import { IconLock, IconMessage, IconMic, IconShield, IconWallet } from '@/components/icons';
 import { AudioButton, BigActionCard } from '@/components/ui';
 import { useI18n } from '@/lib/i18n';
+import { RefusedClaims } from './refused-claims';
 
 export function CitizenHome() {
   const { t } = useI18n();
@@ -16,6 +17,7 @@ export function CitizenHome() {
           className="text-brand"
         />
       </div>
+      <RefusedClaims />
       <nav className="space-y-4" aria-label={t('appName')}>
         <BigActionCard href="/citizen/claim" icon={IconMic} label={t('claim')} tone="info" />
         <BigActionCard

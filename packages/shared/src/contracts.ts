@@ -122,7 +122,7 @@ export const ClaimExtraction = z.object({
 export type ClaimExtraction = z.infer<typeof ClaimExtraction>;
 
 export const ScamCheckRequest = z.object({
-  text: z.string().min(1).max(2000),
+  text: z.string().trim().min(1).max(2000),
   sender: z.string().max(40).optional(),
 });
 

@@ -6,9 +6,11 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { useOnline, useSession } from '@/lib/hooks';
 import { useI18n } from '@/lib/i18n';
+import { M, type MessageKey } from '@/lib/messages';
 import { flush, pending } from '@/lib/outbox';
 import {
   clearSession,
+  forgetPerson,
   getHelperSession,
   HOME,
   saveHelperSession,
@@ -73,9 +75,11 @@ export function Shell({
     else if (session && !roles.includes(session.role)) router.replace(HOME[session.role]);
   }, [session, roles, router]);
 
+  // Only the open person's claims are counted and sent: a claim saved for another family waits for theirs.
+  const personId = session?.personId ?? null;
   useEffect(() => {
-    const count = () => void pending().then((p) => setWaiting(p.length));
-    const tryFlush = () => void flush().then(count);
+    const count = () => void pending(personId).then((p) => setWaiting(p.length));
+    const tryFlush = () => void flush(personId).then(count);
     count();
     tryFlush();
     window.addEventListener('online', tryFlush);
@@ -84,12 +88,13 @@ export function Shell({
       window.removeEventListener('online', tryFlush);
       window.removeEventListener('hq:outbox', count);
     };
-  }, []);
+  }, [personId]);
 
   if (!session || !roles.includes(session.role)) return <Skeleton lines={4} />;
 
   const logout = async () => {
     await api.logout(session.refreshToken).catch(() => undefined);
+    forgetPerson(session.personId);
     clearSession();
     // A full page load (not a client route change) drops everything this account had on screen or in memory.
     leaveTo('/login');
@@ -97,6 +102,7 @@ export function Shell({
 
   const leaveFamily = () => {
     const helper = getHelperSession();
+    forgetPerson(session.personId);
     if (helper) saveSession(helper);
     saveHelperSession(null);
     // The family's screens must not stay behind for the next family to swipe back to.
@@ -105,11 +111,16 @@ export function Shell({
 
   const nav = STAFF_NAV[session.role];
   const isStaff = !!nav;
+  // Staff screens are written in English, so their frame is English too: one language per screen.
+  const label = (k: MessageKey) => (isStaff ? M[k][1] : t(k));
 
   return (
-    <div className="mx-auto flex min-h-dvh flex-col">
+    <div
+      className="mx-auto flex min-h-dvh flex-col"
+      {...(isStaff ? { dir: 'ltr', lang: 'en' } : {})}
+    >
       <p className="bg-amber-100 px-3 py-1 text-center text-xs font-semibold text-amber-900">
-        {t('prototype')}
+        {label('prototype')}
       </p>
       <header className="app-header text-white">
         <div
@@ -119,21 +130,23 @@ export function Shell({
             href={HOME[session.role]}
             className="inline-flex min-h-12 items-center px-1 text-2xl font-bold"
           >
-            {t('appName')}
+            {label('appName')}
           </Link>
           <span className="latin truncate text-sm opacity-90">{session.name}</span>
           <span className="flex-1" />
-          <button
-            onClick={toggle}
-            className="min-h-12 rounded-lg px-3 text-sm underline-offset-4 hover:underline"
-          >
-            {t('switchLang')}
-          </button>
+          {!isStaff && (
+            <button
+              onClick={toggle}
+              className="min-h-12 rounded-lg px-3 text-sm underline-offset-4 hover:underline"
+            >
+              {t('switchLang')}
+            </button>
+          )}
           <button
             onClick={logout}
             className="min-h-12 rounded-lg px-3 text-sm underline-offset-4 hover:underline"
           >
-            {t('logout')}
+            {label('logout')}
           </button>
         </div>
         {nav && (

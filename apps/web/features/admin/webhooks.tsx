@@ -5,16 +5,19 @@ import { Shell } from '@/components/shell';
 import {
   Button,
   Card,
+  ConfirmDialog,
   DataTable,
   Skeleton,
   StatusPill,
   staffError,
   type Tone,
 } from '@/components/ui';
-import { api, type WebhookDelivery } from '@/lib/api';
+import { api, request, type WebhookDelivery, type WebhookSubscription } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-PK') : '—');
+/** Same rule as the server: https with a dotted host name or address. */
+const HTTPS_URL = /^https:\/\/[^\s/?#]+\.[^\s/?#]+([/?#]\S*)?$/;
 const deliveryTone = (status: string): Tone =>
   status === 'DELIVERED' ? 'ok' : status === 'PENDING' ? 'warn' : 'bad';
 
@@ -101,8 +104,25 @@ export function AdminWebhooks() {
   const [url, setUrl] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [turnOff, setTurnOff] = useState<WebhookSubscription | null>(null);
+  const [offBusy, setOffBusy] = useState(false);
+  const [offError, setOffError] = useState<string | null>(null);
   const shownId = selected ?? data?.[0]?.id ?? null;
-  const validUrl = /^https?:\/\/\S+\.\S+|^https?:\/\/(localhost|127\.0\.0\.1)/.test(url.trim());
+  const validUrl = HTTPS_URL.test(url.trim());
+
+  async function deactivate(s: WebhookSubscription) {
+    setOffBusy(true);
+    setOffError(null);
+    try {
+      await request<WebhookSubscription>('DELETE', `/webhooks/${s.id}`);
+      setTurnOff(null);
+      reload();
+    } catch (e) {
+      setOffError(staffError(e));
+    } finally {
+      setOffBusy(false);
+    }
+  }
 
   async function register() {
     setMsg(null);
@@ -195,6 +215,24 @@ export function AdminWebhooks() {
                     </Button>
                   ),
                 },
+                {
+                  header: 'Turn off',
+                  cell: (s) =>
+                    s.active ? (
+                      <Button
+                        variant="ghost"
+                        className="min-h-10 text-sm"
+                        onClick={() => {
+                          setOffError(null);
+                          setTurnOff(s);
+                        }}
+                      >
+                        Turn off…
+                      </Button>
+                    ) : (
+                      '—'
+                    ),
+                },
               ]}
             />
           )}
@@ -206,6 +244,26 @@ export function AdminWebhooks() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={!!turnOff}
+        title="Turn off this webhook?"
+        confirmLabel={offBusy ? 'Turning off…' : 'Turn off'}
+        danger
+        busy={offBusy}
+        onClose={() => setTurnOff(null)}
+        onConfirm={() => turnOff && deactivate(turnOff)}
+      >
+        <p className="break-all font-mono text-xs">{turnOff?.url}</p>
+        <p className="text-sm">
+          The partner gets no more messages, and queued retries are dropped. The delivery history
+          stays here. To start again, register the URL anew.
+        </p>
+        {offError && (
+          <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+            {offError}
+          </p>
+        )}
+      </ConfirmDialog>
     </Shell>
   );
 }

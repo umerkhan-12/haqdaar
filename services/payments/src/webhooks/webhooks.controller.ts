@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, Roles, ZBody, type AuthUser } from '@haqdaar/nest-kit';
 import { z } from 'zod';
@@ -9,8 +9,10 @@ const SUPPORTED_EVENTS = ['payments.payment.state_changed'] as const;
 const CreateBody = z.object({
   url: z
     .string()
+    .trim()
+    .max(2048)
     .url()
-    .refine((u) => /^https?:\/\//.test(u), 'Only http(s) URLs'),
+    .refine((u) => u.startsWith('https://'), 'Webhook URL must use https'),
   events: z.array(z.enum(SUPPORTED_EVENTS)).min(1),
 });
 
@@ -29,6 +31,13 @@ export class WebhooksController {
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.webhooks.list(user.tenantId);
+  }
+
+  /** Turns the webhook off for good; its delivery history stays readable. */
+  @Delete(':id')
+  @HttpCode(200)
+  deactivate(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.webhooks.deactivate(user.tenantId, id);
   }
 
   @Get(':id/deliveries')

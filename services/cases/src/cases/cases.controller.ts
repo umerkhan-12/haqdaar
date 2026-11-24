@@ -18,6 +18,8 @@ import {
   ApproveBody,
   AssignBody,
   CloseBody,
+  CorrectionBody,
+  CorrectionContextQuery,
   CreateCase,
   EscalateBody,
   ListQuery,
@@ -56,11 +58,11 @@ export class CasesController {
     return this.cases.resubmit(requireUser(user), id, req.id, b);
   }
 
-  /** Citizens and helpers see only their (selected) person's cases; staff see the tenant's. */
+  /** Citizens and helpers see only their (selected) person's cases; staff see the tenant's and can search. */
   @Roles('citizen', 'helper', 'officer', 'admin', 'auditor')
   @Get('cases')
   list(@CurrentUser() user: AuthUser, @ZQuery(ListQuery) q: z.infer<typeof ListQuery>) {
-    return this.cases.list(requireUser(user), q.status);
+    return this.cases.list(requireUser(user), q);
   }
 
   @Roles('citizen', 'helper', 'officer', 'admin', 'auditor')
@@ -73,6 +75,35 @@ export class CasesController {
   @Get('queue')
   queue(@CurrentUser() user: AuthUser) {
     return this.cases.queue(requireUser(user));
+  }
+
+  /** Names and latest claims for the people in "my information is wrong" requests. */
+  @Roles('officer', 'admin')
+  @Get('queue/corrections')
+  corrections(
+    @CurrentUser() user: AuthUser,
+    @ZQuery(CorrectionContextQuery) q: z.infer<typeof CorrectionContextQuery>,
+  ) {
+    return this.cases.correctionContext(requireUser(user), q.personIds);
+  }
+
+  /** A case without personal data, for when the citizen has withdrawn consent. */
+  @Roles('officer', 'admin')
+  @Get('queue/cases/:id')
+  basic(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.cases.basic(requireUser(user), id);
+  }
+
+  @Roles('officer', 'admin')
+  @Post('cases/:id/correction')
+  @HttpCode(200)
+  correction(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ZBody(CorrectionBody) b: CorrectionBody,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.cases.applyCorrection(requireUser(user), id, b, req.id);
   }
 
   @Roles('officer', 'admin')
@@ -116,7 +147,7 @@ export class CasesController {
     @ZBody(RequestInfoBody) b: z.infer<typeof RequestInfoBody>,
     @Req() req: FastifyRequest,
   ) {
-    return this.cases.requestInfo(requireUser(user), id, b.message, req.id);
+    return this.cases.requestInfo(requireUser(user), id, b.message, req.id, b.correctionId);
   }
 
   @Roles('officer', 'admin')

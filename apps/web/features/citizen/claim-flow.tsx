@@ -14,6 +14,8 @@ import {
   LinkButton,
   Skeleton,
   StatusCard,
+  errorReason,
+  errorWords,
 } from '@/components/ui';
 import {
   api,
@@ -27,21 +29,32 @@ import { useSession } from '@/lib/hooks';
 import { useI18n } from '@/lib/i18n';
 import type { MessageKey } from '@/lib/messages';
 import { enqueue } from '@/lib/outbox';
-import { ownPhone } from '@/lib/session';
+import { DISTRICT_KEY, draftKey, ownPhone } from '@/lib/session';
 import {
   DISTRICTS,
   districtLabel,
   EMPTY,
+  FIELDS,
   firstMissing,
   formatCnic,
   isValid,
   mergeHeard,
   spellDigits,
+  typedMobile,
+  westernDigits,
   type Details,
   type FieldName,
 } from './claim-words';
 import { CnicPhoto } from './cnic-photo';
 import { SimpleWordsLabel, useSimpleExplanation } from './simple-explanation';
+
+/** Numbers typed with Urdu digits or +92 become the form the server checks. */
+function typed(k: FieldName, v: string): string {
+  if (k === 'cnic') return formatCnic(v);
+  if (k === 'alias') return typedMobile(v);
+  if (k === 'householdSize') return westernDigits(v).replace(/\D/g, '').slice(0, 2);
+  return v;
+}
 
 /** speak → card photo → review (yes / no) → consent → done; `edit` is the typed fallback, reachable from anywhere. */
 type Step = 'speak' | 'review' | 'edit' | 'photo' | 'consent' | 'done';
@@ -64,6 +77,14 @@ const LABEL: Record<FieldName, MessageKey> = {
   district: 'district',
   householdSize: 'household',
   alias: 'payoutNumber',
+};
+/** What to fix when a typed box is not right, said and shown under that box. */
+const BAD: Record<FieldName, MessageKey> = {
+  fullName: 'badFullName',
+  cnic: 'redoCnicBad',
+  district: 'badDistrict',
+  householdSize: 'badHousehold',
+  alias: 'signupPhoneBad',
 };
 
 const PROGRESS: {
@@ -98,8 +119,6 @@ interface Heard {
   reason?: string;
 }
 
-const draftKey = (personId: string) => `hq.claim.${personId}`;
-
 function loadDraft(personId: string): Draft | null {
   try {
     const d = JSON.parse(localStorage.getItem(draftKey(personId)) ?? 'null') as Draft | null;
@@ -118,6 +137,14 @@ export function ClaimFlow() {
   /** The one thing being asked for right now; null = "tell us everything". */
   const [asking, setAsking] = useState<FieldName | null>(null);
   const [aiUnsure, setAiUnsure] = useState(false);
+  /** She said something was wrong: she repeats only that; everything else she told us is kept. */
+  const [redo, setRedo] = useState(false);
+  /** The recording could not be sent: no internet, not her words. */
+  const [voiceOffline, setVoiceOffline] = useState(false);
+  /** "Next" pressed with a box not right: each wrong box says what to fix. */
+  const [showBad, setShowBad] = useState(false);
+  /** Warned once that sending without permission stops the claim at the officer. */
+  const [warnedConsent, setWarnedConsent] = useState(false);
   const [restored, setRestored] = useState(false);
   const [documentCheck, setDocumentCheck] = useState<DocumentCheck | null>(null);
   /** The card step is passed once (scanned or skipped); later corrections do not ask for it again. */
@@ -186,7 +213,14 @@ export function ClaimFlow() {
   // Every step says what to do as soon as it appears: the screen is usable without reading a word.
   useEffect(() => {
     if (!personId) return;
-    if (step === 'speak') speak(asking ? t(QUESTION[asking]) : [t('recordTap'), t('recordHint')]);
+    if (step === 'speak')
+      speak(
+        asking
+          ? t(QUESTION[asking])
+          : redo
+            ? [t('sayWhatIsWrong'), t('recordTap')]
+            : [t('recordTap'), t('recordHint')],
+      );
     else if (step === 'review')
       speak(restored ? [t('draftRestored'), ...readBack(details)] : readBack(details));
     else if (step === 'edit') speak(t(aiUnsure ? 'typeOrHelper' : 'checkDetails'));
@@ -194,13 +228,14 @@ export function ClaimFlow() {
       speak([t('consentAsk'), ...CONSENTS.map((c) => t(c.label)), t('consentNote')]);
     // Speak once per step / question, not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, asking, personId, lang]);
+  }, [step, asking, redo, personId, lang]);
 
   const set = (k: FieldName) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setDetails((d) => ({ ...d, [k]: k === 'cnic' ? formatCnic(e.target.value) : e.target.value }));
+    setDetails((d) => ({ ...d, [k]: typed(k, e.target.value) }));
 
   async function startRecording() {
     setError(null);
+    setVoiceOffline(false);
     speak([]);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -242,8 +277,12 @@ export function ClaimFlow() {
       const next = mergeHeard(details, ex.extraction, said.text, asking);
       setDetails(next);
       askNext(next);
-    } catch {
-      goManual();
+    } catch (e) {
+      // No signal is not her words being unclear: say so, and let her speak again when it returns.
+      if (e instanceof ApiError && e.offline) {
+        setVoiceOffline(true);
+        speak(t('voiceOffline'));
+      } else goManual();
     } finally {
       setBusy('');
     }
@@ -290,10 +329,30 @@ export function ClaimFlow() {
     );
     setAsking(null);
     setAiUnsure(false);
+    setRedo(false);
+    setShowBad(false);
     setRestored(false);
     setDocumentCheck(null);
     setCardSeen(false);
     setStep('speak');
+  }
+
+  /** Back to the voice, keeping her answers and the card check: she repeats only what is missing or wrong. */
+  function speakAgain() {
+    tries.current = {};
+    setRestored(false);
+    setVoiceOffline(false);
+    setAsking(firstMissing(details));
+    setRedo(true);
+    setStep('speak');
+  }
+
+  /** "Next" on the typing screen: a box that is not right says (aloud too) what to fix. */
+  function checkTyped() {
+    const bad = FIELDS.filter((f) => !isValid[f](details[f]));
+    if (!bad.length) return setStep('review');
+    setShowBad(true);
+    speak(bad.map((f) => `${t(LABEL[f])}: ${t(BAD[f])}`));
   }
 
   /**
@@ -371,6 +430,12 @@ export function ClaimFlow() {
 
   async function send() {
     if (!personId) return;
+    // Without permission the claim stops at the officer: she hears that before it is sent, not after.
+    if (missingConsent && !warnedConsent) {
+      setWarnedConsent(true);
+      speak(t('consentMissingWarn'));
+      return;
+    }
     const claim: ClaimInput = {
       type: 'relief_claim',
       fullName: details.fullName.trim(),
@@ -388,7 +453,7 @@ export function ClaimFlow() {
       for (const purpose of consents) await api.grantConsent(personId, purpose);
       const c = await api.submitClaim(claim, key.current);
       localStorage.removeItem(draftKey(personId));
-      if (details.district) localStorage.setItem('hq.district', details.district);
+      if (details.district) localStorage.setItem(DISTRICT_KEY, details.district);
       setResult({ kind: 'sent', case: c });
       setStep('done');
       const reason = lang === 'ur' ? c.decision?.explanationUr : c.decision?.explanationEn;
@@ -404,13 +469,23 @@ export function ClaimFlow() {
         setResult({ kind: 'saved' });
         setStep('done');
         speak(t('savedOffline'));
-      } else setError(e);
+      } else {
+        setError(e);
+        const [title, help] = errorWords(e);
+        // She may not read: the reason and what to do next are spoken, not only shown.
+        speak(help ? [t(title), t(help)] : t(title));
+      }
     } finally {
       setBusy('');
     }
   }
 
   const complete = firstMissing(details) === null;
+  const missingConsent = consents.length < CONSENTS.length;
+  const badNote = (f: FieldName) =>
+    showBad && !isValid[f](details[f]) ? (
+      <p className="text-base font-semibold text-red-700">{t(BAD[f])}</p>
+    ) : null;
   const at = PROGRESS.findIndex((p) => p.steps.includes(step));
 
   return (
@@ -453,13 +528,22 @@ export function ClaimFlow() {
       {step === 'speak' && (
         <div className="space-y-6 text-center">
           <div className="flex items-center justify-center gap-3">
-            <h1 className="text-2xl font-bold">{asking ? t(QUESTION[asking]) : t('recordTap')}</h1>
+            <h1 className="text-2xl font-bold">
+              {asking ? t(QUESTION[asking]) : redo ? t('sayWhatIsWrong') : t('recordTap')}
+            </h1>
             <AudioButton
-              text={asking ? t(QUESTION[asking]) : [t('recordTap'), t('recordHint')]}
+              text={
+                asking
+                  ? t(QUESTION[asking])
+                  : redo
+                    ? [t('sayWhatIsWrong'), t('recordTap')]
+                    : [t('recordTap'), t('recordHint')]
+              }
               className="text-brand"
             />
           </div>
-          {!asking && <p className="text-lg text-muted">{t('recordHint')}</p>}
+          {!asking && <p className="text-lg text-muted">{t(redo ? 'recordTap' : 'recordHint')}</p>}
+          {voiceOffline && <StatusCard tone="warn" title={t('voiceOffline')} urgent />}
           {busy === 'understanding' ? (
             <div role="status" className="space-y-2">
               <p className="text-xl font-semibold">{t('understanding')}</p>
@@ -536,7 +620,7 @@ export function ClaimFlow() {
           </button>
           <button
             type="button"
-            onClick={startOver}
+            onClick={speakAgain}
             className="flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl border-2 border-red-700 bg-white px-5 text-xl font-semibold text-red-800"
           >
             <IconX className="h-8 w-8" />
@@ -545,6 +629,13 @@ export function ClaimFlow() {
           <Button variant="ghost" className="w-full" onClick={() => setStep('edit')}>
             {t('fixByTyping')}
           </Button>
+          <button
+            type="button"
+            onClick={startOver}
+            className="flex min-h-12 w-full items-center justify-center text-lg text-brand underline"
+          >
+            {t('startOver')}
+          </button>
         </div>
       )}
 
@@ -563,9 +654,11 @@ export function ClaimFlow() {
               className={inputCls}
               value={details.fullName}
               onChange={set('fullName')}
+              maxLength={80}
               autoComplete="name"
             />
           </Field>
+          {badNote('fullName')}
           <Field label={t('cnic')}>
             <input
               className={inputCls}
@@ -576,6 +669,7 @@ export function ClaimFlow() {
               onChange={set('cnic')}
             />
           </Field>
+          {badNote('cnic')}
           <Field label={t('district')}>
             <select className={inputCls} value={details.district} onChange={set('district')}>
               <option value="">—</option>
@@ -586,6 +680,7 @@ export function ClaimFlow() {
               ))}
             </select>
           </Field>
+          {badNote('district')}
           <Field label={t('household')}>
             <input
               className={inputCls}
@@ -595,6 +690,7 @@ export function ClaimFlow() {
               onChange={set('householdSize')}
             />
           </Field>
+          {badNote('householdSize')}
           <Field label={t('payoutPhone')}>
             <input
               className={inputCls}
@@ -605,12 +701,23 @@ export function ClaimFlow() {
               onChange={set('alias')}
             />
           </Field>
-          <Button className="w-full" disabled={!complete} onClick={() => setStep('review')}>
+          {badNote('alias')}
+          <Button className="w-full" onClick={checkTyped}>
             {t('next')}
           </Button>
-          <Button variant="ghost" className="w-full" onClick={startOver}>
-            {t('startOver')}
+          <Button variant="ghost" className="w-full" onClick={speakAgain}>
+            <span className="inline-flex items-center gap-2">
+              <IconMic className="h-6 w-6" />
+              {t('redoSpeak')}
+            </span>
           </Button>
+          <button
+            type="button"
+            onClick={startOver}
+            className="flex min-h-12 w-full items-center justify-center text-lg text-brand underline"
+          >
+            {t('startOver')}
+          </button>
         </div>
       )}
 
@@ -634,13 +741,14 @@ export function ClaimFlow() {
                 type="button"
                 role="checkbox"
                 aria-checked={on}
+                disabled={busy === 'sending'}
                 onClick={() => {
                   setConsents((cs) =>
                     on ? cs.filter((x) => x !== c.purpose) : [...cs, c.purpose],
                   );
                   if (!on) speak(t(c.label));
                 }}
-                className={`flex min-h-20 w-full items-center gap-4 rounded-2xl border-2 p-4 text-start text-lg ${
+                className={`flex min-h-20 w-full items-center gap-4 rounded-2xl border-2 p-4 text-start text-lg disabled:opacity-60 ${
                   on ? 'border-brand bg-brand-soft' : 'border-slate-300 bg-white'
                 }`}
               >
@@ -654,9 +762,28 @@ export function ClaimFlow() {
             );
           })}
           <p className="text-muted">{t('consentNote')}</p>
+          {missingConsent && warnedConsent && (
+            <StatusCard tone="warn" title={t('consentMissingWarn')} urgent />
+          )}
           {error ? <ErrorState error={error} /> : null}
+          {error instanceof ApiError && errorReason(error.code) && error.code !== 'CNIC_LOCKED' && (
+            <Button variant="ghost" className="w-full" onClick={() => setStep('edit')}>
+              {t('correctCnic')}
+            </Button>
+          )}
           <Button className="min-h-16 w-full text-xl" disabled={busy === 'sending'} onClick={send}>
-            {busy === 'sending' ? t('sending') : t('send')}
+            {busy === 'sending'
+              ? t('sending')
+              : t(missingConsent && warnedConsent ? 'sendWithout' : 'send')}
+          </Button>
+          {/* Last chance before sending: her answers stay filled in, she changes only what is wrong. */}
+          <Button
+            variant="ghost"
+            className="w-full"
+            disabled={busy === 'sending'}
+            onClick={() => setStep('edit')}
+          >
+            {t('changeDetails')}
           </Button>
         </div>
       )}

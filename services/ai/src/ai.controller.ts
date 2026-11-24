@@ -17,7 +17,9 @@ import {
   CurrentUser,
   InternalOnly,
   PartnerScope,
+  requirePlatformAdmin,
   Roles,
+  ServiceClient,
   ZBody,
   type AuthUser,
   type Principal,
@@ -99,7 +101,10 @@ const AUDIO_TYPES = [
 @ApiBearerAuth()
 @Controller('ai')
 export class AiController {
-  constructor(private readonly ai: AiService) {}
+  constructor(
+    private readonly ai: AiService,
+    private readonly client: ServiceClient,
+  ) {}
 
   /** Active profile, provider chain with circuit states, stats. */
   @Roles('admin', 'auditor', 'officer')
@@ -108,19 +113,24 @@ export class AiController {
     return this.ai.status();
   }
 
-  /** Switch AI profile at runtime (e.g. to `demo` on judging day). Logged. */
+  /** Switch AI profile at runtime (e.g. to `demo` on judging day). One profile serves every program: platform admins only. Logged. */
   @Roles('admin')
   @Post('profile')
   @HttpCode(200)
-  setProfile(@CurrentPrincipal() p: Principal, @ZBody(ProfileBody) b: z.infer<typeof ProfileBody>) {
+  async setProfile(
+    @CurrentPrincipal() p: Principal,
+    @ZBody(ProfileBody) b: z.infer<typeof ProfileBody>,
+  ) {
+    await requirePlatformAdmin(this.client, p, 'The AI profile');
     return this.ai.setProfile(b.profile, p);
   }
 
-  /** Kill AI: every AI answer becomes "not sure"; the system keeps working through humans. */
+  /** Kill AI: every AI answer becomes "not sure"; the system keeps working through humans. Every program at once: platform admins only. */
   @Roles('admin')
   @Post('kill-switch')
   @HttpCode(200)
-  kill(@CurrentPrincipal() p: Principal, @ZBody(KillBody) b: z.infer<typeof KillBody>) {
+  async kill(@CurrentPrincipal() p: Principal, @ZBody(KillBody) b: z.infer<typeof KillBody>) {
+    await requirePlatformAdmin(this.client, p, 'Kill AI');
     return this.ai.setKilled(b.killed, p);
   }
 

@@ -1,23 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Button,
   Card,
   ConfirmDialog,
+  LinkButton,
   Skeleton,
   StatusPill,
   Timeline,
   laneTone,
   staffError,
 } from '@/components/ui';
-import { api, type StaffCase } from '@/lib/api';
+import { api, ApiError, type BasicStaffCase, type StaffCase } from '@/lib/api';
 import { useAsync, useSession } from '@/lib/hooks';
 import { AiNotesCard } from './ai-notes-card';
 import { FraudSignalsCard } from './fraud-signals';
 import { laneLabel, staffName, statusLabel, timelineLabel } from './labels';
 
-type Action = 'reject' | 'info' | 'escalate' | 'close';
+type Action = 'approve' | 'reject' | 'info' | 'escalate' | 'close';
 
 /** One place for every dialog: its words, whether text is required, and the call it makes. */
 const DIALOG: Record<
@@ -32,6 +33,14 @@ const DIALOG: Record<
     call: (id: string, text: string) => Promise<unknown>;
   }
 > = {
+  approve: {
+    title: 'Approve this claim',
+    confirm: 'Approve and start the payout',
+    prompt: 'Note for the citizen (optional, she hears it)',
+    minChars: 0,
+    done: 'Approved. Payout will start.',
+    call: (id, text) => api.approve(id, text || undefined),
+  },
   reject: {
     title: 'Reject this claim',
     confirm: 'Reject',
@@ -67,6 +76,8 @@ const DIALOG: Record<
   },
 };
 
+const DONE_STATUSES = ['PAID', 'REJECTED', 'CLOSED'];
+
 function clauseList(d: NonNullable<StaffCase['decision']>) {
   const c = d.clauses;
   const rows = Array.isArray(c)
@@ -79,10 +90,8 @@ function clauseList(d: NonNullable<StaffCase['decision']>) {
   }));
 }
 
-/** Everything an officer needs to decide one case, reachable by keyboard. */
-export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
-  const { data: c, error, loading, reload } = useAsync<StaffCase>(() => api.staffCase(id), [id]);
-  const me = useSession()?.userId;
+/** Runs one officer action; after a failure the case and queue are reloaded so no stale button stays. */
+function useActions(reload: () => void, onDone: () => void) {
   const [action, setAction] = useState<Action | null>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -94,19 +103,86 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
     try {
       await fn();
       setMessage(done);
-      setAction(null);
-      setText('');
-      reload();
-      onDone();
     } catch (e) {
       setMessage(staffError(e));
-      setAction(null);
     } finally {
+      setAction(null);
+      setText('');
       setBusy(false);
+      reload();
+      onDone();
     }
   }
 
+  function open(a: Action) {
+    setText('');
+    setAction(a);
+  }
+
+  return { action, setAction, open, text, setText, busy, message, run };
+}
+
+type Actions = ReturnType<typeof useActions>;
+
+/** The dialog every action goes through, with its minimum length spelled out. */
+function ActionDialog({
+  caseId,
+  a,
+  children,
+}: {
+  caseId: string;
+  a: Actions;
+  children?: ReactNode;
+}) {
+  const dialog = a.action ? DIALOG[a.action] : null;
+  const short = a.text.trim().length < (dialog?.minChars ?? 0);
+  return (
+    <ConfirmDialog
+      open={dialog !== null}
+      title={dialog?.title ?? ''}
+      confirmLabel={dialog?.confirm ?? ''}
+      danger={dialog?.danger}
+      busy={a.busy || short}
+      onClose={() => a.setAction(null)}
+      onConfirm={() => dialog && a.run(() => dialog.call(caseId, a.text.trim()), dialog.done)}
+    >
+      {children}
+      <label className="block space-y-1">
+        <span className="text-sm font-medium">{dialog?.prompt}</span>
+        <textarea
+          maxLength={500}
+          value={a.text}
+          onChange={(e) => a.setText(e.target.value)}
+          rows={3}
+          className="w-full rounded-xl border-2 border-slate-400 p-2"
+        />
+      </label>
+      {dialog && dialog.minChars > 0 && short && (
+        <p className="text-xs text-muted">
+          At least {dialog.minChars} characters ({a.text.trim().length} so far).
+        </p>
+      )}
+    </ConfirmDialog>
+  );
+}
+
+function Message({ text }: { text: string | null }) {
+  return text ? (
+    <p role="status" className="rounded-xl bg-slate-100 p-3">
+      {text}
+    </p>
+  ) : null;
+}
+
+/** Everything an officer needs to decide one case, reachable by keyboard. */
+export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
+  const { data: c, error, loading, reload } = useAsync<StaffCase>(() => api.staffCase(id), [id]);
+  const me = useSession()?.userId;
+  const a = useActions(reload, onDone);
+
   if (loading && !c) return <Skeleton lines={5} />;
+  if (error instanceof ApiError && error.code === 'CONSENT_WITHDRAWN')
+    return <ReducedPanel id={id} onDone={onDone} />;
   if (error)
     return (
       <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">
@@ -118,7 +194,7 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
   const reviewable = c.status === 'IN_REVIEW' || c.status === 'NEEDS_INFO';
   const closable = c.status === 'PAID' || c.status === 'REJECTED';
   const d = c.decision;
-  const dialog = action ? DIALOG[action] : null;
+  const account = c.payout.aliasMasked ?? c.payout.ibanMasked ?? '—';
 
   return (
     <div className="space-y-4">
@@ -133,9 +209,9 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
           <dt className="text-muted">CNIC</dt>
           <dd className="font-mono">{c.person.cnicMasked}</dd>
           <dt className="text-muted">District</dt>
-          <dd>{c.person.district ?? '—'}</dd>
+          <dd>{c.district ?? c.person.district ?? '—'}</dd>
           <dt className="text-muted">Payout</dt>
-          <dd className="font-mono">{c.payout.aliasMasked ?? c.payout.ibanMasked ?? '—'}</dd>
+          <dd className="font-mono">{account}</dd>
           <dt className="text-muted">Amount</dt>
           <dd>Rs {c.amount?.toLocaleString('en-PK') ?? '—'}</dd>
           <dt className="text-muted">Assigned to</dt>
@@ -177,72 +253,131 @@ export function CasePanel({ id, onDone }: { id: string; onDone: () => void }) {
       <div className="flex flex-wrap gap-2">
         {reviewable && (
           <>
-            <Button
-              disabled={busy}
-              onClick={() =>
-                run(() => api.approve(c.id, 'Approved by officer'), 'Approved. Payout will start.')
-              }
-            >
-              Approve
+            <Button disabled={a.busy} onClick={() => a.open('approve')}>
+              Approve…
             </Button>
-            <Button variant="danger" disabled={busy} onClick={() => setAction('reject')}>
+            <Button variant="danger" disabled={a.busy} onClick={() => a.open('reject')}>
               Reject…
             </Button>
-            <Button variant="ghost" disabled={busy} onClick={() => setAction('info')}>
+            <Button variant="ghost" disabled={a.busy} onClick={() => a.open('info')}>
               Ask for info…
             </Button>
             {c.assignedTo !== me && (
               <Button
                 variant="ghost"
-                disabled={busy}
-                onClick={() => run(() => api.assign(c.id), 'Assigned to you.')}
+                disabled={a.busy}
+                onClick={() => a.run(() => api.assign(c.id), 'Assigned to you.')}
               >
                 Assign to me
               </Button>
             )}
             {!c.escalated && (
-              <Button variant="ghost" disabled={busy} onClick={() => setAction('escalate')}>
+              <Button variant="ghost" disabled={a.busy} onClick={() => a.open('escalate')}>
                 Escalate…
               </Button>
             )}
           </>
         )}
         {closable && (
-          <Button variant="ghost" disabled={busy} onClick={() => setAction('close')}>
+          <Button variant="ghost" disabled={a.busy} onClick={() => a.open('close')}>
             Close case…
           </Button>
         )}
       </div>
-      {message && (
-        <p role="status" className="rounded-xl bg-slate-100 p-3">
-          {message}
-        </p>
+      <Message text={a.message} />
+      {(c.status === 'APPROVED' || c.status === 'PAID') && (
+        <LinkButton href={`/officer/payments?case=${c.id}`}>See this payout</LinkButton>
       )}
 
       <Card>
         <h3 className="mb-2 font-semibold">Timeline</h3>
-        <Timeline events={c.timeline.map((e) => ({ label: timelineLabel(e, me), at: e.at }))} />
+        <Timeline
+          done={DONE_STATUSES.includes(c.status)}
+          events={c.timeline.map((e) => ({ label: timelineLabel(e, me), at: e.at }))}
+        />
       </Card>
 
-      <ConfirmDialog
-        open={dialog !== null}
-        title={dialog?.title ?? ''}
-        confirmLabel={dialog?.confirm ?? ''}
-        danger={dialog?.danger}
-        busy={busy || text.trim().length < (dialog?.minChars ?? 0)}
-        onClose={() => setAction(null)}
-        onConfirm={() => dialog && run(() => dialog.call(c.id, text.trim()), dialog.done)}
-      >
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">{dialog?.prompt}</span>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={3}
-            className="w-full rounded-xl border-2 border-slate-400 p-2"
-          />
-        </label>
-      </ConfirmDialog>
+      <ActionDialog caseId={c.id} a={a}>
+        {a.action === 'approve' && (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-xl bg-brand-soft p-3 text-sm">
+            <dt className="text-muted">Claimant</dt>
+            <dd>{c.person.fullName}</dd>
+            <dt className="text-muted">Amount</dt>
+            <dd className="font-semibold">Rs {c.amount?.toLocaleString('en-PK') ?? '—'}</dd>
+            <dt className="text-muted">Paid to</dt>
+            <dd className="font-mono">{account}</dd>
+          </dl>
+        )}
+      </ActionDialog>
+    </div>
+  );
+}
+
+/**
+ * The citizen withdrew consent: no name, CNIC, account or AI notes, only where the claim stands. An
+ * officer can still say no (reject) or file a finished case away (close).
+ */
+function ReducedPanel({ id, onDone }: { id: string; onDone: () => void }) {
+  const {
+    data: c,
+    error,
+    loading,
+    reload,
+  } = useAsync<BasicStaffCase>(() => api.staffCaseBasic(id), [id]);
+  const me = useSession()?.userId;
+  const a = useActions(reload, onDone);
+
+  if (loading && !c) return <Skeleton lines={4} />;
+  if (error || !c)
+    return (
+      <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">
+        {error ? staffError(error) : 'Case not found.'}
+      </p>
+    );
+
+  const reviewable = c.status === 'IN_REVIEW' || c.status === 'NEEDS_INFO';
+  const closable = c.status === 'PAID' || c.status === 'REJECTED';
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xl font-bold">Claim {c.id.slice(0, 8)}</h2>
+          <StatusPill tone={laneTone(c.lane)}>{laneLabel(c.lane)}</StatusPill>
+          <StatusPill>{statusLabel(c.status)}</StatusPill>
+        </div>
+        <p className="mt-2 rounded-lg border border-amber-600 bg-amber-50 p-2 text-sm text-amber-900">
+          The citizen withdrew consent, so her personal data is hidden. You can still reject the
+          claim or close a finished one.
+        </p>
+        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <dt className="text-muted">Amount</dt>
+          <dd>Rs {c.amount?.toLocaleString('en-PK') ?? '—'}</dd>
+          <dt className="text-muted">Assigned to</dt>
+          <dd>{staffName(c.assignedTo, me)}</dd>
+        </dl>
+      </Card>
+      <div className="flex flex-wrap gap-2">
+        {reviewable && (
+          <Button variant="danger" disabled={a.busy} onClick={() => a.open('reject')}>
+            Reject…
+          </Button>
+        )}
+        {closable && (
+          <Button variant="ghost" disabled={a.busy} onClick={() => a.open('close')}>
+            Close case…
+          </Button>
+        )}
+      </div>
+      <Message text={a.message} />
+      <Card>
+        <h3 className="mb-2 font-semibold">Timeline</h3>
+        <Timeline
+          done={DONE_STATUSES.includes(c.status)}
+          events={c.timeline.map((e) => ({ label: timelineLabel(e, me), at: e.at }))}
+        />
+      </Card>
+      <ActionDialog caseId={c.id} a={a} />
     </div>
   );
 }

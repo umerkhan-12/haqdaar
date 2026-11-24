@@ -20,6 +20,18 @@ const PROFILES: { id: AiStatus['profile']; label: string; note: string }[] = [
   { id: 'offline', label: 'Offline', note: 'No external AI; uncertain cases go to people' },
 ];
 
+/** Kill AI and the profile serve every program at once, so each change is confirmed first. */
+interface Pending {
+  title: string;
+  body: string;
+  label: string;
+  danger?: boolean;
+  done: string;
+  run: () => Promise<unknown>;
+}
+
+const EVERY_PROGRAM = 'This changes AI for every program on the platform, not only yours.';
+
 function Chain({ title, rows }: { title: string; rows: AiStatus['llm'] }) {
   return (
     <div>
@@ -54,16 +66,22 @@ function Chain({ title, rows }: { title: string; rows: AiStatus['llm'] }) {
 
 export function AdminAi() {
   const { data, error, loading, reload } = useAsync(() => api.aiStatus(), []);
-  const [confirmKill, setConfirmKill] = useState(false);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  async function act(fn: () => Promise<unknown>, ok: string) {
+  async function confirmPending() {
+    if (!pending) return;
+    setBusy(true);
     try {
-      await fn();
-      setMsg(ok);
+      await pending.run();
+      setMsg(pending.done);
       reload();
     } catch (e) {
       setMsg(staffError(e));
+    } finally {
+      setBusy(false);
+      setPending(null);
     }
   }
 
@@ -92,11 +110,33 @@ export function AdminAi() {
                 {data.killed ? 'AI is OFF' : 'AI is ON'}
               </StatusPill>
               {data.killed ? (
-                <Button onClick={() => act(() => api.setKill(false), 'AI is back on.')}>
+                <Button
+                  onClick={() =>
+                    setPending({
+                      title: 'Turn AI back on?',
+                      body: `AI models answer again. ${EVERY_PROGRAM}`,
+                      label: 'Turn AI on',
+                      done: 'AI is back on.',
+                      run: () => api.setKill(false),
+                    })
+                  }
+                >
                   Turn AI on
                 </Button>
               ) : (
-                <Button variant="danger" onClick={() => setConfirmKill(true)}>
+                <Button
+                  variant="danger"
+                  onClick={() =>
+                    setPending({
+                      title: 'Switch every AI model off?',
+                      body: `Uncertain answers go to officers until AI is turned back on. ${EVERY_PROGRAM}`,
+                      label: 'Kill AI',
+                      danger: true,
+                      done: 'AI is off. Watch claims still flow — to people.',
+                      run: () => api.setKill(true),
+                    })
+                  }
+                >
                   Kill AI…
                 </Button>
               )}
@@ -113,7 +153,15 @@ export function AdminAi() {
                     type="radio"
                     name="profile"
                     checked={data.profile === p.id}
-                    onChange={() => act(() => api.setProfile(p.id), `Profile set to ${p.label}.`)}
+                    onChange={() =>
+                      setPending({
+                        title: `Switch the AI profile to ${p.label}?`,
+                        body: `${p.note}. ${EVERY_PROGRAM}`,
+                        label: `Use ${p.label}`,
+                        done: `Profile set to ${p.label}.`,
+                        run: () => api.setProfile(p.id),
+                      })
+                    }
                     className="h-5 w-5"
                   />
                   <span>
@@ -138,16 +186,17 @@ export function AdminAi() {
         </div>
       ) : null}
       <ConfirmDialog
-        open={confirmKill}
-        title="Switch every AI model off?"
-        confirmLabel="Kill AI"
-        danger
-        onClose={() => setConfirmKill(false)}
-        onConfirm={() => {
-          setConfirmKill(false);
-          void act(() => api.setKill(true), 'AI is off. Watch claims still flow — to people.');
-        }}
-      />
+        open={!!pending}
+        title={pending?.title ?? ''}
+        confirmLabel={busy ? 'Working…' : (pending?.label ?? '')}
+        danger={pending?.danger}
+        busy={busy}
+        onClose={() => setPending(null)}
+        onConfirm={() => void confirmPending()}
+      >
+        <p className="text-sm">{pending?.body}</p>
+        <p className="text-sm text-muted">Only platform admins can change this.</p>
+      </ConfirmDialog>
     </Shell>
   );
 }

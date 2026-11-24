@@ -15,7 +15,7 @@ import {
   trustedExtractionConfidence,
   viewNotes,
 } from './ai-notes';
-import { CreateCase } from './cases.schemas';
+import { CorrectionBody, CorrectionContextQuery, CreateCase, ListQuery } from './cases.schemas';
 import { boosted, refusal } from './lifecycle';
 
 const CNIC = '42101-1234567-3';
@@ -267,4 +267,27 @@ test('assign is refused once a case is decided or closed', () => {
 test('an escalated case outranks the same case not escalated', () => {
   assert.ok(boosted(120, true) > boosted(120, false));
   assert.equal(boosted(120, false), 120);
+});
+
+test('an officer can correct district or household only while the claim can still be decided', () => {
+  const correctable = ALL.filter((s) => refusal('correct', at(s)) === null);
+  assert.deepEqual(correctable, ['NEEDS_INFO', 'IN_REVIEW']);
+  assert.match(refusal('correct', at('PAID')) ?? '', /claim is PAID/);
+});
+
+test('a correction carries a letters-only district or a sane household size, never both kinds mixed', () => {
+  assert.ok(CorrectionBody.safeParse({ field: 'district', district: 'Sujawal' }).success);
+  assert.ok(!CorrectionBody.safeParse({ field: 'district', district: 'Sujawal 2' }).success);
+  assert.ok(!CorrectionBody.safeParse({ field: 'district', householdSize: 4 }).success);
+  assert.ok(CorrectionBody.safeParse({ field: 'household', householdSize: 6 }).success);
+  assert.ok(!CorrectionBody.safeParse({ field: 'household', householdSize: 0 }).success);
+  assert.ok(!CorrectionBody.safeParse({ field: 'name', note: 'x' }).success);
+});
+
+test('staff case lookups accept only real ids and a bounded list of people', () => {
+  assert.ok(ListQuery.safeParse({ view: 'decided', q: 'Zainab' }).success);
+  assert.ok(!ListQuery.safeParse({ personId: 'not-a-uuid' }).success);
+  const id = '449f151d-0000-4000-8000-000000000001';
+  assert.deepEqual(CorrectionContextQuery.parse({ personIds: `${id},` }).personIds, [id]);
+  assert.ok(!CorrectionContextQuery.safeParse({ personIds: 'x,y' }).success);
 });

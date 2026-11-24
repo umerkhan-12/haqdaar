@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { AudioButton, Button, StatusCard } from '@/components/ui';
+import { AudioButton, Button, ErrorState, errorWords, StatusCard } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { typedMobile, westernDigits } from './claim-words';
 import { useSession } from '@/lib/hooks';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 
@@ -24,24 +25,30 @@ export function HelperLinkCard() {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: 'ok' | 'bad'; key: MessageKey } | null>(null);
+  const [error, setError] = useState<unknown>(null);
   if (session?.role !== 'citizen') return null;
 
   const ready = /^03\d{9}$/.test(phone) && /^\d{4}$/.test(pin) && !weak(pin);
   async function save() {
     setBusy(true);
     setNote(null);
+    setError(null);
     try {
       await api.linkHelper(phone, pin);
       setNote({ tone: 'ok', key: 'helperLinkDone' });
       speak(t('helperLinkDone'));
       setPin('');
     } catch (e) {
-      const key =
-        e instanceof ApiError && e.status === 404 ? 'helperLinkNotFound' : 'signupPinWeak';
-      setNote({
-        tone: 'bad',
-        key: e instanceof ApiError && e.status === 400 ? 'signupPinWeak' : key,
-      });
+      const status = e instanceof ApiError ? e.status : -1;
+      if (status === 404 || status === 400) {
+        const key = status === 404 ? 'helperLinkNotFound' : 'signupPinWeak';
+        setNote({ tone: 'bad', key });
+        speak(t(key));
+      } else {
+        setError(e);
+        const [title, help] = errorWords(e);
+        speak(help ? [t(title), t(help)] : t(title));
+      }
     } finally {
       setBusy(false);
     }
@@ -66,7 +73,7 @@ export function HelperLinkCard() {
           inputMode="numeric"
           placeholder="03XXXXXXXXX"
           value={phone}
-          onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+          onChange={(e) => setPhone(typedMobile(e.target.value))}
         />
       </label>
       <label className="block text-lg font-semibold">
@@ -78,13 +85,18 @@ export function HelperLinkCard() {
           type="password"
           autoComplete="off"
           value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          onChange={(e) => {
+            const v = westernDigits(e.target.value).replace(/\D/g, '').slice(0, 4);
+            setPin(v);
+            if (v.length === 4 && weak(v)) speak(t('signupPinWeak'));
+          }}
         />
       </label>
       {pin.length === 4 && weak(pin) && (
         <p className="text-lg font-semibold text-red-700">{t('signupPinWeak')}</p>
       )}
       {note && <StatusCard tone={note.tone} title={t(note.key)} />}
+      {error ? <ErrorState error={error} /> : null}
       <Button className="w-full" disabled={busy || !ready} onClick={save}>
         {busy ? t('loading') : t('helperLinkSave')}
       </Button>

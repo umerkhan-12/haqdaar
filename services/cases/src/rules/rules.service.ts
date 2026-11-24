@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -12,6 +13,8 @@ import { PrismaService } from '../prisma.service';
 import { decide, type DecisionInputs } from '../engine/decide';
 import { Clause, combinedLogic, type RuleDefinition } from '../engine/rules';
 import { env } from '../env';
+import { applyCaution, type SoftFlag } from '../cases/ai-notes';
+import { clauseTextProblems } from './rule-checks';
 
 export interface ActiveRule {
   id: string;
@@ -36,7 +39,10 @@ export class RulesService {
   }
 
   async published(tenantId: string): Promise<ActiveRule> {
-    const r = await this.prisma.ruleVersion.findFirst({ where: { tenantId, status: 'PUBLISHED' } });
+    const r = await this.prisma.ruleVersion.findFirst({
+      where: { tenantId, status: 'PUBLISHED' },
+      orderBy: { version: 'desc' },
+    });
     if (!r) throw new ServiceUnavailableException('No published rule for this program');
     return {
       id: r.id,
@@ -46,7 +52,23 @@ export class RulesService {
     };
   }
 
+  /** Refuses clause texts whose numbers no longer match the logic (citizens hear the texts). */
+  private async checkTexts(tenantId: string, clauses: Clause[]) {
+    const live = await this.prisma.ruleVersion.findFirst({
+      where: { tenantId, status: 'PUBLISHED' },
+      orderBy: { version: 'desc' },
+      select: { clauses: true },
+    });
+    const parsed = z.array(Clause).safeParse(live?.clauses ?? []);
+    const problems = clauseTextProblems(clauses, parsed.success ? parsed.data : []);
+    if (problems.length)
+      throw new BadRequestException(
+        `Update the clause texts so citizens hear the right limits. ${problems.join(' ')}`,
+      );
+  }
+
   async createDraft(user: AuthUser, def: RuleDefinition) {
+    await this.checkTexts(user.tenantId, def.clauses);
     const last = await this.prisma.ruleVersion.findFirst({
       where: { tenantId: user.tenantId },
       orderBy: { version: 'desc' },
@@ -65,12 +87,42 @@ export class RulesService {
     });
   }
 
+  async updateDraft(user: AuthUser, id: string, def: RuleDefinition) {
+    await this.checkTexts(user.tenantId, def.clauses);
+    const { count } = await this.prisma.ruleVersion.updateMany({
+      where: { id, tenantId: user.tenantId, status: 'DRAFT' },
+      data: {
+        clauses: def.clauses as object[],
+        logic: combinedLogic(def.clauses) as object,
+        amount: def.amount,
+        notes: def.notes,
+      },
+    });
+    if (!count) throw new ConflictException('This draft is no longer editable');
+    return this.prisma.ruleVersion.findUniqueOrThrow({ where: { id } });
+  }
+
   /** Retires the current version and publishes this one. New decisions use it immediately; old ones keep theirs. */
   async publish(user: AuthUser, id: string) {
     const published = await this.prisma.$transaction(async (tx) => {
+      // Two publishes at once must not both see the same live version: lock the program's rules first.
+      await tx.$queryRaw`SELECT id FROM rule_versions WHERE tenant_id = ${user.tenantId}::uuid FOR UPDATE`;
       const draft = await tx.ruleVersion.findFirst({ where: { id, tenantId: user.tenantId } });
       if (!draft) throw new NotFoundException('Rule version not found');
       if (draft.status !== 'DRAFT') throw new ConflictException(`Rule version is ${draft.status}`);
+      const live = await tx.ruleVersion.findFirst({
+        where: { tenantId: user.tenantId, status: 'PUBLISHED' },
+        orderBy: { version: 'desc' },
+        select: { clauses: true },
+      });
+      const problems = clauseTextProblems(
+        z.array(Clause).parse(draft.clauses),
+        z.array(Clause).safeParse(live?.clauses ?? []).data ?? [],
+      );
+      if (problems.length)
+        throw new BadRequestException(
+          `Update the clause texts so citizens hear the right limits. ${problems.join(' ')}`,
+        );
       const previous = await tx.ruleVersion.findFirst({
         where: { tenantId: user.tenantId, status: 'PUBLISHED' },
         select: { id: true },
@@ -125,12 +177,18 @@ export class RulesService {
     const after = empty();
     const changed: { caseId: string; from: Lane; to: Lane }[] = [];
     for (const d of decisions) {
-      const lane = decide(d.inputs as unknown as DecisionInputs, {
+      // Replayed exactly as live processing decides: the engine, then the AI notes' caution.
+      const inputs = d.inputs as unknown as DecisionInputs & { softFlags?: SoftFlag[] };
+      const engine = decide(inputs, {
         clauses,
         amount: draft.amount,
         costs,
         amountCap: env.AUTO_APPROVE_AMOUNT_CAP_PKR,
-      }).lane;
+      });
+      const lane = applyCaution(
+        engine,
+        Array.isArray(inputs?.softFlags) ? inputs.softFlags : [],
+      ).lane;
       before[d.lane] += 1;
       after[lane] += 1;
       if (lane !== d.lane) changed.push({ caseId: d.caseId, from: d.lane, to: lane });

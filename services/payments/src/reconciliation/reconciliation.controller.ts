@@ -4,7 +4,7 @@ import { CurrentUser, Roles, ZBody, type AuthUser } from '@haqdaar/nest-kit';
 import { z } from 'zod';
 import { PrismaService } from '../prisma.service';
 import { RailsClient } from '../payments/rails.client';
-import { reconcile } from './reconcile';
+import { forProgram, reconcile } from './reconcile';
 
 const RunBody = z
   .object({
@@ -46,9 +46,16 @@ export class ReconciliationController {
       this.rails.statement(date),
     ]);
 
+    const others = await this.prisma.payment.findMany({
+      where: {
+        tenantId: { not: user.tenantId },
+        endToEndId: { in: statement.entries.map((e) => e.endToEndId) },
+      },
+      select: { endToEndId: true },
+    });
     const items = reconcile(
       ours.map((p) => ({ paymentId: p.id, endToEndId: p.endToEndId, amount: p.amount })),
-      statement.entries,
+      forProgram(statement.entries, new Set(others.map((o) => o.endToEndId))),
     );
     const matched = items.filter((i) => i.status === 'matched').length;
     return this.prisma.reconciliationRun.create({

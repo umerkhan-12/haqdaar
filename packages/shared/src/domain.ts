@@ -71,11 +71,14 @@ export const ConsentPurpose = z.enum([
 ]);
 export type ConsentPurpose = z.infer<typeof ConsentPurpose>;
 
+/** Whole rupees (the columns are integers), bounded and finite: an absurd value (or 1e400, which JSON
+ * reads as Infinity) would push the auto-approve threshold to 1 or below 0 without anyone noticing. */
+const Rupees = z.number().int().positive().max(10_000_000);
 /** Cost model used to derive the auto-approve threshold (challenge 01). */
 export const CostSettings = z.object({
-  wrongApproval: z.number().positive(),
-  humanReview: z.number().positive(),
-  askMore: z.number().positive(),
+  wrongApproval: Rupees,
+  humanReview: Rupees,
+  askMore: Rupees,
 });
 export type CostSettings = z.infer<typeof CostSettings>;
 
@@ -89,3 +92,6 @@ export const DEFAULT_COSTS: CostSettings = {
 export function autoApproveThreshold(c: CostSettings): number {
   return 1 - c.humanReview / c.wrongApproval;
 }
+
+/** Cost settings that would auto-approve below this confidence are refused (wrong approval ≥ 10 × review). */
+export const MIN_AUTO_APPROVE_THRESHOLD = 0.9;

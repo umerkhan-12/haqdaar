@@ -4,8 +4,14 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Shell } from '@/components/shell';
 import { Button, Card, ConfirmDialog, Skeleton, StatusPill, staffError } from '@/components/ui';
-import { api, type RaastFaultMode, type Scenario, type ScenarioResult } from '@/lib/api';
+import { api, request, type RaastFaultMode, type Scenario, type ScenarioResult } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
+
+interface ResetResult {
+  ok: boolean;
+  services: { service: string; ok: boolean; error?: string }[];
+}
+const resetDemo = () => request<ResetResult>('POST', '/judge/reset');
 
 const GROUP_TITLE: Record<string, string> = { PAY: 'Bank-grade payouts' };
 
@@ -171,6 +177,7 @@ export function JudgeMode() {
   const [running, setRunning] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ScenarioResult | string>>({});
   const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function run(s: Scenario) {
@@ -200,7 +207,11 @@ export function JudgeMode() {
         >
           Mock phone
         </Link>
-        <Button variant="ghost" onClick={() => setConfirmReset(true)} disabled={!!running}>
+        <Button
+          variant="danger"
+          onClick={() => setConfirmReset(true)}
+          disabled={!!running || resetting}
+        >
           Reset demo…
         </Button>
       </div>
@@ -270,26 +281,33 @@ export function JudgeMode() {
       )}
       <ConfirmDialog
         open={confirmReset}
-        title="Reset the demo?"
-        confirmLabel="Reset"
+        title="Reset the demo for every program?"
+        confirmLabel={resetting ? 'Resetting…' : 'Reset everything'}
+        danger
+        busy={resetting}
         onClose={() => setConfirmReset(false)}
         onConfirm={async () => {
-          setConfirmReset(false);
+          setResetting(true);
           try {
-            const r = await api.resetDemo();
+            const r = await resetDemo();
             setResults({});
+            const failed = r.services.filter((x) => !x.ok);
             setMsg(
-              r.ok
-                ? 'Fresh demo: claims, payouts and consents cleared. The audit log is never touched.'
-                : 'Reset finished with problems — check service status.',
+              failed.length
+                ? `Reset finished with problems. Not cleared: ${failed.map((x) => `${x.service} (${x.error ?? 'no answer'})`).join(', ')}.`
+                : 'Fresh demo: claims, payouts and consents cleared. The audit log is never touched.',
             );
           } catch (e) {
             setMsg(staffError(e));
+          } finally {
+            setResetting(false);
+            setConfirmReset(false);
           }
         }}
       >
         <p className="text-sm">
-          Clears claims, payouts and consents. People, rules and the audit log stay.
+          Clears claims, payouts and consents in every program, not only yours, and cannot be
+          undone. People, rules and the audit log stay. Platform admins only.
         </p>
       </ConfirmDialog>
     </Shell>

@@ -48,6 +48,7 @@ export function UsersPage() {
   const [form, setForm] = useState({ name: '', phone: '', role: 'officer' as TeamRole });
   const [created, setCreated] = useState<{ name: string; password: string } | null>(null);
   const [confirm, setConfirm] = useState<TeamMember | null>(null);
+  const [promote, setPromote] = useState<TeamMember | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -78,8 +79,8 @@ export function UsersPage() {
       <h1 className="mb-1 text-2xl font-bold">Team and roles</h1>
       <p className="mb-4 text-sm text-muted">
         People who work in this program. Citizens register themselves and are not listed here. A
-        role change applies the next time that person signs in; a disabled person is signed out and
-        cannot sign in.
+        role change applies when that person&apos;s session next renews (within 15 minutes); a
+        disabled person cannot sign in again and is signed out within 15 minutes.
       </p>
       {msg && (
         <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-900" role="alert">
@@ -118,11 +119,11 @@ export function UsersPage() {
                         className="rounded-lg border border-slate-300 bg-white px-2 py-1"
                         value={u.role}
                         disabled={busy || !u.active}
-                        onChange={(e) =>
-                          void run(() =>
-                            api.updateTeamMember(u.id, { role: e.target.value as TeamRole }),
-                          )
-                        }
+                        onChange={(e) => {
+                          const role = e.target.value as TeamRole;
+                          if (role === 'admin') setPromote(u);
+                          else void run(() => api.updateTeamMember(u.id, { role }));
+                        }}
                       >
                         {ROLES.map((r) => (
                           <option key={r.value} value={r.value}>
@@ -239,8 +240,26 @@ export function UsersPage() {
         }}
       >
         <p>
-          They are signed out at once and cannot sign in until an admin enables them again. Their
-          past actions stay in the audit log.
+          They cannot sign in until an admin enables them again, and a session they already have
+          ends within 15 minutes. Their past actions stay in the audit log.
+        </p>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={!!promote}
+        title={`Make ${promote?.name ?? ''} an admin?`}
+        confirmLabel="Make admin"
+        danger
+        busy={busy}
+        onClose={() => setPromote(null)}
+        onConfirm={() => {
+          const u = promote;
+          setPromote(null);
+          if (u) void run(() => api.updateTeamMember(u.id, { role: 'admin' }));
+        }}
+      >
+        <p>
+          Admins can change the rules and costs, add and disable people (other admins too) and issue
+          partner API keys for this program.
         </p>
       </ConfirmDialog>
     </Shell>

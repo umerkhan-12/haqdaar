@@ -67,15 +67,17 @@ export class AuthService {
 
     const ok = await argon2.verify(user.passwordHash, password);
     if (!ok) {
-      const failed = user.failedLogins + 1;
-      await this.prisma.user.update({
+      // Atomic increment: parallel wrong PINs must each count, or the lock barely moves.
+      const { failedLogins } = await this.prisma.user.update({
         where: { id: user.id },
-        data: {
-          failedLogins: failed,
-          lockedUntil:
-            failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
-        },
+        data: { failedLogins: { increment: 1 } },
+        select: { failedLogins: true },
       });
+      if (failedLogins >= MAX_FAILED_LOGINS)
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) },
+        });
       throw new UnauthorizedException('Wrong phone number or password');
     }
 
@@ -398,15 +400,16 @@ export class AuthService {
       throw new ForbiddenException('Too many wrong PINs. Ask the family to try later.');
     }
     if (!(await argon2.verify(link.pinHash, pin))) {
-      const failed = link.failedPins + 1;
-      await this.prisma.helperLink.update({
+      const { failedPins } = await this.prisma.helperLink.update({
         where: { id: link.id },
-        data: {
-          failedPins: failed,
-          lockedUntil:
-            failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
-        },
+        data: { failedPins: { increment: 1 } },
+        select: { failedPins: true },
       });
+      if (failedPins >= MAX_FAILED_LOGINS)
+        await this.prisma.helperLink.update({
+          where: { id: link.id },
+          data: { lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) },
+        });
       throw new UnauthorizedException('Wrong PIN');
     }
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: helper.id } });

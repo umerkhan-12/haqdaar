@@ -15,15 +15,16 @@ import {
 import { api, type ScamVerdict } from '@/lib/api';
 import { useSession } from '@/lib/hooks';
 import { useI18n, type MessageKey } from '@/lib/i18n';
+import { DISTRICT_KEY, draftKey } from '@/lib/session';
 
 /** The district of her saved or last claim, if this phone knows one: it places the message on the Scam Map. */
 function knownDistrict(personId: string | null | undefined): string | null {
   if (!personId) return null;
   try {
-    const draft = JSON.parse(localStorage.getItem(`hq.claim.${personId}`) ?? 'null') as {
+    const draft = JSON.parse(localStorage.getItem(draftKey(personId)) ?? 'null') as {
       details?: { district?: string };
     } | null;
-    return draft?.details?.district || localStorage.getItem('hq.district') || null;
+    return draft?.details?.district || localStorage.getItem(DISTRICT_KEY) || null;
   } catch {
     return null;
   }

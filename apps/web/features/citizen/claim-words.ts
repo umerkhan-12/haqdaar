@@ -46,6 +46,14 @@ export function formatMobile(v: string): string {
   return /^03\d{9}$/.test(local) ? local : '';
 }
 
+/** While typing a mobile number: Urdu digits and +92 / 0092 become the local 03… form, at most 11 digits. */
+export function typedMobile(v: string): string {
+  return westernDigits(v)
+    .replace(/\D/g, '')
+    .replace(/^(0092|92)/, '0')
+    .slice(0, 11);
+}
+
 function editDistance(a: string, b: string): number {
   const row = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
@@ -84,8 +92,11 @@ export function matchDistrict(heard: string | null | undefined): string {
 export const districtLabel = (value: string, lang: 'ur' | 'en'): string =>
   lang === 'ur' ? (DISTRICTS.find((d) => d.value === value)?.ur ?? value) : value;
 
+/** Same rule as the server (packages/shared contracts): a name is letters in any script, spaces and . ' - */
+export const PERSON_NAME = /^\p{L}[\p{L}\p{M}‌ .'-]*$/u;
+
 export const isValid: Record<FieldName, (v: string) => boolean> = {
-  fullName: (v) => v.trim().length >= 2,
+  fullName: (v) => v.trim().length >= 2 && v.trim().length <= 80 && PERSON_NAME.test(v.trim()),
   cnic: (v) => /^\d{5}-\d{7}-\d$/.test(v),
   district: (v) => DISTRICTS.some((d) => d.value === v),
   householdSize: (v) => /^\d{1,2}$/.test(v) && Number(v) >= 1 && Number(v) <= 30,

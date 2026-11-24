@@ -91,7 +91,21 @@ export async function request<T>(
   const text = await res.text();
   const data = text ? safeJson(text) : undefined;
   if (!res.ok) {
-    const b = (data ?? {}) as { message?: string; details?: { code?: string }; requestId?: string };
+    const b = (data ?? {}) as {
+      message?: string;
+      details?: { code?: string } | { path?: string; message?: string }[];
+      requestId?: string;
+    };
+    // Validation errors list each field's problem; show those rather than "Validation failed".
+    if (Array.isArray(b.details)) {
+      const reasons = b.details.map((d) => d.message).filter(Boolean);
+      throw new ApiError(
+        res.status,
+        reasons.length ? reasons.join('. ') : (b.message ?? res.statusText),
+        undefined,
+        b.requestId,
+      );
+    }
     throw new ApiError(res.status, b.message ?? res.statusText, b.details?.code, b.requestId);
   }
   return data as T;
@@ -227,6 +241,8 @@ export interface Payment {
   titleFetched: string | null;
   titleMatchScore: number | null;
   makerId: string;
+  /** Who asked for this payout or its reversal (claim approver, releaser, retrier). */
+  approvals?: { action: string; actorId: string }[];
   createdAt: string;
 }
 
@@ -530,6 +546,8 @@ export interface AssistAnswer {
 }
 
 export interface QueueCase extends CaseSummary {
+  /** Claimant's name; null when she has withdrawn consent. */
+  name: string | null;
   anomalies?: Anomaly[];
   assignedTo: string | null;
   escalated: boolean;
@@ -549,6 +567,36 @@ export interface StaffCase
         at: string;
       })
     | null;
+}
+
+/** A decided claim as staff find it again: no CNIC, name hidden after consent is withdrawn. */
+export interface StaffCaseRow extends Omit<CaseSummary, 'district'> {
+  name: string | null;
+  district: string | null;
+  assignedTo: string | null;
+  escalated: boolean;
+  updatedAt: string;
+}
+
+/** A case reduced to where it stands, for when the citizen has withdrawn consent. */
+export interface BasicStaffCase extends CaseSummary {
+  consentWithdrawn: true;
+  assignedTo: string | null;
+  escalated: boolean;
+  timeline: { type: string; actor: string; data: null; at: string }[];
+}
+
+/** People named in correction requests: name, latest claim, and the requests already acted on. */
+export interface CorrectionContext {
+  people: {
+    personId: string;
+    name: string | null;
+    caseId: string;
+    status: CaseStatus;
+    district: string | null;
+    householdSize: number | null;
+  }[];
+  handled: string[];
 }
 
 /** Raw decision record for auditors (`GET /decisions/:id/trace`). */
@@ -680,8 +728,10 @@ export const api = {
     request('POST', `/cases/${id}/approve`, { body: { note } }),
   reject: (id: string, reason: string) =>
     request('POST', `/cases/${id}/reject`, { body: { reason } }),
-  requestInfo: (id: string, message: string) =>
-    request('POST', `/cases/${id}/request-info`, { body: { message } }),
+  requestInfo: (id: string, message: string, correctionId?: string) =>
+    request('POST', `/cases/${id}/request-info`, {
+      body: correctionId ? { message, correctionId } : { message },
+    }),
   trace: (decisionId: string) =>
     request<{ decision: unknown; ruleVersion: unknown }>('GET', `/decisions/${decisionId}/trace`),
 
@@ -712,11 +762,15 @@ export const api = {
   setProfile: (profile: AiStatus['profile']) =>
     request<AiStatus>('POST', '/ai/profile', { body: { profile } }),
 
-  payments: (state?: string, caseId?: string) =>
+  payments: (f: { state?: string; caseId?: string; q?: string; after?: string } = {}) =>
     request<Payment[]>(
       'GET',
-      `/payments?${new URLSearchParams({ ...(state ? { state } : {}), ...(caseId ? { caseId } : {}) })}`,
+      `/payments?${new URLSearchParams(Object.entries(f).filter((e): e is [string, string] => !!e[1]))}`,
     ),
+  requestReversal: (id: string, reason: string) =>
+    request<Payment>('POST', `/payments/${id}/reversal`, { body: { reason } }),
+  approveReversal: (id: string) =>
+    request<Payment>('POST', `/payments/${id}/reversal/approve`, { body: {} }),
   release: (id: string, note: string, alias?: string) =>
     request<Payment>('POST', `/payments/${id}/release`, {
       body: alias ? { note, alias } : { note },
@@ -827,6 +881,25 @@ export const api = {
   // ---------- officer + auditor package ----------
   staffCase: (id: string) => request<StaffCase>('GET', `/cases/${id}`),
   staffQueue: () => request<QueueCase[]>('GET', '/queue'),
+  /** Staff: decided claims (most recent first), one person's claims, or a name / claim id search. */
+  staffCases: (f: { view?: 'decided'; personId?: string; q?: string } = {}) =>
+    request<StaffCaseRow[]>(
+      'GET',
+      `/cases?${new URLSearchParams(Object.entries(f).filter((e): e is [string, string] => !!e[1]))}`,
+    ),
+  staffCaseBasic: (id: string) => request<BasicStaffCase>('GET', `/queue/cases/${id}`),
+  correctionContext: (personIds: string[]) =>
+    request<CorrectionContext>(
+      'GET',
+      `/queue/corrections?${new URLSearchParams({ personIds: personIds.join(',') })}`,
+    ),
+  applyCorrection: (
+    id: string,
+    c: ({ field: 'district'; district: string } | { field: 'household'; householdSize: number }) & {
+      note?: string;
+      correctionId?: string;
+    },
+  ) => request<StaffCase>('POST', `/cases/${id}/correction`, { body: c }),
   /** No officer id = "assign to me". */
   assign: (id: string, officerId?: string) =>
     request<StaffCase>('POST', `/cases/${id}/assign`, { body: { officerId } }),

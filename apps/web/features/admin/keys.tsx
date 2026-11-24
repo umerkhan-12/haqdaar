@@ -23,6 +23,8 @@ export function AdminKeys() {
   const [scopes, setScopes] = useState<string[]>(['scam:check']);
   const [created, setCreated] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [revokeBusy, setRevokeBusy] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   return (
@@ -34,6 +36,7 @@ export function AdminKeys() {
           <label className="mt-2 block text-sm">
             Partner name
             <input
+              maxLength={60}
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="mt-1 min-h-12 w-full rounded-lg border-2 border-slate-400 px-2"
@@ -116,7 +119,10 @@ export function AdminKeys() {
                       <Button
                         variant="ghost"
                         className="min-h-10 text-sm"
-                        onClick={() => setRevoking(k.id)}
+                        onClick={() => {
+                          setRevokeError(null);
+                          setRevoking(k.id);
+                        }}
                       >
                         Revoke…
                       </Button>
@@ -130,16 +136,34 @@ export function AdminKeys() {
       <ConfirmDialog
         open={!!revoking}
         title="Revoke this key?"
-        confirmLabel="Revoke"
+        confirmLabel={revokeBusy ? 'Revoking…' : 'Revoke'}
         danger
+        busy={revokeBusy}
         onClose={() => setRevoking(null)}
         onConfirm={async () => {
-          if (revoking) await api.revokeKey(revoking).catch((e) => setMsg(staffError(e)));
-          setRevoking(null);
-          reload();
+          if (!revoking) return;
+          setRevokeBusy(true);
+          setRevokeError(null);
+          try {
+            await api.revokeKey(revoking);
+            setRevoking(null);
+            reload();
+          } catch (e) {
+            setRevokeError(staffError(e));
+          } finally {
+            setRevokeBusy(false);
+          }
         }}
       >
-        <p className="text-sm">The partner&apos;s requests stop working at once.</p>
+        <p className="text-sm">
+          The key can no longer get new tokens. A token the partner already holds keeps working
+          until it expires, within 15 minutes.
+        </p>
+        {revokeError && (
+          <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+            {revokeError}
+          </p>
+        )}
       </ConfirmDialog>
     </Shell>
   );

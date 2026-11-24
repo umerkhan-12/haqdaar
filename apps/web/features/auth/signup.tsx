@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import { AudioButton, Button, ErrorState, inputCls, PinPad, StatusCard } from '@/components/ui';
+import { PERSON_NAME, typedMobile } from '@/features/citizen/claim-words';
 import { api, ApiError } from '@/lib/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { HOME, saveHelperSession, rememberPhone, saveSession, sessionFrom } from '@/lib/session';
 
 /** One thing per screen. Each screen has one spoken instruction (the main channel) and one action. */
-// Same rules as the server (packages/shared contracts): letters only in a name, no easy PIN.
-const PERSON_NAME = /^\p{L}[\p{L}\p{M}‌ .'-]*$/u;
+// Same rule as the server (packages/shared contracts): no easy PIN.
 function isWeakPin(pin: string): boolean {
   const d = [...pin].map(Number);
   if (d.every((x) => x === d[0])) return true;
@@ -47,7 +47,8 @@ export function Signup({ reset = false }: { reset?: boolean }) {
 
   // Speak the instruction once whenever a screen appears (and again if the language changes).
   useEffect(() => {
-    speak(problem ? `${t(problem)} ${t(SAY[screen])}` : t(SAY[screen]));
+    // Separate sentences, so each plays from its recording (the server voice needs an account).
+    speak(problem ? [t(problem), t(SAY[screen])] : t(SAY[screen]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, lang]);
 
@@ -205,7 +206,7 @@ export function Signup({ reset = false }: { reset?: boolean }) {
               autoComplete="tel"
               aria-label={t('phone')}
               value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+              onChange={(e) => setPhone(typedMobile(e.target.value))}
               placeholder="03XXXXXXXXX"
               autoFocus
             />
@@ -237,9 +238,7 @@ export function Signup({ reset = false }: { reset?: boolean }) {
             <Button variant="ghost" disabled={busy} onClick={() => sendCode()} className="w-full">
               {busy ? t('loading') : t('signupResend')}
             </Button>
-            <p className="latin text-center text-xs text-muted" dir="ltr">
-              Prototype: no real SMS is sent. The code appears above. (admin login).
-            </p>
+            {!reset && <p className="text-center text-xs text-muted">{t('signupNoRealSms')}</p>}
           </div>
         )}
 

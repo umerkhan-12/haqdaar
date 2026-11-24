@@ -20,6 +20,7 @@ import { useI18n, type MessageKey } from '@/lib/i18n';
 import { urduNumberWords } from '@/lib/urdu-number';
 import { missingPurposes, purposeText } from './consent-purposes';
 import { CorrectDetails, correctionReady, sendableCorrection } from './correct-details';
+import { RefusedClaims } from './refused-claims';
 import { SimpleWordsLabel, useSimpleExplanation } from './simple-explanation';
 
 const STATUS_TONE: Partial<Record<CaseStatus, 'ok' | 'bad' | 'warn' | 'info'>> = {
@@ -163,8 +164,11 @@ function HaqReceipt({ amount, caseId }: { amount: number; caseId: string }) {
             {seal.code}
           </p>
           {seal.ref && (
-            <p className="latin text-sm text-slate-600" dir="ltr">
-              Ref: {seal.ref}
+            <p className="text-sm text-slate-600">
+              {t('receiptRef')}{' '}
+              <span className="latin" dir="ltr">
+                {seal.ref}
+              </span>
             </p>
           )}
           <p className="mt-2 text-base">{t('receiptSealHint')}</p>
@@ -184,8 +188,17 @@ function HaqReceipt({ amount, caseId }: { amount: number; caseId: string }) {
  * NEEDS_INFO: show what the officer asked, and if a permission is missing say exactly what she is
  * allowing before one tap gives it and resends. Resending without the permission can never succeed.
  */
-function NeedsInfo({ c, onResent }: { c: CaseDetail; onResent: () => void }) {
-  const { t, speak } = useI18n();
+function NeedsInfo({
+  c,
+  lead,
+  onResent,
+}: {
+  c: CaseDetail;
+  /** The status sentences said first, so her whole task is heard in one go. */
+  lead: string[];
+  onResent: () => void;
+}) {
+  const { t, speak, lang } = useI18n();
   const session = useSession();
   const consents = useAsync(() => api.consents(), [c.id]);
   const [busy, setBusy] = useState(false);
@@ -197,6 +210,18 @@ function NeedsInfo({ c, onResent }: { c: CaseDetail; onResent: () => void }) {
   const message = asked ? dataField(asked, 'message') : null;
   const missing = consents.data ? missingPurposes(consents.data) : [];
   const allowing = missing.map((p) => `${t(purposeText(p).who)}: ${t(purposeText(p).why)}`);
+
+  // Once the permissions are known: what the officer asked and what she is asked to allow, aloud.
+  const ready = !!consents.data;
+  useEffect(() => {
+    if (!ready) return;
+    speak([
+      ...lead,
+      ...(message ? [t('officerAsks'), message] : []),
+      ...(missing.length ? [t('needPermission'), ...allowing, t('consentNote')] : []),
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, c.id, lang]);
 
   async function resend() {
     const personId = session?.personId;
@@ -250,9 +275,40 @@ function NeedsInfo({ c, onResent }: { c: CaseDetail; onResent: () => void }) {
   );
 }
 
-function CaseCard({ id }: { id: string }) {
+/** Claims still moving: the screen asks again by itself so she sees "approved" without reloading. */
+const MOVING: CaseStatus[] = ['SUBMITTED', 'PROCESSING', 'IN_REVIEW', 'APPROVED'];
+
+/** A tick that advances every 15 s while the screen is visible and online, and when she comes back to it. */
+function useRefreshTick(active: boolean): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const bump = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) setTick((n) => n + 1);
+    };
+    const timer = window.setInterval(bump, 15_000);
+    document.addEventListener('visibilitychange', bump);
+    window.addEventListener('online', bump);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', bump);
+      window.removeEventListener('online', bump);
+    };
+  }, [active]);
+  return tick;
+}
+
+function CaseCard({ id, onChange }: { id: string; onChange: () => void }) {
   const { t, lang, speak } = useI18n();
-  const { data: c, error, loading, reload } = useAsync<CaseDetail>(() => api.case(id), [id]);
+  const [status, setStatus] = useState<CaseStatus | null>(null);
+  const tick = useRefreshTick(status === null || MOVING.includes(status));
+  const { data: c, error, loading, reload } = useAsync<CaseDetail>(() => api.case(id), [id, tick]);
+  // When the status moves (e.g. an officer approves), the claims list chips update too.
+  useEffect(() => {
+    if (!c) return;
+    if (status !== null && status !== c.status) onChange();
+    setStatus(c.status);
+  }, [c, status, onChange]);
 
   const title = c ? t(STATUS_KEY[c.status]) : '';
   const explanation = lang === 'ur' ? c?.decision?.explanationUr : c?.decision?.explanationEn;
@@ -283,13 +339,16 @@ function CaseCard({ id }: { id: string }) {
   useEffect(() => {
     if (!c || spoken.current === `${c.id}:${c.status}`) return;
     spoken.current = `${c.id}:${c.status}`;
+    // NEEDS_INFO is spoken by its own panel, together with the officer's question.
+    if (c.status === 'NEEDS_INFO') return;
     const receipt =
       paid != null ? ` ${t('receiptTitle')}. ${amount.spoken}. ${t('receiptLine')}` : '';
     speak(`${title}. ${explanation ?? ''}${receipt}`);
   }, [c, paid, title, explanation, amount.spoken, speak, t]);
 
   if (loading && !c) return <Skeleton lines={2} />;
-  if (error) return <ErrorState error={error} onRetry={reload} />;
+  // A failed background refresh keeps the last good card instead of replacing it with an error.
+  if (error && !c) return <ErrorState error={error} onRetry={reload} />;
   if (!c) return null;
 
   return (
@@ -310,8 +369,11 @@ function CaseCard({ id }: { id: string }) {
       )}
       {paid != null && <HaqReceipt amount={paid} caseId={c.id} />}
       {c.status === 'IN_REVIEW' && <StatusCard tone="info" title={t('waitingOfficer')} />}
-      {c.status === 'NEEDS_INFO' && <NeedsInfo c={c} onResent={reload} />}
+      {c.status === 'NEEDS_INFO' && (
+        <NeedsInfo c={c} lead={[title, explanation ?? '']} onResent={reload} />
+      )}
       <Timeline
+        lang={lang}
         events={timelineRows(c.timeline, t)}
         done={c.status === 'PAID' || c.status === 'CLOSED' || c.status === 'REJECTED'}
       />
@@ -320,7 +382,7 @@ function CaseCard({ id }: { id: string }) {
 }
 
 export function ClaimStatus() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { data, error, loading, reload } = useAsync(() => api.cases(), []);
   const [open, setOpen] = useState<string | null>(null);
   const latest = open ?? data?.[0]?.id ?? null;
@@ -338,6 +400,7 @@ export function ClaimStatus() {
         <h1 className="flex-1 text-2xl font-bold">{t('status')}</h1>
         <AudioButton text={t('status')} className="text-brand" />
       </div>
+      <RefusedClaims />
       {loading && !data ? (
         <Skeleton lines={2} />
       ) : error ? (
@@ -349,7 +412,7 @@ export function ClaimStatus() {
         />
       ) : (
         <div className="space-y-4">
-          {latest && <CaseCard key={latest} id={latest} />}
+          {latest && <CaseCard key={latest} id={latest} onChange={reload} />}
           {data.length > 1 && (
             <nav aria-label={t('claimsList')} className="space-y-2">
               <p className="text-lg font-semibold">{t('claimsList')}</p>
@@ -362,8 +425,8 @@ export function ClaimStatus() {
                     onClick={() => setOpen(c.id)}
                     className={`min-h-12 rounded-xl border-2 px-3 ${c.id === latest ? 'border-brand bg-brand-soft' : 'border-slate-300 bg-white'}`}
                   >
-                    <span className="latin text-sm" dir="ltr">
-                      {new Date(c.createdAt).toLocaleDateString('en-PK')}
+                    <span className={`text-sm ${lang === 'en' ? 'latin' : ''}`}>
+                      {new Date(c.createdAt).toLocaleDateString(lang === 'ur' ? 'ur-PK' : 'en-PK')}
                     </span>
                     {' · '}
                     {t(CHIP_KEY[c.status])}

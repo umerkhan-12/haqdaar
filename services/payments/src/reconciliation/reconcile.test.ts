@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { reconcile } from './reconcile';
+import { forProgram, reconcile } from './reconcile';
 import { backoffMs } from '../domain/webhook-signature';
 
 test('reconciliation finds every kind of mismatch', () => {
@@ -39,6 +39,25 @@ test('the bank settling the same transfer twice is caught, not silently merged',
     ['matched', 'duplicate_in_provider'],
   );
   assert.equal(items[1]!.paymentId, 'p1');
+});
+
+test("another program's payouts on the shared statement are not reported as missing", () => {
+  const statement = [
+    { endToEndId: 'E1', amount: 12_000, status: 'ACSC' },
+    { endToEndId: 'OTHER', amount: 5_000, status: 'ACSC' },
+    { endToEndId: 'UNKNOWN', amount: 7_000, status: 'ACSC' },
+  ];
+  const items = reconcile(
+    [{ paymentId: 'p1', endToEndId: 'E1', amount: 12_000 }],
+    forProgram(statement, new Set(['OTHER'])),
+  );
+  assert.deepEqual(
+    items.map((i) => [i.endToEndId, i.status]),
+    [
+      ['E1', 'matched'],
+      ['UNKNOWN', 'missing_in_ledger'],
+    ],
+  );
 });
 
 test('webhook retry backoff doubles', () => {

@@ -15,7 +15,7 @@ export const FINAL: CaseStatus[] = ['CLOSED'];
 /** An escalated case jumps the queue: a supervisor should see it before routine work. */
 export const ESCALATION_BOOST = 3;
 
-export type OfficerMove = 'escalate' | 'close' | 'assign';
+export type OfficerMove = 'escalate' | 'close' | 'assign' | 'correct';
 
 /** Why a move is not allowed, or null when it is. */
 export function refusal(
@@ -35,6 +35,10 @@ export function refusal(
       return REVIEWABLE.includes(c.status)
         ? null
         : `Only a case waiting for review can be assigned (case is ${c.status})`;
+    case 'correct':
+      return REVIEWABLE.includes(c.status)
+        ? null
+        : `Only a claim waiting for review can be corrected (claim is ${c.status})`;
   }
 }
 

@@ -3,15 +3,70 @@
 import { useState } from 'react';
 import { Shell } from '@/components/shell';
 import { Button, Card, DataTable, Skeleton, StatusPill, staffError } from '@/components/ui';
-import { api } from '@/lib/api';
+import { api, request } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
-type Recon = Awaited<ReturnType<typeof api.reconcile>>;
+interface ReconItem {
+  endToEndId: string;
+  status: string;
+  ourAmount: number | null;
+  providerAmount: number | null;
+  paymentId: string | null;
+}
+interface ReconRun {
+  id: string;
+  date: string;
+  matched: number;
+  mismatched: number;
+  items: ReconItem[];
+  createdAt: string;
+}
+
+const runReconciliation = () => request<ReconRun>('POST', '/reconciliation/run', { body: {} });
+const pastRuns = () => request<ReconRun[]>('GET', '/reconciliation/runs');
+const rupees = (n: number | null) => (n === null ? '—' : n.toLocaleString('en-PK'));
+
+/** One run's problems. A bank paying twice gives two rows with the same id, so the position is in the key. */
+function ReconItems({ run }: { run: ReconRun }) {
+  const rows = run.items.map((item, n) => ({ ...item, n })).filter((i) => i.status !== 'matched');
+  return (
+    <div className="mt-3 space-y-2" aria-live="polite">
+      <p>
+        <StatusPill tone={run.mismatched ? 'bad' : 'ok'}>
+          {run.date}: {run.matched} matched · {run.mismatched} mismatched
+        </StatusPill>
+      </p>
+      <DataTable
+        caption="Reconciliation items"
+        rows={rows}
+        rowKey={(i) => `${i.endToEndId}-${i.status}-${i.n}`}
+        empty="Every payout matches the statement."
+        columns={[
+          {
+            header: 'End-to-end id',
+            cell: (i) => <span className="font-mono text-xs">{i.endToEndId}</span>,
+          },
+          {
+            header: 'Problem',
+            cell: (i) => <StatusPill tone="bad">{i.status}</StatusPill>,
+          },
+          { header: 'Ours (PKR)', cell: (i) => rupees(i.ourAmount), className: 'text-right' },
+          {
+            header: 'Bank (PKR)',
+            cell: (i) => rupees(i.providerAmount),
+            className: 'text-right',
+          },
+        ]}
+      />
+    </div>
+  );
+}
 
 /** Double-entry ledger and reconciliation against the (mock) Raast statement. */
 export function AdminMoney() {
   const { data, error, loading, reload } = useAsync(() => api.balances(), []);
-  const [recon, setRecon] = useState<Recon | null>(null);
+  const runs = useAsync(pastRuns, []);
+  const [recon, setRecon] = useState<ReconRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -67,7 +122,8 @@ export function AdminMoney() {
               setBusy(true);
               setMsg(null);
               try {
-                setRecon(await api.reconcile());
+                setRecon(await runReconciliation());
+                runs.reload();
               } catch (e) {
                 setMsg(staffError(e));
               } finally {
@@ -78,30 +134,38 @@ export function AdminMoney() {
             Run reconciliation
           </Button>
           {msg && <p role="alert">{msg}</p>}
-          {recon && (
-            <div className="mt-3 space-y-2" aria-live="polite">
-              <p>
-                <StatusPill tone={recon.mismatched ? 'bad' : 'ok'}>
-                  {recon.matched} matched · {recon.mismatched} mismatched
-                </StatusPill>
-              </p>
-              <DataTable
-                caption="Reconciliation items"
-                rows={recon.items.filter((i) => i.status !== 'matched')}
-                rowKey={(i) => `${i.endToEndId}-${i.status}`}
-                empty="Every payout matches the statement."
-                columns={[
-                  {
-                    header: 'End-to-end id',
-                    cell: (i) => <span className="font-mono text-xs">{i.endToEndId}</span>,
-                  },
-                  {
-                    header: 'Problem',
-                    cell: (i) => <StatusPill tone="bad">{i.status}</StatusPill>,
-                  },
-                ]}
-              />
-            </div>
+          {recon && <ReconItems run={recon} />}
+          <h3 className="mt-5 font-semibold">Past runs</h3>
+          {runs.loading && !runs.data ? (
+            <Skeleton lines={2} />
+          ) : runs.error ? (
+            <p role="alert">{staffError(runs.error)}</p>
+          ) : (
+            <DataTable
+              caption="Past reconciliation runs"
+              rows={runs.data ?? []}
+              rowKey={(r) => r.id}
+              empty="No runs yet."
+              columns={[
+                { header: 'Statement day', cell: (r) => r.date },
+                { header: 'Run at', cell: (r) => new Date(r.createdAt).toLocaleString('en-PK') },
+                { header: 'Matched', cell: (r) => r.matched, className: 'text-right' },
+                { header: 'Mismatched', cell: (r) => r.mismatched, className: 'text-right' },
+                {
+                  header: 'Details',
+                  cell: (r) => (
+                    <Button
+                      variant="ghost"
+                      className="min-h-10 text-sm"
+                      aria-pressed={recon?.id === r.id}
+                      onClick={() => setRecon(r)}
+                    >
+                      {recon?.id === r.id ? 'Showing' : 'Show'}
+                    </Button>
+                  ),
+                },
+              ]}
+            />
           )}
         </Card>
       </div>

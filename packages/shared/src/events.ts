@@ -76,6 +76,8 @@ export const EventSchemas = {
     confidence: z.number(),
     ruleVersionId: z.string(),
     amount: z.number().nullable(),
+    /** `system` or the officer who approved the claim; that officer can never approve its payout. */
+    decidedBy: z.string().optional(),
   }),
   'cases.rule.published': z.object({
     ruleVersionId: z.string(),

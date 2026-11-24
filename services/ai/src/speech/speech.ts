@@ -79,6 +79,15 @@ export class Speech {
   }
 }
 
+const XML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&apos;',
+};
+const escapeXml = (s: string) => s.replace(/[&<>"']/g, (ch) => XML_ESCAPES[ch] ?? ch);
+
 /** The real synthesiser. A new connection per sentence keeps one stuck socket from blocking the next request. */
 export const edgeSynthesizer: Synthesizer = async (text, voice, timeoutMs) => {
   const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
@@ -87,7 +96,8 @@ export const edgeSynthesizer: Synthesizer = async (text, voice, timeoutMs) => {
   try {
     const work = (async () => {
       await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-      const { audioStream } = tts.toStream(text);
+      // msedge-tts puts the text into SSML unescaped: a bare & or < breaks synthesis (and opens the breaker).
+      const { audioStream } = tts.toStream(escapeXml(text));
       const chunks: Buffer[] = [];
       for await (const chunk of audioStream) chunks.push(chunk as Buffer);
       return Buffer.concat(chunks);

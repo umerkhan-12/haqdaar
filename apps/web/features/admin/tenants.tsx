@@ -2,7 +2,15 @@
 
 import { useState } from 'react';
 import { Shell } from '@/components/shell';
-import { Button, Card, DataTable, Skeleton, StatusPill, staffError } from '@/components/ui';
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  DataTable,
+  Skeleton,
+  StatusPill,
+  staffError,
+} from '@/components/ui';
 import { api, type LaunchProgramInput, type Tenant, type TenantUsage } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 
@@ -20,6 +28,22 @@ const EMPTY: LaunchProgramInput = {
   monthlyRequestQuota: 100_000,
 };
 const n = (x: number) => x.toLocaleString('en-PK');
+/** Same rules as the server's LaunchProgramRequest. */
+const PK_MOBILE = /^(\+?92|0)3\d{9}$/;
+function launchProblem(f: LaunchProgramInput): string | null {
+  const name = f.programName.trim();
+  if (name.length < 3 || name.length > 80) return 'Program name: 3 to 80 characters.';
+  const admin = f.adminName.trim();
+  if (admin.length < 2 || admin.length > 80) return "Admin's name: 2 to 80 characters.";
+  if (!PK_MOBILE.test(f.adminPhone.replace(/[\s-]/g, '')))
+    return 'Admin mobile must be a Pakistani mobile number, like 03001234567.';
+  if (f.adminPassword.length < 8 || f.adminPassword.length > 128)
+    return 'Admin password: 8 to 128 characters.';
+  const q = f.monthlyRequestQuota;
+  if (q !== undefined && (!Number.isInteger(q) || q < 1_000 || q > 100_000_000))
+    return 'Monthly request limit: a whole number from 1,000 to 100,000,000.';
+  return null;
+}
 
 /** Month-to-date requests against the plan's monthly limit. */
 function QuotaBar({ q }: { q: TenantUsage['quota'] }) {
@@ -114,11 +138,9 @@ export function AdminTenants() {
   const shown = rows.find((t) => t.id === shownId) ?? me.data;
   const set = <K extends keyof LaunchProgramInput>(k: K, v: LaunchProgramInput[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
-  const valid =
-    form.programName.trim().length >= 3 &&
-    form.adminName.trim().length >= 2 &&
-    form.adminPhone.trim().length >= 11 &&
-    form.adminPassword.length >= 8;
+  const [confirm, setConfirm] = useState(false);
+  const problem = launchProblem(form);
+  const touched = form.programName !== '' || form.adminName !== '' || form.adminPhone !== '';
 
   async function launch() {
     setBusy(true);
@@ -141,6 +163,7 @@ export function AdminTenants() {
       setMsg({ ok: false, text: staffError(e) });
     } finally {
       setBusy(false);
+      setConfirm(false);
     }
   }
 
@@ -281,13 +304,18 @@ export function AdminTenants() {
                     className={INPUT}
                   />
                 </label>
+                {touched && problem && (
+                  <p role="alert" className="mt-3 text-sm text-red-900">
+                    {problem}
+                  </p>
+                )}
                 <Button
                   className="mt-4"
-                  disabled={!valid || busy}
+                  disabled={!!problem || busy}
                   aria-busy={busy}
-                  onClick={launch}
+                  onClick={() => setConfirm(true)}
                 >
-                  {busy ? 'Launching…' : 'Launch program'}
+                  {busy ? 'Launching…' : 'Launch program…'}
                 </Button>
               </>
             ) : (
@@ -307,6 +335,21 @@ export function AdminTenants() {
           </Card>
         </div>
       )}
+      <ConfirmDialog
+        open={confirm}
+        title={`Launch "${form.programName.trim()}"?`}
+        confirmLabel={busy ? 'Launching…' : 'Launch program'}
+        busy={busy}
+        onClose={() => setConfirm(false)}
+        onConfirm={() => void launch()}
+      >
+        <p className="text-sm">
+          Creates a new program ({TYPE_LABEL[form.type]}) with a limit of{' '}
+          {n(form.monthlyRequestQuota ?? 100_000)} requests a month, and its first admin{' '}
+          {form.adminName.trim()}, who can sign in at once. Programs cannot be deleted from this
+          screen.
+        </p>
+      </ConfirmDialog>
     </Shell>
   );
 }

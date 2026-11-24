@@ -5,20 +5,19 @@ import { IconMic } from '@/components/icons';
 import { AudioButton } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { EMPTY, formatCnic, isValid, mergeHeard } from './claim-words';
+import { EMPTY, formatCnic, isValid, mergeHeard, PERSON_NAME } from './claim-words';
 
 export interface Correction {
   fullName: string;
   cnic: string;
 }
 
-const NAME_OK = /^\p{L}[\p{L}\p{M}‌ .'-]*$/u;
 const MAX_RECORDING_MS = 20_000;
 
 /** What can be sent: an empty box keeps the old value; a filled box must be valid. */
 export function correctionReady(c: Correction): boolean {
   const name = c.fullName.trim();
-  const nameOk = name === '' || (name.length >= 2 && NAME_OK.test(name));
+  const nameOk = name === '' || (name.length >= 2 && PERSON_NAME.test(name));
   const cnicOk = c.cnic === '' || isValid.cnic(c.cnic);
   return nameOk && cnicOk && (name !== '' || c.cnic !== '');
 }

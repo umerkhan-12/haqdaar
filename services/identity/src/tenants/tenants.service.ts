@@ -46,12 +46,16 @@ export class TenantsService {
    * Checked against the database on every call, not a token claim: revoking it is immediate.
    */
   async isPlatformAdmin(user: AuthUser): Promise<boolean> {
-    if (user.role !== 'admin') return false;
+    return user.role === 'admin' && (await this.platformAdminById(user.id));
+  }
+
+  /** Same check for another service (judge reset, AI switches), which only knows the user id. */
+  async platformAdminById(userId: string): Promise<boolean> {
     const row = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      select: { platformAdmin: true, active: true },
+      where: { id: userId },
+      select: { platformAdmin: true, active: true, role: true },
     });
-    return !!row?.active && row.platformAdmin;
+    return !!row?.active && row.role === 'admin' && row.platformAdmin;
   }
 
   private async requirePlatformAdmin(user: AuthUser): Promise<void> {

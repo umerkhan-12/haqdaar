@@ -60,6 +60,19 @@ export function saveHelperSession(s: Session | null): void {
   else localStorage.removeItem(HELPER_KEY);
 }
 
+/** Her half-finished claim on this phone, kept per person. */
+export const draftKey = (personId: string) => `hq.claim.${personId}`;
+export const DISTRICT_KEY = 'hq.district';
+
+/**
+ * Logout or "switch family" on a shared phone: the next person must not see this one's half-told claim
+ * or district. (Her unsent claims stay in the outbox, which only ever sends them with her own session.)
+ */
+export function forgetPerson(personId: string | null | undefined): void {
+  if (personId) localStorage.removeItem(draftKey(personId));
+  localStorage.removeItem(DISTRICT_KEY);
+}
+
 export function clearSession(): void {
   localStorage.removeItem(KEY);
   localStorage.removeItem(HELPER_KEY);

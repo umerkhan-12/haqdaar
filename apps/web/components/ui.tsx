@@ -177,13 +177,35 @@ export function EmptyState({ title, action }: { title: string; action?: ReactNod
 }
 
 /** Citizens see plain words + a short reference; never raw error text. */
+/** Refusals the server explains with a code: what went wrong, and what she can do about it. */
+const REASONS: Record<string, [title: MessageKey, help: MessageKey]> = {
+  CNIC_TAKEN: ['errCnicTaken', 'errCnicTakenHelp'],
+  CNIC_MISMATCH: ['errCnicMismatch', 'errCnicMismatchHelp'],
+  CNIC_LOCKED: ['errCnicLocked', 'errCnicLockedHelp'],
+};
+
+export const errorReason = (code?: string) => (code ? REASONS[code] : undefined) ?? null;
+
+/** What ErrorState shows for a failure, as message keys, so a screen can also speak it. */
+export function errorWords(error: unknown): [title: MessageKey, help?: MessageKey] {
+  const e = error instanceof ApiError ? error : null;
+  const reason = errorReason(e?.code);
+  if (reason) return reason;
+  return [e?.offline ? 'offline' : e?.status === 403 ? 'forbidden' : 'error'];
+}
+
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   const { t } = useI18n();
   const e = error instanceof ApiError ? error : null;
-  const key: MessageKey = e?.offline ? 'offline' : e?.status === 403 ? 'forbidden' : 'error';
+  const [title, help] = errorWords(error);
   return (
     <div className="space-y-3">
-      <StatusCard tone={e?.offline ? 'warn' : 'bad'} title={t(key)} urgent />
+      <StatusCard
+        tone={e?.offline ? 'warn' : 'bad'}
+        title={t(title)}
+        body={help ? t(help) : undefined}
+        urgent
+      />
       {e?.requestId && <p className="latin text-xs text-muted">ref {e.requestId.slice(0, 8)}</p>}
       {onRetry && (
         <Button variant="ghost" onClick={onRetry}>
@@ -233,7 +255,14 @@ export function VerdictCard({ v }: { v: ScamVerdict }) {
         <AudioButton text={[t(key), reason]} />
       </div>
       <p className="text-lg">{reason}</p>
-      {v.sealValid && <StatusPill tone="ok">Haqdaar Seal ✓</StatusPill>}
+      {v.sealValid && (
+        <span
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm font-semibold ${TONE.ok}`}
+        >
+          <IconCheck className="h-4 w-4" />
+          {t('receiptSeal')}
+        </span>
+      )}
     </div>
   );
 }
@@ -253,10 +282,13 @@ export function StatusPill({ children, tone = 'neutral' }: { children: ReactNode
 export function Timeline({
   events,
   done = false,
+  lang = 'en',
 }: {
   events: { label: string; at: string }[];
   /** True when nothing more will happen (paid, closed, rejected): the last step is ticked too. */
   done?: boolean;
+  /** Dates are written in the screen's language (staff screens stay English). */
+  lang?: 'ur' | 'en';
 }) {
   return (
     <ol className="space-y-2">
@@ -270,8 +302,11 @@ export function Timeline({
               <IconCheck className="h-6 w-6 shrink-0 text-green-700" />
             )}
             <span className="flex-1">{e.label}</span>
-            <time className="latin text-sm text-muted" dir="ltr" dateTime={e.at}>
-              {new Date(e.at).toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' })}
+            <time className={`text-sm text-muted ${lang === 'en' ? 'latin' : ''}`} dateTime={e.at}>
+              {new Date(e.at).toLocaleString(lang === 'ur' ? 'ur-PK' : 'en-PK', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
             </time>
           </li>
         );
@@ -306,6 +341,7 @@ export function PinPad({
   onChange: (v: string) => void;
   label: string;
 }) {
+  const { t } = useI18n();
   const press = (d: string) => value.length < length && onChange(value + d);
   return (
     <div className="space-y-4" dir="ltr">
@@ -335,7 +371,7 @@ export function PinPad({
         <button
           type="button"
           onClick={() => onChange(value.slice(0, -1))}
-          aria-label="Delete"
+          aria-label={t('pinDelete')}
           className="h-16 rounded-2xl bg-white text-2xl shadow-sm"
         >
           ⌫

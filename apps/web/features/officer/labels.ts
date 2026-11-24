@@ -186,6 +186,8 @@ const TIMELINE: Record<string, string> = {
   escalated: 'Escalated to a supervisor',
   closed: 'Case closed',
   consent_withdrawn: 'Citizen withdrew consent',
+  district_corrected: 'District corrected by officer',
+  household_corrected: 'Household size corrected by officer',
   'payment.success': 'Payment sent',
   'payment.failed': 'Payment failed',
   'payment.unknown': 'Payment result unknown',
@@ -210,11 +212,61 @@ export function timelineLabel(
         : e.actor === me
           ? 'you'
           : `staff ${e.actor.slice(0, 8)}`;
-  const d = (e.data ?? {}) as { reason?: string; message?: string; note?: string | null };
-  const detail = d.reason ?? d.message ?? d.note;
+  const d = (e.data ?? {}) as {
+    reason?: string;
+    message?: string;
+    note?: string | null;
+    from?: string | number | null;
+    to?: string | number | null;
+  };
+  const change =
+    e.type.endsWith('_corrected') && d.to != null ? `${d.from ?? 'none'} → ${d.to}` : null;
+  const detail = change ?? d.reason ?? d.message ?? d.note;
   return `${TIMELINE[e.type] ?? readable(e.type)} · ${who}${detail ? ` · “${detail}”` : ''}`;
 }
 
 /** "you" or a short id: there is no staff directory in the prototype. */
 export const staffName = (id: string | null, me?: string) =>
   !id ? 'nobody' : id === me ? 'you' : `officer ${id.slice(0, 8)}`;
+
+const PAYMENT_STATES: Record<string, string> = {
+  CREATED: 'Created',
+  AWAITING_APPROVAL: 'Waiting for a second officer',
+  APPROVED: 'Approved, sending',
+  SENT: 'Sent to the bank',
+  SUCCESS: 'Paid',
+  FAILED: 'Failed',
+  UNKNOWN: 'Bank did not answer',
+  HELD: 'Held for a check',
+  REVERSAL_REQUESTED: 'Reversal requested',
+  REVERSED: 'Reversed',
+};
+export const paymentStateLabel = (s: string) => PAYMENT_STATES[s] ?? readable(s);
+
+/** Why a payout is held, failed or waiting, in words an officer can act on. */
+const HOLDS: Record<string, string> = {
+  TITLE_MISMATCH:
+    'The bank account is in a different name than the claimant. Check with her before releasing.',
+  ACCOUNT_NOT_FOUND:
+    'The bank has no account for this mobile number. Ask the claimant for the correct number.',
+  TITLE_FETCH_UNAVAILABLE: 'The bank could not be asked whose account this is. Try again shortly.',
+  VELOCITY:
+    'This account received payouts for several other people today. Often one person collecting for many.',
+  RETRY_AWAITING_APPROVAL: 'Sent again by an officer; a different officer must approve the retry.',
+  ABOVE_MAKER_CHECKER_LIMIT: 'Large amount: a second officer must approve it.',
+  INQUIRY_NOT_RECEIVED_SAFE_TO_RETRY: 'The bank never received it. It is safe to send again.',
+  INQUIRY_CONFIRMED_RJCT: 'The bank confirmed it rejected the transfer.',
+  NO_RESPONSE_FROM_RAAST: 'The bank did not answer. Ask the bank (inquiry) before paying again.',
+};
+
+/** Bank and rail codes in words an officer can act on. */
+export function plainReason(code: string | null | undefined): string {
+  if (!code) return 'No reason recorded';
+  if (HOLDS[code]) return HOLDS[code];
+  if (/AC0[134]|ACCOUNT_NOT_FOUND|not found|no such account/i.test(code))
+    return HOLDS.ACCOUNT_NOT_FOUND;
+  if (/timeout|UNKNOWN|no answer/i.test(code)) return HOLDS.NO_RESPONSE_FROM_RAAST;
+  if (/RJCT|REJECT/i.test(code))
+    return `The bank rejected the transfer (${code.replace(/^(RJCT|REQUEST_REJECTED):\s*/i, '')}).`;
+  return readable(code);
+}

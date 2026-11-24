@@ -54,6 +54,13 @@ export class TenantsController {
     return this.tenants.mine(user);
   }
 
+  /** Service → identity: may this user flip switches that affect every program? */
+  @InternalOnly()
+  @Get('platform-admins/:userId')
+  async platformAdmin(@Param('userId', ParseUUIDPipe) userId: string) {
+    return { platformAdmin: await this.tenants.platformAdminById(userId) };
+  }
+
   @Roles('admin')
   @Get(':id/usage')
   usage(

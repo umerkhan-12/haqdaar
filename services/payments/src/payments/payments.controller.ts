@@ -16,6 +16,7 @@ import { PaymentState } from '@haqdaar/shared';
 import { z } from 'zod';
 import { PrismaService } from '../prisma.service';
 import { PayoutService } from './payout.service';
+import { MAKER_ACTIONS } from '../domain/four-eyes';
 
 /** Optional corrected mobile account number, given by the claimant after a failed payout. */
 // A retry with no body at all is the plain "send again".
@@ -33,7 +34,12 @@ const ListQuery = z.object({
   state: PaymentState.optional(),
   caseId: z.string().uuid().optional(),
   take: z.coerce.number().int().min(1).max(200).default(50),
+  /** Beneficiary name (part of it), or a full claim or payout id. */
+  q: z.string().trim().max(80).optional(),
+  /** Paging: the id of the last payout already shown. */
+  after: z.string().uuid().optional(),
 });
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MineQuery = z.object({ caseId: z.string().uuid().optional() });
 const ReceiptQuery = z.object({ caseId: z.string().uuid() });
 const NoteBody = z.object({ note: z.string().max(300).optional() }).default({});
@@ -66,15 +72,29 @@ export class PaymentsController {
         tenantId: user.tenantId,
         ...(q.state ? { state: q.state } : {}),
         ...(q.caseId ? { caseId: q.caseId } : {}),
+        ...(q.q
+          ? {
+              OR: [
+                { creditorName: { contains: q.q, mode: 'insensitive' as const } },
+                ...(UUID.test(q.q) ? [{ caseId: q.q }, { id: q.q }] : []),
+              ],
+            }
+          : {}),
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: q.take,
+      ...(q.after ? { cursor: { id: q.after }, skip: 1 } : {}),
       // The latest step and its reason: staff must see WHY a payout is held or failed, not only that it is.
       include: {
         transitions: {
           orderBy: { at: 'desc' },
           take: 1,
           select: { to: true, reason: true, at: true },
+        },
+        // Who asked for it: the screen hides Approve from them (the server refuses them anyway).
+        approvals: {
+          where: { action: { in: [...MAKER_ACTIONS, 'REVERSAL_REQUEST'] } },
+          select: { action: true, actorId: true },
         },
       },
     });

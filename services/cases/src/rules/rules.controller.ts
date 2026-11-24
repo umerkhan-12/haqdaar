@@ -11,15 +11,12 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { CurrentUser, Roles, ZBody, type AuthUser } from '@haqdaar/nest-kit';
-import { CostSettings } from '@haqdaar/shared';
+import type { CostSettings } from '@haqdaar/shared';
 import { RuleDefinition } from '../engine/rules';
 import { PrismaService } from '../prisma.service';
 import { requireUser } from '../access';
 import { RulesService } from './rules.service';
-
-const CostBody = CostSettings.refine((c) => c.wrongApproval > c.humanReview, {
-  message: 'A wrong approval must cost more than a human review',
-});
+import { CostBody } from './rule-checks';
 
 @ApiTags('rules')
 @ApiBearerAuth()
@@ -43,6 +40,17 @@ export class RulesController {
     @ZBody(RuleDefinition) body: z.infer<typeof RuleDefinition>,
   ) {
     return this.rules.createDraft(requireUser(user), body);
+  }
+
+  /** Rewrites a draft in place, so editing and replaying again does not pile up versions. */
+  @Roles('admin')
+  @Put('rules/versions/:id')
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @ZBody(RuleDefinition) body: z.infer<typeof RuleDefinition>,
+  ) {
+    return this.rules.updateDraft(requireUser(user), id, body);
   }
 
   @Roles('admin')

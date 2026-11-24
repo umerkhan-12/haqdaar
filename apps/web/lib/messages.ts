@@ -5,7 +5,8 @@
 export const M = {
   appName: ['حقدار', 'Haqdaar'],
   prototype: ['نمونہ — سرکاری سروس نہیں', 'PROTOTYPE — not an official government service'],
-  switchLang: ['English', 'اردو'],
+  /** Written in the language on screen, like every other label: انگریزی on Urdu screens, Urdu on English ones. */
+  switchLang: ['انگریزی', 'Urdu'],
   listen: ['سنیں', 'Listen'],
   logout: ['باہر نکلیں', 'Log out'],
   back: ['واپس', 'Back'],
@@ -18,6 +19,29 @@ export const M = {
   error: ['کچھ مسئلہ ہوا۔ دوبارہ کوشش کریں۔', 'Something went wrong. Please try again.'],
   empty: ['ابھی یہاں کچھ نہیں ہے۔', 'Nothing here yet.'],
   forbidden: ['آپ کو اس کی اجازت نہیں ہے۔', 'You are not allowed to do this.'],
+  errCnicTaken: [
+    'یہ شناختی کارڈ نمبر پہلے سے کسی اور اکاؤنٹ میں درج ہے۔',
+    'This CNIC is already registered to another account.',
+  ],
+  errCnicTakenHelp: [
+    'ایک شناختی کارڈ پر صرف ایک اکاؤنٹ بن سکتا ہے، تاکہ آپ کی رقم کوئی اور نہ لے سکے۔ نمبر غلط لکھا ہے تو درست کریں۔ اگر کارڈ آپ کا ہے تو اسی فون نمبر سے داخل ہوں جس سے پہلے اکاؤنٹ بنایا تھا، یا اپنے مددگار یا دفتر سے بات کریں۔',
+    'One CNIC can have only one account, so nobody else can take your money. If you typed it wrong, correct it. If the card is yours, sign in with the phone number you first registered with, or ask your helper or the programme office.',
+  ],
+  errCnicMismatch: [
+    'یہ نمبر آپ کے درج شناختی کارڈ سے نہیں ملتا۔',
+    'This number does not match the CNIC on your account.',
+  ],
+  errCnicMismatchHelp: [
+    'وہی شناختی کارڈ نمبر لکھیں جو آپ نے پہلے دیا تھا۔ نمبر بدلنا ہو تو افسر سے بات کریں۔',
+    'Enter the same CNIC you gave before. To change it, speak to an officer.',
+  ],
+  errCnicLocked: ['آپ کی شناخت کی تصدیق ہو چکی ہے۔', 'Your identity is already confirmed.'],
+  errCnicLockedHelp: [
+    'اب شناختی کارڈ نمبر صرف افسر بدل سکتا ہے۔ دفتر سے بات کریں۔',
+    'Only an officer can change the CNIC now. Please contact the programme office.',
+  ],
+  changeDetails: ['اپنی معلومات بدلیں', 'Change my details'],
+  correctCnic: ['شناختی کارڈ نمبر درست کریں', 'Correct the CNIC number'],
 
   loginTitle: ['اپنے فون نمبر سے داخل ہوں', 'Sign in with your phone number'],
   phone: ['فون نمبر', 'Phone number'],
@@ -25,6 +49,24 @@ export const M = {
   signIn: ['داخل ہوں', 'Sign in'],
   wrongLogin: ['فون نمبر یا پاس ورڈ غلط ہے۔', 'Wrong phone number or password.'],
   demoAccounts: ['ڈیمو اکاؤنٹ (ایک ٹیپ)', 'Demo accounts (one tap)'],
+  loginSay: [
+    'اپنا موبائل نمبر لکھیں۔ پھر اپنا چار ہندسوں کا پن دبائیں۔',
+    'Type your mobile number. Then tap your 4-digit PIN.',
+  ],
+  wrongLoginPin: ['فون نمبر یا پن غلط ہے۔', 'Wrong phone number or PIN.'],
+  loginLocked: [
+    'کئی بار غلط کوشش ہوئی۔ پندرہ منٹ انتظار کریں، پھر دوبارہ کوشش کریں۔',
+    'Too many wrong tries. Please wait 15 minutes, then try again.',
+  ],
+  loginUsePassword: ['پاس ورڈ سے داخل ہوں (عملے کے لیے)', 'Sign in with a password (staff)'],
+  loginUsePin: ['پن سے داخل ہوں', 'Sign in with a PIN'],
+  demoCitizen: ['شہری — زینب', 'Citizen — Zainab'],
+  demoHelper: ['مددگار — دکاندار آصف', 'Helper — shopkeeper Asif'],
+  demoOfficerSana: ['افسر — ثنا', 'Officer — Sana'],
+  demoOfficerKamran: ['افسر — کامران', 'Officer — Kamran'],
+  demoAdmin: ['ایڈمن — حرا (جج موڈ)', 'Admin — Hira (Judge Mode)'],
+  demoAuditor: ['آڈیٹر — بلال', 'Auditor — Bilal'],
+  pinDelete: ['آخری ہندسہ مٹائیں', 'Delete the last digit'],
 
   homeGreeting: ['السلام علیکم', 'Assalam-o-Alaikum'],
   claim: ['میرے پیسے کے لیے درخواست', 'Claim my money'],
@@ -88,6 +130,32 @@ export const M = {
     'Saved on your phone. It will be sent automatically when the internet is back.',
   ],
   outboxPending: ['درخواستیں بھیجی جانی ہیں', 'claims waiting to be sent'],
+  outboxRefused: [
+    'آپ کی ایک درخواست نہیں بھیجی جا سکی۔',
+    'One of your claims could not be sent.',
+  ],
+  consentMissingWarn: [
+    'آپ نے اجازت کے خانے نہیں دبائے۔ اجازت کے بغیر افسر آپ کی درخواست آگے نہیں بڑھا سکے گا، اور آپ سے دوبارہ اجازت مانگی جائے گی۔ اجازت دینی ہو تو اوپر خانے دبائیں۔',
+    'You did not tick the permission boxes. Without permission the officer cannot move your claim forward, and you will be asked again. To give permission, tap the boxes above.',
+  ],
+  sendWithout: ['اجازت کے بغیر بھیجیں', 'Send without permission'],
+  voiceOffline: [
+    'انٹرنیٹ نہیں ہے، اس لیے آپ کی آواز سمجھی نہیں جا سکی۔ انٹرنیٹ آنے پر دوبارہ بولیں، یا لکھ کر بتائیں۔',
+    'There is no internet, so we could not understand your voice. Speak again when the internet is back, or type instead.',
+  ],
+  sayWhatIsWrong: [
+    'جو بات غلط ہے وہ دوبارہ بولیں، جیسے اپنا نام یا شناختی کارڈ نمبر۔ باقی معلومات محفوظ ہیں۔',
+    'Say again only what is wrong, for example your name or CNIC number. Everything else is kept.',
+  ],
+  badFullName: [
+    'نام صرف حروف میں لکھیں، کم از کم دو حروف۔',
+    'Write the name in letters only, at least 2 letters.',
+  ],
+  badDistrict: ['اپنا ضلع فہرست میں سے چنیں۔', 'Choose your district from the list.'],
+  badHousehold: [
+    'گھر کے افراد کی تعداد ایک سے تیس تک لکھیں۔',
+    'Write how many people live in your home, from 1 to 30.',
+  ],
 
   laneAUTO_APPROVE: ['منظور ہو گئی', 'Approved'],
   laneHUMAN_REVIEW: ['ایک افسر دیکھ رہا ہے', 'An officer is checking it'],
@@ -146,6 +214,15 @@ export const M = {
   wrongPin: ['پن غلط ہے', 'Wrong PIN'],
   actingFor: ['آپ مدد کر رہے ہیں:', 'Acting for:'],
   switchFamily: ['خاندان بدلیں', 'Switch family'],
+  pinLocked: [
+    'کئی بار غلط پن ڈالا گیا۔ یہ خاندان ابھی بند ہے۔ پندرہ منٹ بعد دوبارہ کوشش کریں۔',
+    'Too many wrong PINs. This family is locked. Try again in 15 minutes.',
+  ],
+  familyLocked: ['بند ہے — پندرہ منٹ بعد کوشش کریں', 'Locked — try again in 15 minutes'],
+  helperDemoPins: [
+    'نمونہ — ڈیمو پن (اصل خاندان اپنا پن خفیہ رکھتا ہے): زینب بی بی 1111، راشدہ بیگم 2222، نسرین بی بی 3333، کنیز فاطمہ 4444، زینب بی بی (بدین) 5555۔ پانچ بار غلط پن ڈالنے سے وہ خاندان بند ہو جاتا ہے۔',
+    'Prototype demo PINs (a real family keeps its PIN secret): Zainab Bibi 1111 · Rashida Begum 2222 · Nasreen Bi Bi 3333 · Kaneez Fatima 4444 · Zainab Bibi (Badin) 5555. Five wrong tries lock that family.',
+  ],
 
   // sign-up
   signupTitle: ['نیا اکاؤنٹ بنائیں', 'Create a new account'],
@@ -223,6 +300,11 @@ export const M = {
   ],
   signupSmsSimulated: ['فرضی پیغام (صرف نمونہ)', 'SIMULATED SMS (prototype only)'],
   signupSmsWaiting: ['پیغام کا انتظار ہے…', 'Waiting for the message…'],
+  signupNoRealSms: [
+    'نمونہ: اصل پیغام نہیں بھیجا جاتا۔ کوڈ اوپر نظر آتا ہے۔',
+    'Prototype: no real SMS is sent. The code appears above.',
+  ],
+  receiptRef: ['حوالہ نمبر:', 'Ref:'],
 
   // ---------- my data and permission, status screen, offline/error (consents engineer) ----------
   myData: ['میرا ڈیٹا اور اجازت', 'My data and permission'],

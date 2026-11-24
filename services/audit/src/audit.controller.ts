@@ -37,14 +37,14 @@ export class AuditController {
   }
 
   @Get('stats')
-  stats() {
-    return this.audit.stats();
+  stats(@CurrentUser() user: AuthUser) {
+    return this.audit.stats(user.tenantId);
   }
 
   @Post('verify-chain')
   @HttpCode(200)
-  verify(@ZBody(VerifyBody) b: z.infer<typeof VerifyBody>) {
-    return this.audit.verify(b.fromSeq);
+  verify(@CurrentUser() user: AuthUser, @ZBody(VerifyBody) b: z.infer<typeof VerifyBody>) {
+    return this.audit.verify(b.fromSeq, user.tenantId);
   }
 
   /** "My information is wrong" requests from citizens, newest first, for the caller's program. */

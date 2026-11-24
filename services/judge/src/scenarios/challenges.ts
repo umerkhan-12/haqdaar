@@ -182,6 +182,11 @@ const rulesChange: Scenario = {
         }),
       (r) => `draft v${r.body?.version} (${r.body?.status})`,
     );
+    run.check(
+      'Draft saved',
+      draft.status === 201,
+      `HTTP ${draft.status}${draft.body?.message ? `: ${draft.body.message}` : ''}`,
+    );
     const sim = await run.step(
       'Digital Twin replays past decisions under the draft',
       () => api.call('POST', `/rules/versions/${draft.body.id}/simulate`, { token: admin }),
@@ -192,7 +197,16 @@ const rulesChange: Scenario = {
         changed: r.body?.changed?.slice(0, 10),
       }),
     );
-    run.check('Nothing published: live rule unchanged', true, `still v${live.version}`);
+    run.check('Digital Twin replayed', sim.status === 200, `HTTP ${sim.status}`);
+    const after = await api.call('GET', '/rules', { token: admin });
+    const stillLive = items<{ id: string; version: number; status: string }>(after.body).find(
+      (r) => r.status === 'PUBLISHED',
+    );
+    run.check(
+      'Nothing published: live rule unchanged',
+      stillLive?.id === live.id,
+      `live is v${stillLive?.version ?? '?'}`,
+    );
     return `${sim.body.casesReplayed} decisions replayed: ${sim.body.changedCount} would change lane. Draft not published.`;
   },
 };

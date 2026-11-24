@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Shell } from '@/components/shell';
 import { Button, Card, DataTable, Skeleton, StatusPill, staffError } from '@/components/ui';
-import { api, type AuditEntry } from '@/lib/api';
+import { api, request, type AuditEntry } from '@/lib/api';
 import { useAsync } from '@/lib/hooks';
 import {
   QUICK_FILTERS,
@@ -20,26 +20,41 @@ const PAGE = 25;
 /** AI calls by the submitter this long before the claim are shown as "involved" in its trace. */
 const AI_WINDOW_MS = 30 * 60_000;
 
+type ChainCheck = { checked: number } & (
+  | { valid: true }
+  | { valid: false; brokenAtSeq: number; reason: string }
+  | { valid: false; inAnotherProgram: true }
+);
+const verifyChain = () => request<ChainCheck>('POST', '/audit/verify-chain', { body: {} });
+
+/** A day picked in the date fields covers that whole local day. */
+const dayStart = (d: string) => (d ? new Date(`${d}T00:00:00`).toISOString() : '');
+const dayEnd = (d: string) => (d ? new Date(`${d}T23:59:59.999`).toISOString() : '');
+
 const params = (o: Record<string, string>) =>
   new URLSearchParams(Object.entries(o).filter(([, v]) => v)).toString();
 
-/** One page of entries. A quick filter covers several exact event types, so it asks once per type and merges by sequence. */
-async function loadEntries(q: {
+interface Query {
   quick: QuickFilter;
   type: string;
   entityId: string;
+  from: string;
+  to: string;
   cursor: string;
-}) {
+}
+
+/** One page of entries. A quick filter covers several exact event types, so it asks once per type and merges by sequence. */
+async function loadEntries(q: Query) {
   const types = QUICK_FILTERS.find((f) => f.id === q.quick)?.types ?? [];
-  if (!types.length)
-    return api.audit(
-      params({ type: q.type, entityId: q.entityId, cursor: q.cursor, limit: String(PAGE) }),
-    );
-  const pages = await Promise.all(
-    types.map((type) =>
-      api.audit(params({ type, entityId: q.entityId, cursor: q.cursor, limit: String(PAGE) })),
-    ),
-  );
+  const common = {
+    entityId: q.entityId,
+    from: dayStart(q.from),
+    to: dayEnd(q.to),
+    cursor: q.cursor,
+    limit: String(PAGE),
+  };
+  if (!types.length) return api.audit(params({ type: q.type, ...common }));
+  const pages = await Promise.all(types.map((type) => api.audit(params({ type, ...common }))));
   const merged = pages
     .flatMap((p) => p.items)
     .sort((a, b) => b.seq - a.seq)
@@ -83,16 +98,38 @@ async function loadTrace(caseId: string): Promise<CaseTrace> {
 
 /** Read-only, tamper-evident record. Auditors filter, read a decision trace in plain words, and verify the hash chain. */
 export function AuditLog() {
-  const [filters, setFilters] = useState({ type: '', entityId: '' });
-  const [query, setQuery] = useState({
-    quick: 'all' as QuickFilter,
+  const [filters, setFilters] = useState({ type: '', entityId: '', from: '', to: '' });
+  const [query, setQuery] = useState<Query>({
+    quick: 'all',
     type: '',
     entityId: '',
+    from: '',
+    to: '',
     cursor: '',
   });
-  const { data, error, loading } = useAsync(() => loadEntries(query), [JSON.stringify(query)]);
+  /** Cursors of the pages before this one, so "Newer" goes back one page at a time. */
+  const [newer, setNewer] = useState<string[]>([]);
+  const entries = useAsync(() => loadEntries(query), [JSON.stringify(query)]);
+  const { error, loading } = entries;
+  /** A failed reload keeps the last page on screen (with a warning) instead of blanking it. */
+  const [lastGood, setLastGood] = useState(entries.data);
+  useEffect(() => {
+    if (entries.data) setLastGood(entries.data);
+  }, [entries.data]);
+  const data = entries.data ?? lastGood;
   const stats = useAsync(() => api.auditStats(), []);
-  const [verify, setVerify] = useState<Awaited<ReturnType<typeof api.verifyChain>> | null>(null);
+  const [verify, setVerify] = useState<ChainCheck | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const badRange = !!filters.from && !!filters.to && filters.from > filters.to;
+  const restart = (q: Query) => {
+    setNewer([]);
+    setQuery(q);
+  };
+  const copy = (id: string) =>
+    navigator.clipboard
+      .writeText(id)
+      .then(() => setCopied(id))
+      .catch(() => setCopied(null));
   const [trace, setTrace] = useState<CaseTrace | null>(null);
   const [entry, setEntry] = useState<AuditEntry | null>(null);
   const [busy, setBusy] = useState(false);
@@ -100,7 +137,8 @@ export function AuditLog() {
 
   const apply = (e: FormEvent) => {
     e.preventDefault();
-    setQuery({ quick: filters.type ? 'all' : query.quick, ...filters, cursor: '' });
+    if (badRange) return;
+    restart({ quick: filters.type ? 'all' : query.quick, ...filters, cursor: '' });
   };
 
   async function open<T>(load: () => Promise<T>, show: (v: T) => void) {
@@ -119,7 +157,7 @@ export function AuditLog() {
     <Shell roles={['auditor', 'admin']} wide>
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <h1 className="mr-auto text-xl font-bold">Audit log</h1>
-        <Button disabled={busy} onClick={() => open(() => api.verifyChain(), setVerify)}>
+        <Button disabled={busy} onClick={() => open(verifyChain, setVerify)}>
           Verify chain
         </Button>
       </div>
@@ -161,7 +199,9 @@ export function AuditLog() {
           >
             {verify.valid
               ? `✓ Chain intact: ${verify.checked} entries verified. No entry has been edited or removed.`
-              : `✗ Chain broken at entry #${verify.brokenAtSeq} (${verify.reason}). That record was changed after it was written.`}
+              : 'inAnotherProgram' in verify
+                ? '✗ Chain broken in an entry that belongs to another program. That record was changed after it was written; the platform team must look into it.'
+                : `✗ Chain broken at entry #${verify.brokenAtSeq} (${verify.reason}). That record was changed after it was written.`}
           </p>
         )}
         {msg && (
@@ -178,7 +218,7 @@ export function AuditLog() {
             aria-pressed={query.quick === f.id && !query.type}
             onClick={() => {
               setFilters({ ...filters, type: '' });
-              setQuery({ quick: f.id, type: '', entityId: query.entityId, cursor: '' });
+              restart({ ...query, quick: f.id, type: '', cursor: '' });
             }}
             className={`min-h-12 rounded-lg border-2 px-3 text-sm font-medium ${query.quick === f.id && !query.type ? 'border-brand bg-brand-soft text-brand-dark' : 'border-slate-300 bg-white'}`}
           >
@@ -198,21 +238,56 @@ export function AuditLog() {
           />
         </label>
         <label className="text-sm">
-          Case / payment id
+          Case / payment id (or its start)
           <input
             value={filters.entityId}
-            onChange={(e) => setFilters({ ...filters, entityId: e.target.value })}
+            onChange={(e) => setFilters({ ...filters, entityId: e.target.value.trim() })}
             className="mt-1 block min-h-12 rounded-lg border-2 border-slate-400 px-2 font-mono"
           />
         </label>
-        <Button type="submit" variant="ghost">
+        <label className="text-sm">
+          From
+          <input
+            type="date"
+            value={filters.from}
+            max={filters.to || undefined}
+            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+            className="mt-1 block min-h-12 rounded-lg border-2 border-slate-400 px-2"
+          />
+        </label>
+        <label className="text-sm">
+          To
+          <input
+            type="date"
+            value={filters.to}
+            min={filters.from || undefined}
+            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+            className="mt-1 block min-h-12 rounded-lg border-2 border-slate-400 px-2"
+          />
+        </label>
+        <Button type="submit" variant="ghost" disabled={badRange}>
           Filter
         </Button>
+        {badRange && (
+          <p role="alert" className="w-full text-sm text-red-900">
+            The start day must be before the end day.
+          </p>
+        )}
       </form>
 
+      {loading && data && (
+        <p role="status" className="mb-2 text-sm text-muted">
+          Loading…
+        </p>
+      )}
+      {!!error && data && (
+        <p role="alert" className="mb-2 rounded-xl bg-red-50 p-3 text-sm text-red-900">
+          Could not load these entries: {staffError(error)} The list below is the last one loaded.
+        </p>
+      )}
       {loading && !data ? (
         <Skeleton lines={8} />
-      ) : error ? (
+      ) : error && !data ? (
         <p role="alert">{staffError(error)}</p>
       ) : (
         <>
@@ -231,9 +306,19 @@ export function AuditLog() {
               { header: 'What happened', cell: (e) => eventSummary(e) || '—' },
               {
                 header: 'Entity',
-                cell: (e) => (
-                  <span className="font-mono text-xs">{e.entityId?.slice(0, 8) ?? '—'}</span>
-                ),
+                cell: (e) =>
+                  e.entityId ? (
+                    <button
+                      className="min-h-10 font-mono text-xs underline decoration-dotted"
+                      title={`${e.entityId} (click to copy)`}
+                      aria-label={`Copy id ${e.entityId}`}
+                      onClick={() => copy(e.entityId!)}
+                    >
+                      {copied === e.entityId ? 'copied' : e.entityId.slice(0, 8)}
+                    </button>
+                  ) : (
+                    '—'
+                  ),
               },
               {
                 header: 'Actor',
@@ -275,14 +360,34 @@ export function AuditLog() {
           />
           <div className="mt-3 flex gap-2">
             {query.cursor && (
-              <Button variant="ghost" onClick={() => setQuery({ ...query, cursor: '' })}>
-                Newest
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  disabled={loading}
+                  onClick={() => restart({ ...query, cursor: '' })}
+                >
+                  Newest
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={loading}
+                  onClick={() => {
+                    setQuery({ ...query, cursor: newer.at(-1) ?? '' });
+                    setNewer(newer.slice(0, -1));
+                  }}
+                >
+                  ← Newer
+                </Button>
+              </>
             )}
             {data?.nextCursor && (
               <Button
                 variant="ghost"
-                onClick={() => setQuery({ ...query, cursor: String(data.nextCursor) })}
+                disabled={loading}
+                onClick={() => {
+                  setNewer([...newer, query.cursor]);
+                  setQuery({ ...query, cursor: String(data.nextCursor) });
+                }}
               >
                 Older →
               </Button>

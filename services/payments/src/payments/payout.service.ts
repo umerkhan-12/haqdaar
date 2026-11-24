@@ -15,10 +15,27 @@ import { env } from '../env';
 import { nameMatchScore, TITLE_MATCH_THRESHOLD } from '../domain/name-match';
 import { velocityBreached } from '../domain/velocity';
 import { newEndToEndId } from '../domain/transition';
+import {
+  checkerRefusal,
+  MAKER_ACTIONS,
+  RETRY_AWAITING_APPROVAL,
+  retryNeedsSecondOfficer,
+} from '../domain/four-eyes';
 import { RailsClient } from './rails.client';
 import { PaymentStateMachine, SYSTEM } from './state-machine.service';
 
 const INQUIRY_DELAY_MS = 2_000;
+
+/** Corrected account facts checked by title fetch before a retry. */
+interface CorrectedAccount {
+  creditorAlias: string;
+  creditorIban: string | null;
+  titleFetched: string;
+  titleMatchScore: number;
+}
+
+const fourEyes = (message: string) =>
+  new ForbiddenException({ message, details: { code: 'FOUR_EYES' } });
 const SWEEP_EVERY_MS = 15_000;
 
 /**
@@ -52,6 +69,7 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
 
   async onCaseDecided(e: EventEnvelope<EventPayload<'cases.case.decided'>>) {
     const { caseId, amount } = e.payload;
+    const decidedBy = e.payload.decidedBy ?? 'system';
     if (!amount || amount <= 0) return;
     if (await this.prisma.payment.findUnique({ where: { caseId } })) return; // redelivery: no-op
 
@@ -70,8 +88,13 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
             creditorName: d.beneficiaryName,
             creditorIban: d.accountIban,
             creditorAlias: d.accountAlias,
+            makerId: decidedBy,
           },
         });
+        if (decidedBy !== 'system')
+          await tx.approval.create({
+            data: { paymentId: p.id, action: 'CLAIM_APPROVE', actorId: decidedBy },
+          });
         await tx.paymentTransition.create({
           data: {
             paymentId: p.id,
@@ -188,10 +211,30 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
     });
   }
 
+  /**
+   * Checker approval: never by anyone who asked for this payout (claim approver, releaser, retrier).
+   * Approves a payout waiting for a second officer, or sends a failed one whose retry waits for one.
+   */
   async approve(id: string, user: AuthUser, note?: string) {
     const p = await this.sm.get(id, user.tenantId);
-    if (p.makerId === user.id) {
-      throw new ForbiddenException('Maker-checker: you cannot approve your own request');
+    const makers = await this.prisma.approval.findMany({
+      where: { paymentId: id, action: { in: [...MAKER_ACTIONS] } },
+      orderBy: { at: 'desc' },
+      select: { actorId: true, action: true, note: true },
+    });
+    const refused = checkerRefusal(p.makerId, makers, user.id);
+    if (refused) throw fourEyes(refused);
+    if (p.state === 'FAILED') {
+      if (p.holdReason !== RETRY_AWAITING_APPROVAL)
+        throw new ConflictException('This failed payout has no retry waiting for approval');
+      const request = makers.find((m) => m.action === 'RETRY_REQUEST');
+      const corrected = request?.note
+        ? (JSON.parse(request.note) as CorrectedAccount | null)
+        : null;
+      await this.prisma.approval.create({
+        data: { paymentId: id, action: 'RETRY_APPROVE', actorId: user.id, note },
+      });
+      return this.send(p, user, { ...corrected, holdReason: null, checkerId: user.id });
     }
     await this.prisma.approval.create({
       data: { paymentId: id, action: 'APPROVE', actorId: user.id, note },
@@ -218,9 +261,10 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
       where: { paymentId: id, action: 'REVERSAL_REQUEST' },
       orderBy: { at: 'desc' },
     });
-    if (request?.actorId === user.id) {
-      throw new ForbiddenException('Maker-checker: you cannot approve your own request');
-    }
+    if (request?.actorId === user.id)
+      throw fourEyes(
+        'Four-eyes rule: you asked for this reversal, so a different officer must approve it.',
+      );
     await this.prisma.approval.create({
       data: { paymentId: id, action: 'REVERSAL_APPROVE', actorId: user.id },
     });
@@ -231,17 +275,62 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
     });
   }
 
-  /** FAILED → SENT again with the SAME endToEndId, so the provider can never pay twice. */
+  /**
+   * FAILED → SENT again with the SAME endToEndId, so the provider can never pay twice. To a corrected
+   * account, or above the maker-checker limit, the retrying officer becomes the maker and the payout
+   * waits for a different officer's approval.
+   */
   async retry(id: string, user: AuthUser, correctedAlias?: string) {
     const p = await this.sm.get(id, user.tenantId);
     if (p.state !== 'FAILED')
       throw new ConflictException(`Only FAILED payments can be retried (is ${p.state})`);
-    if (!correctedAlias || correctedAlias === p.creditorAlias) return this.send(p, user);
+    if (p.holdReason === RETRY_AWAITING_APPROVAL)
+      throw new ConflictException('A retry of this payout is already waiting for a second officer');
+    const corrected =
+      correctedAlias && correctedAlias !== p.creditorAlias
+        ? await this.checkedAccount(p, correctedAlias, user)
+        : null;
+    if (
+      !retryNeedsSecondOfficer(
+        p.amount,
+        env.MAKER_CHECKER_LIMIT_PKR,
+        correctedAlias,
+        p.creditorAlias,
+      )
+    )
+      return this.send(p, user);
 
-    // The claimant gave a corrected mobile account number. It is paid only if the bank has an
-    // account on it AND that account is in the claimant's own name: an officer cannot redirect
-    // the money to someone else.
-    const title = await this.rails.titleFetch({ alias: correctedAlias }).catch(() => null);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.approval.create({
+        data: {
+          paymentId: id,
+          action: 'RETRY_REQUEST',
+          actorId: user.id,
+          note: JSON.stringify(corrected),
+        },
+      });
+      const claimed = await tx.payment.updateMany({
+        where: { id, version: p.version, state: 'FAILED' },
+        data: { makerId: user.id, holdReason: RETRY_AWAITING_APPROVAL, version: { increment: 1 } },
+      });
+      if (claimed.count === 0)
+        throw new ConflictException(
+          'Payment was changed by another request. Reload and try again.',
+        );
+    });
+    return this.sm.get(id, user.tenantId);
+  }
+
+  /**
+   * The claimant gave a corrected mobile account number. It is used only if the bank has an account
+   * on it AND that account is in the claimant's own name: an officer cannot redirect the money.
+   */
+  private async checkedAccount(
+    p: Payment,
+    alias: string,
+    user: AuthUser,
+  ): Promise<CorrectedAccount> {
+    const title = await this.rails.titleFetch({ alias }).catch(() => null);
     if (!title) throw new ConflictException('The bank could not be reached. Try again shortly.');
     if (!title.found || !title.accountTitle)
       throw new ConflictException('The bank has no account for that mobile number either.');
@@ -252,18 +341,18 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
       );
     await this.prisma.approval.create({
       data: {
-        paymentId: id,
+        paymentId: p.id,
         action: 'CORRECT_PAYOUT_NUMBER',
         actorId: user.id,
         note: 'Payout number corrected by the claimant; account title matches',
       },
     });
-    return this.send(p, user, {
-      creditorAlias: correctedAlias,
+    return {
+      creditorAlias: alias,
       creditorIban: title.iban ?? null,
       titleFetched: title.accountTitle,
       titleMatchScore: score,
-    });
+    };
   }
 
   async inquiry(id: string, by: Principal = SYSTEM, tenantId?: string) {
@@ -275,12 +364,7 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
   private async send(
     payment: Payment,
     by: Principal = SYSTEM,
-    corrected?: {
-      creditorAlias: string;
-      creditorIban: string | null;
-      titleFetched: string;
-      titleMatchScore: number;
-    },
+    patch?: Partial<CorrectedAccount> & { holdReason?: null; checkerId?: string },
   ): Promise<Payment> {
     if (!this.rails.canSend()) {
       this.logger.warn(
@@ -291,12 +375,12 @@ export class PayoutService implements OnModuleInit, OnApplicationShutdown {
     }
     const sent = await this.sm.transition(payment, 'SENT', {
       by,
-      reason: corrected
+      reason: patch?.creditorAlias
         ? 'RETRY_CORRECTED_PAYOUT_NUMBER'
         : payment.state === 'FAILED'
           ? 'RETRY_SAME_END_TO_END_ID'
           : 'SUBMITTED_TO_RAAST',
-      ...(corrected ? { patch: corrected } : {}),
+      ...(patch ? { patch } : {}),
     });
 
     const started = Date.now();

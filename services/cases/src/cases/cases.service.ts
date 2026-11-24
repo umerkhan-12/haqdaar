@@ -43,7 +43,7 @@ import { priority } from '../engine/priority';
 import type { Facts } from '../engine/rules';
 import { isStaff, subjectPerson } from '../access';
 import { env } from '../env';
-import type { CreateCaseBody } from './cases.schemas';
+import type { CorrectionBody, CreateCaseBody, ListQuery } from './cases.schemas';
 import {
   applyCaution,
   auditNotes,
@@ -62,6 +62,12 @@ const OPEN: CaseStatus[] = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW'
 const PROCESSABLE: CaseStatus[] = ['SUBMITTED', 'NEEDS_INFO'];
 const CONSENTS: ConsentPurpose[] = ['identity_verification', 'household_data'];
 const DUPLICATE_NAME_MIN = 0.92;
+/** Finished claims an officer may need to find again. */
+const DECIDED: CaseStatus[] = ['APPROVED', 'REJECTED', 'PAID', 'CLOSED'];
+/** Timeline steps that answer a citizen's "my information is wrong" request. */
+const CORRECTION_ACTIONS = ['district_corrected', 'household_corrected', 'info_requested'];
+const QUEUE_LIMIT = 1000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ANOMALY_OPEN_STATUSES = ['SUBMITTED', 'PROCESSING', 'NEEDS_INFO', 'IN_REVIEW'] as const;
 const ANOMALY_COUNTED_STATUSES = [
   'SUBMITTED',
@@ -236,13 +242,18 @@ export class CasesService {
           where: { personId: c.personId, status: { in: ['APPROVED', 'PAID', 'CLOSED'] } },
         });
         if (confirmed > 0)
-          throw new ForbiddenException(
-            'Your identity is already confirmed. An officer must change the CNIC.',
-          );
+          throw new ForbiddenException({
+            message: 'Your identity is already confirmed. An officer must change the CNIC.',
+            details: { code: 'CNIC_LOCKED' },
+          });
         const other = await this.prisma.person.findUnique({
           where: { tenantId_cnicHash: { tenantId: c.tenantId, cnicHash } },
         });
-        if (other) throw new ForbiddenException('This CNIC belongs to another person');
+        if (other)
+          throw new ForbiddenException({
+            message: 'This CNIC is already registered to another account',
+            details: { code: 'CNIC_TAKEN' },
+          });
         data.cnicHash = cnicHash;
         data.cnicEnc = encryptField(fix.cnic, env.PII_ENC_KEY);
         changed.push('cnic');
@@ -281,10 +292,16 @@ export class CasesService {
       where: { tenantId_cnicHash: { tenantId, cnicHash } },
     });
     if (byCnic && byCnic.id !== personId)
-      throw new ForbiddenException('This CNIC belongs to another person');
+      throw new ForbiddenException({
+        message: 'This CNIC is already registered to another account',
+        details: { code: 'CNIC_TAKEN' },
+      });
     const byId = byCnic ?? (await tx.person.findUnique({ where: { id: personId } }));
     if (byId && byId.cnicHash !== cnicHash) {
-      throw new ForbiddenException('CNIC does not match the registered identity');
+      throw new ForbiddenException({
+        message: 'CNIC does not match the registered identity',
+        details: { code: 'CNIC_MISMATCH' },
+      });
     }
     const data = {
       fullName: body.fullName,
@@ -941,11 +958,12 @@ export class CasesService {
             last?.confidence ?? 0,
             { id: rule.id, amount },
             ctx,
+            user.id,
           ),
         ),
       ctx,
     });
-    return this.view(user, c.id);
+    return this.afterAction(user, c.id);
   }
 
   async reject(user: AuthUser, id: string, reason: string, requestId?: string) {
@@ -959,13 +977,26 @@ export class CasesService {
       en: `Not approved by an officer. Reason: ${reason}`,
       ctx: { source: 'cases', principal: user, correlationId: requestId },
     });
-    return this.view(user, c.id);
+    return this.afterAction(user, c.id);
   }
 
-  async requestInfo(user: AuthUser, id: string, message: string, requestId?: string) {
+  async requestInfo(
+    user: AuthUser,
+    id: string,
+    message: string,
+    requestId?: string,
+    correctionId?: string,
+  ) {
     const c = await this.staffCase(user, id);
-    await this.transition(c, user, 'NEEDS_INFO', 'info_requested', { message }, requestId);
-    return this.view(user, c.id);
+    await this.transition(
+      c,
+      user,
+      'NEEDS_INFO',
+      'info_requested',
+      { message, ...(correctionId ? { correctionId } : {}) },
+      requestId,
+    );
+    return this.afterAction(user, c.id);
   }
 
   /** "Assign to me" (or to a named officer): the queue shows who is already looking at a case. */
@@ -985,7 +1016,7 @@ export class CasesService {
       await this.emit(tx, this.managed(c, c.status, 'assigned', undefined, user, requestId));
     });
     this.bus.kick();
-    return this.view(user, c.id);
+    return this.afterAction(user, c.id);
   }
 
   /**
@@ -1012,7 +1043,7 @@ export class CasesService {
       await this.emit(tx, this.managed(c, c.status, 'escalated', reason, user, requestId));
     });
     this.bus.kick();
-    return this.view(user, c.id);
+    return this.afterAction(user, c.id);
   }
 
   /** File a finished case away. Only PAID or REJECTED cases can be closed; nothing open ever is. */
@@ -1036,7 +1067,54 @@ export class CasesService {
       await this.emit(tx, this.managed(c, 'CLOSED', 'closed', note, user, requestId));
     });
     this.bus.kick();
-    return this.view(user, c.id);
+    return this.afterAction(user, c.id);
+  }
+
+  /**
+   * A citizen said her district or household is wrong and the officer checked it: the record and the
+   * claim's snapshot change together, and the timeline keeps what it was before. Only while the claim
+   * can still be decided, so a paid amount is never re-based on new facts.
+   */
+  async applyCorrection(user: AuthUser, id: string, b: CorrectionBody, requestId?: string) {
+    const c = await this.staffCase(user, id);
+    this.allow('correct', c);
+    await this.requireConsent(c.personId);
+    const person = await this.prisma.person.findUniqueOrThrow({ where: { id: c.personId } });
+    const change =
+      b.field === 'district'
+        ? { from: c.districtSnapshot ?? person.district, to: b.district }
+        : { from: c.householdSize, to: b.householdSize };
+    await this.prisma.$transaction(async (tx) => {
+      const moved = await tx.case.updateMany({
+        where: { id: c.id, status: { in: REVIEWABLE } },
+        data:
+          b.field === 'district'
+            ? { districtSnapshot: b.district }
+            : { householdSize: b.householdSize },
+      });
+      if (moved.count === 0) throw new ConflictException('Case was decided meanwhile; reload it');
+      if (b.field === 'district')
+        await tx.person.update({ where: { id: c.personId }, data: { district: b.district } });
+      await tx.caseEvent.create({
+        data: {
+          caseId: c.id,
+          type: b.field === 'district' ? 'district_corrected' : 'household_corrected',
+          actor: user.id,
+          data: {
+            from: change.from ?? null,
+            to: change.to ?? null,
+            note: b.note ?? null,
+            correctionId: b.correctionId ?? null,
+          },
+        },
+      });
+      await this.emit(
+        tx,
+        this.managed(c, c.status, `${b.field}_corrected`, b.note, user, requestId),
+      );
+    });
+    this.bus.kick();
+    return this.afterAction(user, c.id);
   }
 
   private allow(move: OfficerMove, c: Case) {
@@ -1143,31 +1221,132 @@ export class CasesService {
 
   // ---------- reads ----------
 
-  async list(user: AuthUser, status?: CaseStatus) {
-    const where: Prisma.CaseWhereInput = { tenantId: user.tenantId, ...(status ? { status } : {}) };
-    if (!isStaff(user)) where.personId = subjectPerson(user);
+  /**
+   * Citizens and helpers: their own person's claims. Staff: the tenant's, by status, the decided ones
+   * (most recently changed first), one person's claims, or a name / claim id search. Staff rows carry
+   * the claimant's name unless she withdrew consent.
+   */
+  async list(user: AuthUser, q: ListQuery = {}) {
+    const staff = isStaff(user);
+    const where: Prisma.CaseWhereInput = {
+      tenantId: user.tenantId,
+      ...(q.status
+        ? { status: q.status }
+        : q.view === 'decided'
+          ? { status: { in: DECIDED } }
+          : {}),
+    };
+    if (!staff) where.personId = subjectPerson(user);
+    else {
+      if (q.personId) where.personId = q.personId;
+      if (q.q)
+        where.OR = [
+          { person: { fullName: { contains: q.q, mode: 'insensitive' } } },
+          ...(UUID.test(q.q) ? [{ id: q.q }] : []),
+        ];
+    }
     const rows = await this.prisma.case.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      include: { person: { select: { fullName: true, district: true } } },
+      orderBy: q.view === 'decided' ? { updatedAt: 'desc' } : { createdAt: 'desc' },
       take: 100,
     });
-    return rows.map((c) => this.summary(c, isStaff(user)));
+    return rows.map((c) =>
+      staff
+        ? {
+            ...this.summary(c, true),
+            name: c.flags.includes('consent_withdrawn') ? null : c.person.fullName,
+            district: c.districtSnapshot ?? c.person.district,
+          }
+        : this.summary(c),
+    );
   }
 
-  /** Officer queue: no names or CNICs here, only what is needed to pick the next case. */
+  /**
+   * For the "information is wrong" box: each person's name and latest claim, and which requests an
+   * officer already acted on (an applied correction or a request for information on the timeline).
+   */
+  async correctionContext(user: AuthUser, personIds: string[]) {
+    const [cases, acted] = await Promise.all([
+      this.prisma.case.findMany({
+        where: { tenantId: user.tenantId, personId: { in: personIds } },
+        include: { person: { select: { fullName: true, district: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+      }),
+      this.prisma.caseEvent.findMany({
+        where: {
+          type: { in: CORRECTION_ACTIONS },
+          case: { tenantId: user.tenantId, personId: { in: personIds } },
+        },
+        select: { data: true },
+      }),
+    ]);
+    const latest = new Map<string, (typeof cases)[number]>();
+    for (const c of cases) if (!latest.has(c.personId)) latest.set(c.personId, c);
+    return {
+      people: [...latest.values()].map((c) => ({
+        personId: c.personId,
+        name: c.flags.includes('consent_withdrawn') ? null : c.person.fullName,
+        caseId: c.id,
+        status: c.status,
+        district: c.districtSnapshot ?? c.person.district,
+        householdSize: c.householdSize,
+      })),
+      handled: acted
+        .map((e) => (e.data as { correctionId?: unknown } | null)?.correctionId)
+        .filter((v): v is string => typeof v === 'string'),
+    };
+  }
+
+  /**
+   * A staff case with no personal data, for when the citizen has withdrawn consent: an officer can
+   * still see where the claim stands and reject or close it.
+   */
+  async basic(user: AuthUser, id: string) {
+    const c = await this.staffCase(user, id);
+    const events = await this.prisma.caseEvent.findMany({
+      where: { caseId: c.id },
+      orderBy: { at: 'asc' },
+      select: { type: true, actor: true, at: true },
+    });
+    return {
+      ...this.summary(c, true),
+      consentWithdrawn: true,
+      timeline: events.map((e) => ({ ...e, data: null })),
+    };
+  }
+
+  /** After an officer's action: the full view, or the reduced one once consent is gone. */
+  private async afterAction(user: AuthUser, id: string) {
+    try {
+      return await this.view(user, id);
+    } catch (err) {
+      if (err instanceof ForbiddenException) return this.basic(user, id);
+      throw err;
+    }
+  }
+
+  /**
+   * Officer queue: name, place and risk to pick the next case; never a CNIC. Read in stored-priority
+   * order (escalation already multiplies it), so the cap drops only the least urgent rows.
+   */
   async queue(user: AuthUser) {
     const rows = await this.prisma.case.findMany({
       where: { tenantId: user.tenantId, status: { in: REVIEWABLE } },
       include: {
-        person: { select: { district: true } },
+        person: { select: { district: true, fullName: true } },
         anomalies: { orderBy: { createdAt: 'desc' } },
       },
-      take: 500,
+      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+      take: QUEUE_LIMIT,
     });
     const now = new Date();
     return rows
       .map((c) => ({
         ...this.summary(c, true),
+        // The name lets an officer find the person on the phone. It is hidden once she withdraws consent.
+        name: c.flags.includes('consent_withdrawn') ? null : c.person.fullName,
         district: c.districtSnapshot ?? c.person.district,
         anomalies: c.anomalies.map((finding) => this.anomalyView(finding)),
         priority: boosted(
@@ -1327,10 +1506,19 @@ export class CasesService {
     confidence: number,
     rule: Pick<ActiveRule, 'id' | 'amount'>,
     ctx: { source: string; principal: AuthUser; correlationId?: string },
+    decidedBy = 'system',
   ) {
     return buildEvent(
       'cases.case.decided',
-      { caseId, personId, lane, confidence, ruleVersionId: rule.id, amount: rule.amount },
+      {
+        caseId,
+        personId,
+        lane,
+        confidence,
+        ruleVersionId: rule.id,
+        amount: rule.amount,
+        decidedBy,
+      },
       ctx,
     );
   }

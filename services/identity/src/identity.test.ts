@@ -21,7 +21,9 @@ test('login rate-limit key is per (IP, phone): one shop full of people is not lo
   const c = await track({ ip: '1.2.3.4', body: { phone: '+92 300 1110001' } });
   assert.notEqual(a, b);
   assert.equal(a, c, 'same account in different formats shares one bucket');
-  assert.equal(await track({ ips: ['9.9.9.9'], ip: '10.0.0.1', body: {} }), '9.9.9.9');
+  // ips[0] is the gateway hop; ip is the visitor the gateway forwarded. Keying on the gateway would
+  // give the whole platform one shared limit.
+  assert.equal(await track({ ips: ['10.0.0.1', '9.9.9.9'], ip: '9.9.9.9', body: {} }), '9.9.9.9');
 });
 
 test('usage report: zero-filled days, per-service sums, AI calls, rows outside the window ignored', () => {

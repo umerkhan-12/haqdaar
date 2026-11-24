@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,6 +12,7 @@ import type { WebhookDelivery } from '../../generated/prisma';
 import { PrismaService } from '../prisma.service';
 import { env } from '../env';
 import { backoffMs, signWebhook } from '../domain/webhook-signature';
+import { assertPublicUrl, postPinned, resolvePublicUrl } from './public-url';
 
 const MAX_ATTEMPTS = 6;
 const TIMEOUT_MS = 5_000;
@@ -36,7 +39,10 @@ export class WebhooksService implements OnModuleInit, OnApplicationShutdown {
     if (this.sweeper) clearInterval(this.sweeper);
   }
 
-  create(tenantId: string, url: string, events: string[], createdBy: string) {
+  async create(tenantId: string, url: string, events: string[], createdBy: string) {
+    await assertPublicUrl(url).catch((err: Error) => {
+      throw new BadRequestException(err.message);
+    });
     return this.prisma.webhookSubscription.create({ data: { tenantId, url, events, createdBy } });
   }
 
@@ -45,6 +51,20 @@ export class WebhooksService implements OnModuleInit, OnApplicationShutdown {
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /** Stops all further deliveries, including queued retries. The delivery history is kept. */
+  async deactivate(tenantId: string, id: string) {
+    await this.ownSubscription(tenantId, id);
+    const [sub] = await this.prisma.$transaction([
+      this.prisma.webhookSubscription.update({ where: { id }, data: { active: false } }),
+      this.prisma.webhookDelivery.updateMany({
+        where: { subscriptionId: id, status: 'PENDING' },
+        data: { status: 'FAILED', lastError: 'Webhook turned off' },
+      }),
+    ]);
+    this.logger.warn({ tenantId, subscriptionId: id }, 'Webhook turned off');
+    return sub;
   }
 
   async deliveries(tenantId: string, subscriptionId: string) {
@@ -59,8 +79,10 @@ export class WebhooksService implements OnModuleInit, OnApplicationShutdown {
   async resend(tenantId: string, deliveryId: string) {
     const d = await this.prisma.webhookDelivery.findFirst({
       where: { id: deliveryId, subscription: { tenantId } },
+      include: { subscription: { select: { active: true } } },
     });
     if (!d) throw new NotFoundException('Delivery not found');
+    if (!d.subscription.active) throw new ConflictException('This webhook is turned off');
     const reset = await this.prisma.webhookDelivery.update({
       where: { id: d.id },
       data: { status: 'PENDING', nextAttemptAt: new Date() },
@@ -100,19 +122,22 @@ export class WebhooksService implements OnModuleInit, OnApplicationShutdown {
     let statusCode: number | null = null;
     let error: string | null = null;
     try {
-      const res = await fetch(sub.url, {
-        method: 'POST',
-        headers: {
+      // Checked again at delivery and the connection pinned to the checked address: the name may
+      // resolve to a private address after it was saved, or between the check and the connect.
+      const target = await resolvePublicUrl(sub.url);
+      const res = await postPinned(
+        target,
+        {
           'content-type': 'application/json',
           'x-haqdaar-signature': signWebhook(body, env.WEBHOOK_SIGNING_SECRET),
           'x-haqdaar-event': d.eventType,
           'x-haqdaar-delivery': d.id,
         },
         body,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
+        TIMEOUT_MS,
+      );
       statusCode = res.status;
-      if (!res.ok) error = `HTTP ${res.status}`;
+      if (res.status < 200 || res.status >= 300) error = `HTTP ${res.status}`;
     } catch (err) {
       error = (err as Error).message.slice(0, 200);
     }
@@ -135,7 +160,14 @@ export class WebhooksService implements OnModuleInit, OnApplicationShutdown {
 
   private async retryDue() {
     const due = await this.prisma.webhookDelivery
-      .findMany({ where: { status: 'PENDING', nextAttemptAt: { lte: new Date() } }, take: 20 })
+      .findMany({
+        where: {
+          status: 'PENDING',
+          nextAttemptAt: { lte: new Date() },
+          subscription: { active: true },
+        },
+        take: 20,
+      })
       .catch(() => []);
     for (const d of due) await this.deliver(d).catch(() => undefined);
   }

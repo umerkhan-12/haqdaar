@@ -61,7 +61,11 @@ export class GroqProvider implements AiProvider {
 
   async transcribe(req: SttRequest): Promise<SttResponse> {
     const form = new FormData();
-    const ext = req.mimeType.split('/')[1]?.split(';')[0] ?? 'webm';
+    // Whisper reads the format from the file name: "audio/x-wav" must become .wav, not .x-wav.
+    const sub = req.mimeType.split('/')[1]?.split(';')[0]?.trim().toLowerCase() ?? 'webm';
+    const ext =
+      ({ 'x-wav': 'wav', wave: 'wav', mpeg: 'mp3', 'x-m4a': 'm4a', mp4: 'm4a', 'x-flac': 'flac' } as Record<string, string>)[sub] ??
+      sub;
     form.append(
       'file',
       new Blob([new Uint8Array(req.audio)], { type: req.mimeType }),

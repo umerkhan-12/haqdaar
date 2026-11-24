@@ -26,6 +26,18 @@ export interface ReconItem {
 }
 
 /**
+ * The Raast account is shared by every program, so its statement lists other programs' payouts too.
+ * Those are not this program's business (and not "missing in our ledger"): drop them before matching.
+ * An id that belongs to no program at all stays in, because that is money nobody here sent.
+ */
+export function forProgram(
+  provider: ProviderEntry[],
+  otherProgramsIds: ReadonlySet<string>,
+): ProviderEntry[] {
+  return provider.filter((p) => !otherProgramsIds.has(p.endToEndId));
+}
+
+/**
  * Match our settled payouts against the provider statement by end-to-end id.
  * A second settlement with the same id is flagged `duplicate_in_provider`: the bank paid twice.
  */

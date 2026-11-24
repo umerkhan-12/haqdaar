@@ -2,6 +2,7 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import {
   buildEvent,
   EventBus,
+  requirePlatformAdmin,
   sealMessage,
   ServiceClient,
   type Principal,
@@ -88,7 +89,17 @@ export class JudgeService {
 
   /** Fresh demo: each service clears its own demo state. The audit log is never touched. */
   async reset(by: Principal) {
+    await requirePlatformAdmin(this.client, by, 'Resetting the demo');
     if (this.busy) throw new ConflictException(`"${this.busy}" is still running`);
+    this.busy = 'reset';
+    try {
+      return await this.resetAll(by);
+    } finally {
+      this.busy = null;
+    }
+  }
+
+  private async resetAll(by: Principal) {
     const results = await Promise.all(
       RESETTABLE.map(async (service) => {
         try {

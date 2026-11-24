@@ -4,14 +4,7 @@ import { aggregateScamMap, SCAM_EVENT_TYPES, type ScamMap } from './scam-map';
 import { ALL_EVENT_TYPES, EventEnvelope } from '@haqdaar/shared';
 import { Prisma, type AuditLog } from '../generated/prisma';
 import { PrismaService } from './prisma.service';
-import {
-  chainHash,
-  entityIdOf,
-  GENESIS_HASH,
-  verifyRows,
-  type ChainFields,
-  type VerifyResult,
-} from './chain';
+import { chainHash, entityIdOf, GENESIS_HASH, verifyRows, type ChainFields } from './chain';
 
 /** Any constant works; it only has to be the same for every appender. */
 const CHAIN_LOCK = 7_420_101;
@@ -88,7 +81,8 @@ export class AuditService implements OnModuleInit {
     const rows = await this.prisma.auditLog.findMany({
       where: {
         type: q.type,
-        entityId: q.entityId,
+        // A prefix is enough: staff screens show ids shortened.
+        entityId: q.entityId ? { startsWith: q.entityId } : undefined,
         actorId: q.actorId,
         // Own program plus system entries (no program); never another program's.
         OR: [{ tenantId: ownTenantId }, { tenantId: null }],
@@ -129,7 +123,7 @@ export class AuditService implements OnModuleInit {
   }
 
   /** Recompute every hash from genesis (or from `fromSeq`, anchored on the row before it). */
-  async verify(fromSeq?: number): Promise<VerifyResult & { fromSeq: number }> {
+  async verify(fromSeq: number | undefined, ownTenantId: string): Promise<VerifiedForProgram> {
     let expectedPrev = GENESIS_HASH;
     let cursor = 0;
     if (fromSeq && fromSeq > 1) {
@@ -156,14 +150,27 @@ export class AuditService implements OnModuleInit {
       const r = verifyRows(batch.map(toChainRow), expectedPrev);
       if (!r.valid) {
         this.logger.error({ brokenAtSeq: r.brokenAtSeq, reason: r.reason }, 'Audit chain broken');
-        return { ...r, checked: checked + r.checked, fromSeq: fromSeq ?? 1 };
+        const broken = await this.prisma.auditLog.findUnique({
+          where: { seq: BigInt(r.brokenAtSeq) },
+          select: { tenantId: true },
+        });
+        const visible = !broken?.tenantId || broken.tenantId === ownTenantId;
+        const result = {
+          valid: false as const,
+          checked: checked + r.checked,
+          fromSeq: fromSeq ?? 1,
+        };
+        // The chain spans every program; where another program's entry broke, say so without pointing at it.
+        return visible
+          ? { ...result, brokenAtSeq: r.brokenAtSeq, reason: r.reason }
+          : { ...result, inAnotherProgram: true };
       }
       checked += r.checked;
       expectedPrev = r.lastHash;
       lastSeq = r.lastSeq;
       cursor = Number(batch.at(-1)!.seq);
     }
-    return { valid: true, checked, lastSeq, lastHash: expectedPrev, fromSeq: fromSeq ?? 1 };
+    return { valid: true, checked, lastSeq, fromSeq: fromSeq ?? 1 };
   }
 
   /**
@@ -213,17 +220,20 @@ export class AuditService implements OnModuleInit {
     return { reportId, label };
   }
 
-  async stats() {
+  /** Counts for the caller's program plus system entries, the same rows the list shows. */
+  async stats(ownTenantId: string) {
     const since = new Date(Date.now() - 24 * 3_600_000);
+    const mine = { OR: [{ tenantId: ownTenantId }, { tenantId: null }] };
     const [total, byType, last] = await Promise.all([
-      this.prisma.auditLog.count(),
+      this.prisma.auditLog.count({ where: mine }),
       this.prisma.auditLog.groupBy({
         by: ['type'],
-        where: { recordedAt: { gte: since } },
+        where: { ...mine, recordedAt: { gte: since } },
         _count: { _all: true },
         orderBy: { type: 'asc' },
       }),
       this.prisma.auditLog.findFirst({
+        where: mine,
         orderBy: { seq: 'desc' },
         select: { seq: true, recordedAt: true },
       }),
@@ -236,6 +246,12 @@ export class AuditService implements OnModuleInit {
     };
   }
 }
+
+type VerifiedForProgram = { checked: number; fromSeq: number } & (
+  | { valid: true; lastSeq: number | null }
+  | { valid: false; brokenAtSeq: number; reason: string }
+  | { valid: false; inAnotherProgram: true }
+);
 
 function toChainRow(r: AuditLog) {
   return {
